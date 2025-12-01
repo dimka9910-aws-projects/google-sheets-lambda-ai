@@ -74,5 +74,10 @@ public class AppConfig {
         String region = get("aws.region", "AWS_REGION");
         return region != null ? region : "eu-central-1";
     }
+
+    public static String getUsersTableName() {
+        String tableName = get("dynamodb.users.table", "USERS_TABLE_NAME");
+        return tableName != null ? tableName : "finance-tracker-users-dev";
+    }
 }
 
