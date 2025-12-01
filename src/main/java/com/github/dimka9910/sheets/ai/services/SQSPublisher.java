@@ -47,15 +47,24 @@ public class SQSPublisher {
 
     /**
      * Отправляет команду в очередь google-sheets-lambda
+     * 
+     * DRY_RUN=true — только логирование, без реальной отправки
      */
     public void sendToSheetsLambda(SheetsRecordDTO record) {
-        if (sheetsQueueUrl == null) {
-            log.error("Cannot send to sheets-lambda: SHEETS_QUEUE_URL is not set");
-            return;
-        }
-
         try {
             String messageBody = objectMapper.writeValueAsString(record);
+            
+            // DRY_RUN режим — только логируем, не отправляем в SQS
+            if (isDryRun()) {
+                log.info("[DRY_RUN] Would send to sheets-lambda: {}", messageBody);
+                return;
+            }
+            
+            if (sheetsQueueUrl == null) {
+                log.error("Cannot send to sheets-lambda: SHEETS_QUEUE_URL is not set");
+                return;
+            }
+
             log.info("Sending to sheets-lambda: {}", messageBody);
 
             SendMessageRequest request = SendMessageRequest.builder()
@@ -70,6 +79,11 @@ public class SQSPublisher {
             log.error("Failed to serialize record: {}", e.getMessage(), e);
             throw new RuntimeException("Failed to serialize record", e);
         }
+    }
+    
+    private boolean isDryRun() {
+        String dryRun = System.getenv("DRY_RUN");
+        return "true".equalsIgnoreCase(dryRun) || "1".equals(dryRun);
     }
 
     /**

@@ -21,6 +21,11 @@ Parameters:
     Type: String
     Default: prod
     AllowedValues: [dev, prod]
+  DryRun:
+    Type: String
+    Default: "true"
+    AllowedValues: ["true", "false"]
+    Description: Dry run mode - logs instead of sending to SQS
 
 Resources:
   # ============ LAMBDA ============
@@ -37,6 +42,7 @@ Resources:
           SHEETS_QUEUE_URL: !Ref SheetsQueueUrl
           RESPONSE_QUEUE_URL: !Ref ResponseQueue
           USERS_TABLE_NAME: !Ref UsersTable
+          DRY_RUN: !Ref DryRun
       Policies:
         - DynamoDBCrudPolicy:
             TableName: !Ref UsersTable
