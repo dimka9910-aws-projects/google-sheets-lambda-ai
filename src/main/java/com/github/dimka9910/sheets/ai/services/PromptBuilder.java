@@ -19,25 +19,13 @@ public class PromptBuilder {
             - CREDIT: credit operation (borrowed, lent)
             - UNKNOWN: if command is not understood
             
-            ## Russian money slang (IMPORTANT):
-            - косарь, тыща, штука = 1000
-            - двушка = 2000
-            - полторашка = 1500
-            - пятихатка = 500
-            - к (e.g. 50к, 2.5к) = thousands (50000, 2500)
-            
-            ## Common services (recognize these):
-            - Wolt, Glovo, вольт, глово = food delivery
-            - Bolt, болт = taxi/ride
-            - Maxi, Idea, Lidl, Univerexport = grocery stores
-            - Netflix, Spotify, YouTube = subscriptions
-            
             ## Rules:
             1. Store all data in ENGLISH (tags, account names as provided, fund names as provided)
             2. Respond in the SAME LANGUAGE as the user's message
             3. Use default values from user context when not specified
-            4. You have broad knowledge of brands, stores, services worldwide - use it to categorize
-            5. If unsure about any parameter - set understood=false and ask in clarification
+            4. Use your broad knowledge of slang, brands, stores, services worldwide
+            5. If you don't understand amount, slang, or service name - set understood=false and ask in clarification
+            6. NEVER guess - if unsure, ASK. User will explain and you'll learn via custom instructions
             
             ## Response format (JSON only, no other text):
             {
