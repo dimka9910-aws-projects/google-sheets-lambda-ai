@@ -1,0 +1,13 @@
+# Скопируй этот файл в application.properties и заполни значения
+# cp application.properties.example application.properties
+
+# OpenAI API Key (получить на https://platform.openai.com/api-keys)
+openai.api.key=sk-your-key-here
+
+# AWS SQS очереди (для локального тестирования можно оставить пустыми)
+sqs.sheets.queue.url=
+sqs.response.queue.url=
+
+# AWS Region
+aws.region=eu-central-1
+

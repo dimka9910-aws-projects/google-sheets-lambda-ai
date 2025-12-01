@@ -1,0 +1,143 @@
+name: Build and Deploy
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main, develop]
+
+env:
+  AWS_REGION: eu-central-1
+
+jobs:
+  build:
+    name: Build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: 'corretto'
+          cache: 'maven'
+      
+      - name: Build with Maven
+        run: mvn clean package -DskipTests
+      
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: lambda-package
+          path: target/*.jar
+          retention-days: 1
+
+  deploy-dev:
+    name: Deploy to DEV
+    needs: build
+    if: github.ref == 'refs/heads/develop' && github.event_name == 'push'
+    runs-on: ubuntu-latest
+    environment: dev
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: 'corretto'
+          cache: 'maven'
+      
+      - name: Build with Maven
+        run: mvn clean package -DskipTests
+      
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+      
+      - name: Setup SAM CLI
+        uses: aws-actions/setup-sam@v2
+      
+      - name: SAM Build
+        run: sam build
+      
+      - name: SAM Deploy to DEV
+        run: |
+          sam deploy \
+            --stack-name google-sheets-ai-parser-dev \
+            --no-confirm-changeset \
+            --no-fail-on-empty-changeset \
+            --capabilities CAPABILITY_IAM \
+            --parameter-overrides \
+              Environment=dev \
+              OpenAIApiKey=${{ secrets.OPENAI_API_KEY }} \
+              SheetsQueueUrl=${{ secrets.SHEETS_QUEUE_URL_DEV }}
+      
+      - name: Output API Endpoint
+        run: |
+          echo "## 🚀 DEV Deployment Successful!" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          aws cloudformation describe-stacks \
+            --stack-name google-sheets-ai-parser-dev \
+            --query 'Stacks[0].Outputs' \
+            --output table >> $GITHUB_STEP_SUMMARY
+
+  deploy-prod:
+    name: Deploy to PROD
+    needs: build
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    runs-on: ubuntu-latest
+    environment: prod
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: 'corretto'
+          cache: 'maven'
+      
+      - name: Build with Maven
+        run: mvn clean package -DskipTests
+      
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+      
+      - name: Setup SAM CLI
+        uses: aws-actions/setup-sam@v2
+      
+      - name: SAM Build
+        run: sam build
+      
+      - name: SAM Deploy to PROD
+        run: |
+          sam deploy \
+            --stack-name google-sheets-ai-parser-prod \
+            --no-confirm-changeset \
+            --no-fail-on-empty-changeset \
+            --capabilities CAPABILITY_IAM \
+            --parameter-overrides \
+              Environment=prod \
+              OpenAIApiKey=${{ secrets.OPENAI_API_KEY }} \
+              SheetsQueueUrl=${{ secrets.SHEETS_QUEUE_URL_PROD }}
+      
+      - name: Output API Endpoint
+        run: |
+          echo "## 🚀 PROD Deployment Successful!" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          aws cloudformation describe-stacks \
+            --stack-name google-sheets-ai-parser-prod \
+            --query 'Stacks[0].Outputs' \
+            --output table >> $GITHUB_STEP_SUMMARY

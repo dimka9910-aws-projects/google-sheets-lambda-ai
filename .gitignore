@@ -1,0 +1,17 @@
+# Build
+target/
+*.jar
+*.class
+
+# IDE
+.idea/
+*.iml
+.DS_Store
+
+# Credentials (NEVER commit!)
+service-acc.json
+application.properties
+
+# SAM
+.aws-sam/
+samconfig.toml

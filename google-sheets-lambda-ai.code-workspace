@@ -1,0 +1,13 @@
+{
+	"folders": [
+		{
+			"name": "google-sheets-lambda-ai",
+			"path": "."
+		},
+		{
+			"name": "google-sheets-lambda",
+			"path": "../google-sheets-lambda"
+		}
+	],
+	"settings": {}
+}
