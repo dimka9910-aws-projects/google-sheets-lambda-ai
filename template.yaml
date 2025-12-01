@@ -42,6 +42,12 @@ Resources:
             TableName: !Ref UsersTable
         - SQSSendMessagePolicy:
             QueueName: !GetAtt ResponseQueue.QueueName
+        # Policy for sheets-queue (from another stack)
+        - Statement:
+            - Effect: Allow
+              Action:
+                - sqs:SendMessage
+              Resource: !Sub "arn:aws:sqs:${AWS::Region}:${AWS::AccountId}:sheets-queue-*"
       Events:
         # POST /parse - парсинг команд
         ParseCommand:
