@@ -46,7 +46,7 @@ public class LocalTest {
                 .userId("test-user")
                 .defaultCurrency("EUR")
                 .defaultAccount("Тинькофф")
-                .knownAccounts(List.of("Тинькофф", "Revolut", "Наличные EUR"))
+                .accounts(List.of("Тинькофф", "Revolut", "Наличные EUR"))
                 .customInstructions(List.of(
                         "Я сейчас в путешествии по Европе",
                         "Все траты без указания валюты считай в евро",
@@ -72,13 +72,13 @@ public class LocalTest {
                 .userId("test-user-2")
                 .defaultCurrency("RUB")
                 .defaultAccount("Альфа")
-                .knownAccounts(List.of("Альфа", "Тинькофф", "Крипто-кошелёк"))
+                .accounts(List.of("Альфа", "Тинькофф", "Крипто-кошелёк"))
                 .customInstructions(List.of(
                         "Яндекс.Еда и Деливери = категория 'Доставка еды'",
                         "Spotify и YouTube Premium = категория 'Подписки'",
                         "Все покупки в Steam = категория 'Игры'"
                 ))
-                .customCategories(List.of("Доставка еды", "Подписки", "Игры", "Крипта"))
+                .funds(List.of("Доставка еды", "Подписки", "Игры", "Крипта"))
                 .build();
 
         String[] messages = {

@@ -45,6 +45,12 @@ public class ChatCommandService {
         this.userContextService = new UserContextService();
     }
 
+    public ChatCommandService(UserContextService userContextService) {
+        this.aiCommandParser = new AICommandParser();
+        this.sqsPublisher = new SQSPublisher();
+        this.userContextService = userContextService;
+    }
+
     public ChatCommandService(AICommandParser aiCommandParser, SQSPublisher sqsPublisher, 
                               UserContextService userContextService) {
         this.aiCommandParser = aiCommandParser;
