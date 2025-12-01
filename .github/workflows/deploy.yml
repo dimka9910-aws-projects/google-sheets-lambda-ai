@@ -73,6 +73,7 @@ jobs:
             --stack-name google-sheets-ai-parser-dev \
             --no-confirm-changeset \
             --no-fail-on-empty-changeset \
+            --resolve-s3 \
             --capabilities CAPABILITY_IAM \
             --parameter-overrides \
               Environment=dev \
@@ -127,6 +128,7 @@ jobs:
             --stack-name google-sheets-ai-parser-prod \
             --no-confirm-changeset \
             --no-fail-on-empty-changeset \
+            --resolve-s3 \
             --capabilities CAPABILITY_IAM \
             --parameter-overrides \
               Environment=prod \
