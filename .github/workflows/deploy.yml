@@ -69,16 +69,17 @@ jobs:
       
       - name: SAM Deploy to DEV
         run: |
+          PARAMS="Environment=dev OpenAIApiKey=${{ secrets.OPENAI_API_KEY }}"
+          if [ -n "${{ secrets.SHEETS_QUEUE_URL_DEV }}" ]; then
+            PARAMS="$PARAMS SheetsQueueUrl=${{ secrets.SHEETS_QUEUE_URL_DEV }}"
+          fi
           sam deploy \
             --stack-name google-sheets-ai-parser-dev \
             --no-confirm-changeset \
             --no-fail-on-empty-changeset \
             --resolve-s3 \
             --capabilities CAPABILITY_IAM \
-            --parameter-overrides \
-              Environment=dev \
-              OpenAIApiKey=${{ secrets.OPENAI_API_KEY }} \
-              SheetsQueueUrl=${{ secrets.SHEETS_QUEUE_URL_DEV }}
+            --parameter-overrides $PARAMS
       
       - name: Output API Endpoint
         run: |
@@ -124,16 +125,17 @@ jobs:
       
       - name: SAM Deploy to PROD
         run: |
+          PARAMS="Environment=prod OpenAIApiKey=${{ secrets.OPENAI_API_KEY }}"
+          if [ -n "${{ secrets.SHEETS_QUEUE_URL_PROD }}" ]; then
+            PARAMS="$PARAMS SheetsQueueUrl=${{ secrets.SHEETS_QUEUE_URL_PROD }}"
+          fi
           sam deploy \
             --stack-name google-sheets-ai-parser-prod \
             --no-confirm-changeset \
             --no-fail-on-empty-changeset \
             --resolve-s3 \
             --capabilities CAPABILITY_IAM \
-            --parameter-overrides \
-              Environment=prod \
-              OpenAIApiKey=${{ secrets.OPENAI_API_KEY }} \
-              SheetsQueueUrl=${{ secrets.SHEETS_QUEUE_URL_PROD }}
+            --parameter-overrides $PARAMS
       
       - name: Output API Endpoint
         run: |
