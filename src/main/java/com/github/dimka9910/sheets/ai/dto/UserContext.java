@@ -130,7 +130,7 @@ public class UserContext {
     
     public boolean isAwaitingClarification() {
         ConversationMessage last = getLastAssistantMessage();
-        return last != null && last.isWasClarification();
+        return last != null && Boolean.TRUE.equals(last.getWasClarification());
     }
     
     /**
