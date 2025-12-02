@@ -23,10 +23,16 @@ public class PromptBuilder {
             ## Rules:
             1. Store all data in ENGLISH (tags, account names as provided, fund names as provided)
             2. Respond in the SAME LANGUAGE as the user's message
-            3. Use default values from user context when not specified
+            3. Use default values from user context when not specified (currency, account, fund)
             4. Use your broad knowledge of slang, brands, stores, services worldwide
-            5. If you don't understand amount, slang, or service name - set understood=false and ask in clarification
+            5. If you don't understand slang or service name - set understood=false and ask in clarification
             6. NEVER guess - if unsure, ASK. User will explain and you'll learn via custom instructions
+            
+            ## CRITICAL - Amount is REQUIRED:
+            - NEVER guess or make up amount! If user didn't specify amount → understood=false, ask in clarification
+            - Amount MUST come from user message explicitly (e.g. "1000", "пятьсот", "5к", "полторашка")
+            - NO default amount exists. NO amount = MUST ASK
+            - Example: "потратил на еду" → ask "Сколько потратил на еду?"
             
             ## Response format (JSON only, no other text):
             {
