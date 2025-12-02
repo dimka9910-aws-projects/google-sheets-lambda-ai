@@ -16,10 +16,11 @@ public class ChatCommandService {
     private final AICommandParser aiCommandParser;
     private final SQSPublisher sqsPublisher;
     private final UserContextService userContextService;
+    private final ConversationService conversationService;
 
     // Паттерны для мета-команд
     private static final Pattern SET_CURRENCY_PATTERN = Pattern.compile(
-            "(?i)(установи|поставь|смени)\\s+(валюту|currency)\\s+(?:по умолчанию\\s+)?(?:на\\s+)?(RUB|USD|EUR|рубли|доллары|евро)",
+            "(?i)(установи|поставь|смени)\\s+(валюту|currency)\\s+(?:по умолчанию\\s+)?(?:на\\s+)?(RUB|USD|EUR|RSD|рубли|доллары|евро|динары)",
             Pattern.UNICODE_CASE
     );
     private static final Pattern SET_ACCOUNT_PATTERN = Pattern.compile(
@@ -43,12 +44,14 @@ public class ChatCommandService {
         this.aiCommandParser = new AICommandParser();
         this.sqsPublisher = new SQSPublisher();
         this.userContextService = new UserContextService();
+        this.conversationService = new ConversationService();
     }
 
     public ChatCommandService(UserContextService userContextService) {
         this.aiCommandParser = new AICommandParser();
         this.sqsPublisher = new SQSPublisher();
         this.userContextService = userContextService;
+        this.conversationService = new ConversationService();
     }
 
     public ChatCommandService(AICommandParser aiCommandParser, SQSPublisher sqsPublisher, 
@@ -56,6 +59,7 @@ public class ChatCommandService {
         this.aiCommandParser = aiCommandParser;
         this.sqsPublisher = sqsPublisher;
         this.userContextService = userContextService;
+        this.conversationService = new ConversationService();
     }
 
     /**
@@ -67,25 +71,56 @@ public class ChatCommandService {
         String userId = request.getUserId();
         String message = request.getMessage().trim();
 
+        // Получаем контекст пользователя
+        UserContext userContext = userContextService.getContext(userId);
+
+        // Проверяем: это новая команда или продолжение диалога?
+        boolean isNewCommand = conversationService.isNewCommand(message, userContext);
+        
+        if (isNewCommand) {
+            log.info("New command detected, clearing conversation history");
+            conversationService.clearHistory(userContext);
+        } else {
+            log.info("Continuing conversation, history size: {}", 
+                    userContext.getConversationHistory() != null ? userContext.getConversationHistory().size() : 0);
+        }
+
         // Сначала проверяем мета-команды (настройки)
-        ChatResponse metaResponse = handleMetaCommand(request, message);
+        ChatResponse metaResponse = handleMetaCommand(request, message, userContext);
         if (metaResponse != null) {
+            // Мета-команды очищают историю
+            conversationService.clearHistory(userContext);
+            userContextService.saveContext(userContext);
             sqsPublisher.sendResponse(metaResponse);
             return metaResponse;
         }
 
-        // Получаем контекст пользователя
-        UserContext userContext = userContextService.getContext(userId);
+        // Добавляем сообщение пользователя в историю
+        conversationService.addToHistory(userContext, ConversationMessage.userMessage(message));
 
-        // Парсим финансовую команду с учётом контекста
+        // Парсим финансовую команду с учётом контекста (включая историю)
         ParsedCommand parsedCommand = aiCommandParser.parse(message, userContext);
         log.info("Parsed command: {}", parsedCommand);
 
+        // Строим ответ
         ChatResponse response = buildResponse(request, parsedCommand);
+        
+        // Определяем, был ли это уточняющий вопрос
+        boolean wasClarification = !parsedCommand.isUnderstood() && parsedCommand.getClarification() != null;
+        
+        // Добавляем ответ ассистента в историю
+        conversationService.addToHistory(userContext, 
+                ConversationMessage.assistantMessage(response.getMessage(), parsedCommand, wasClarification));
 
+        // Если успешно распарсили — отправляем в sheets и очищаем историю
         if (response.isSuccess()) {
             sendToSheetsLambda(request, parsedCommand);
+            // После успешной операции — очищаем историю
+            conversationService.clearHistory(userContext);
         }
+
+        // Сохраняем контекст (с историей)
+        userContextService.saveContext(userContext);
 
         sqsPublisher.sendResponse(response);
         return response;
@@ -94,7 +129,7 @@ public class ChatCommandService {
     /**
      * Обрабатывает мета-команды (настройки пользователя)
      */
-    private ChatResponse handleMetaCommand(ChatRequest request, String message) {
+    private ChatResponse handleMetaCommand(ChatRequest request, String message, UserContext userContext) {
         String userId = request.getUserId();
         String chatId = request.getChatId();
 
@@ -164,6 +199,7 @@ public class ChatCommandService {
             case "рубли", "rub" -> "RUB";
             case "доллары", "usd" -> "USD";
             case "евро", "eur" -> "EUR";
+            case "динары", "rsd" -> "RSD";
             default -> input.toUpperCase();
         };
     }

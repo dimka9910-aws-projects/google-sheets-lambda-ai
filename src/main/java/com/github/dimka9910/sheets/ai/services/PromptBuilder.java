@@ -1,5 +1,6 @@
 package com.github.dimka9910.sheets.ai.services;
 
+import com.github.dimka9910.sheets.ai.dto.ConversationMessage;
 import com.github.dimka9910.sheets.ai.dto.UserContext;
 
 import java.util.List;
@@ -112,6 +113,17 @@ public class PromptBuilder {
             for (String instruction : instructions) {
                 prompt.append("- ").append(instruction).append("\n");
             }
+        }
+        
+        // История диалога (если есть)
+        List<ConversationMessage> history = context.getConversationHistory();
+        if (history != null && !history.isEmpty()) {
+            prompt.append("\n### Recent conversation (context for clarifications) ###\n");
+            for (ConversationMessage msg : history) {
+                String role = "user".equals(msg.getRole()) ? "User" : "Assistant";
+                prompt.append(role).append(": ").append(msg.getContent()).append("\n");
+            }
+            prompt.append("\n(The current message may be an answer to assistant's clarification question)\n");
         }
         
         prompt.append("\n### User message ###\n");

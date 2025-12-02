@@ -48,6 +48,10 @@ public class UserContext {
     @Builder.Default
     private List<String> customInstructions = new ArrayList<>();
     
+    // История текущего диалога (для уточнений)
+    @Builder.Default
+    private List<ConversationMessage> conversationHistory = new ArrayList<>();
+    
     @DynamoDbPartitionKey
     public String getUserId() {
         return userId;
@@ -94,6 +98,49 @@ public class UserContext {
         }
         if (!funds.contains(fund)) {
             funds.add(fund);
+        }
+    }
+    
+    // ====== Conversation History methods ======
+    
+    public void addToHistory(ConversationMessage message) {
+        if (conversationHistory == null) {
+            conversationHistory = new ArrayList<>();
+        }
+        conversationHistory.add(message);
+    }
+    
+    public void clearHistory() {
+        if (conversationHistory != null) {
+            conversationHistory.clear();
+        }
+    }
+    
+    public ConversationMessage getLastAssistantMessage() {
+        if (conversationHistory == null || conversationHistory.isEmpty()) {
+            return null;
+        }
+        for (int i = conversationHistory.size() - 1; i >= 0; i--) {
+            if ("assistant".equals(conversationHistory.get(i).getRole())) {
+                return conversationHistory.get(i);
+            }
+        }
+        return null;
+    }
+    
+    public boolean isAwaitingClarification() {
+        ConversationMessage last = getLastAssistantMessage();
+        return last != null && last.isWasClarification();
+    }
+    
+    /**
+     * Обрезает историю если превышает лимит сообщений
+     */
+    public void trimHistory(int maxMessages) {
+        if (conversationHistory != null && conversationHistory.size() > maxMessages) {
+            conversationHistory = new ArrayList<>(
+                conversationHistory.subList(conversationHistory.size() - maxMessages, conversationHistory.size())
+            );
         }
     }
 }
