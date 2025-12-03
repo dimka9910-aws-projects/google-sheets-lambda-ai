@@ -4,12 +4,14 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.github.dimka9910.sheets.ai.config.AppConfig;
 import com.github.dimka9910.sheets.ai.dto.OperationTypeEnum;
 import com.github.dimka9910.sheets.ai.dto.ParsedCommand;
+import com.github.dimka9910.sheets.ai.dto.ParsedCommandList;
 import com.github.dimka9910.sheets.ai.dto.UserContext;
 import dev.langchain4j.model.chat.ChatLanguageModel;
 import dev.langchain4j.model.openai.OpenAiChatModel;
 import lombok.extern.slf4j.Slf4j;
 
 import java.time.Duration;
+import java.util.List;
 
 @Slf4j
 public class AICommandParser {
@@ -44,10 +46,11 @@ public class AICommandParser {
     }
 
     /**
-     * Парсит команду с учётом контекста пользователя
+     * Парсит команду(ы) с учётом контекста пользователя.
+     * Поддерживает multi-command: "кофе 300, такси 500" → 2 операции
      */
-    public ParsedCommand parse(String userMessage, UserContext userContext) {
-        log.info("Parsing message with context: {}", userMessage);
+    public ParsedCommandList parseMultiple(String userMessage, UserContext userContext) {
+        log.info("Parsing message (multi-command) with context: {}", userMessage);
 
         try {
             String prompt = promptBuilder.buildPrompt(userContext, userMessage);
@@ -57,21 +60,56 @@ public class AICommandParser {
             log.info("AI response: {}", response);
 
             String cleanJson = cleanJsonResponse(response);
-            return objectMapper.readValue(cleanJson, ParsedCommand.class);
+            return objectMapper.readValue(cleanJson, ParsedCommandList.class);
 
         } catch (Exception e) {
             log.error("Error parsing command: {}", e.getMessage(), e);
-            return ParsedCommand.builder()
-                    .operationType(OperationTypeEnum.UNKNOWN)
+            return ParsedCommandList.builder()
+                    .commands(List.of())
                     .understood(false)
-                    .errorMessage("Ошибка обработки: " + e.getMessage())
+                    .errorMessage("Error: " + e.getMessage()) // Technical error, will be logged
+                    .clarification("Sorry, please try again.") // Neutral fallback
                     .build();
         }
     }
 
     /**
-     * Парсит команду без контекста (для обратной совместимости и тестов)
+     * Парсит команду с учётом контекста пользователя.
+     * @deprecated Используй parseMultiple() для поддержки нескольких команд
      */
+    @Deprecated
+    public ParsedCommand parse(String userMessage, UserContext userContext) {
+        log.info("Parsing message with context: {}", userMessage);
+
+        ParsedCommandList result = parseMultiple(userMessage, userContext);
+        
+        // Для обратной совместимости возвращаем первую команду или ошибку
+        if (result.getCommands() != null && !result.getCommands().isEmpty()) {
+            ParsedCommand first = result.getFirst();
+            // Переносим общий статус в команду
+            first.setUnderstood(result.isUnderstood());
+            if (result.getClarification() != null) {
+                first.setClarification(result.getClarification());
+            }
+            if (result.getErrorMessage() != null) {
+                first.setErrorMessage(result.getErrorMessage());
+            }
+            return first;
+        }
+        
+        return ParsedCommand.builder()
+                .operationType(OperationTypeEnum.UNKNOWN)
+                .understood(result.isUnderstood())
+                .clarification(result.getClarification())
+                .errorMessage(result.getErrorMessage())
+                .build();
+    }
+
+    /**
+     * Парсит команду без контекста (для обратной совместимости и тестов)
+     * @deprecated Используй parseMultiple() для поддержки нескольких команд
+     */
+    @Deprecated
     public ParsedCommand parse(String userMessage) {
         log.info("Parsing message without context: {}", userMessage);
 
@@ -81,14 +119,31 @@ public class AICommandParser {
             log.info("AI response: {}", response);
 
             String cleanJson = cleanJsonResponse(response);
-            return objectMapper.readValue(cleanJson, ParsedCommand.class);
+            ParsedCommandList result = objectMapper.readValue(cleanJson, ParsedCommandList.class);
+            
+            if (result.getCommands() != null && !result.getCommands().isEmpty()) {
+                ParsedCommand first = result.getFirst();
+                first.setUnderstood(result.isUnderstood());
+                if (result.getClarification() != null) {
+                    first.setClarification(result.getClarification());
+                }
+                return first;
+            }
+            
+            return ParsedCommand.builder()
+                    .operationType(OperationTypeEnum.UNKNOWN)
+                    .understood(result.isUnderstood())
+                    .clarification(result.getClarification())
+                    .errorMessage(result.getErrorMessage())
+                    .build();
 
         } catch (Exception e) {
             log.error("Error parsing command: {}", e.getMessage(), e);
             return ParsedCommand.builder()
                     .operationType(OperationTypeEnum.UNKNOWN)
                     .understood(false)
-                    .errorMessage("Ошибка обработки: " + e.getMessage())
+                    .errorMessage("Error: " + e.getMessage())
+                    .clarification("Sorry, please try again.")
                     .build();
         }
     }

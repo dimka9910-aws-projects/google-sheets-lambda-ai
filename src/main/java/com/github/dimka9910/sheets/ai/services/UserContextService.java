@@ -163,6 +163,14 @@ public class UserContextService {
     }
 
     /**
+     * Удалить пользователя полностью (для reset/debug)
+     */
+    public void deleteUser(String userId) {
+        repository.delete(userId);
+        log.info("Deleted user {}", userId);
+    }
+
+    /**
      * Получить все настройки пользователя в текстовом виде
      */
     public String getContextSummary(String userId) {

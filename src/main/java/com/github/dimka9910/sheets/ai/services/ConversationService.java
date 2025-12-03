@@ -5,100 +5,60 @@ import com.github.dimka9910.sheets.ai.dto.UserContext;
 import lombok.extern.slf4j.Slf4j;
 
 import java.util.List;
-import java.util.regex.Pattern;
 
 /**
  * Сервис для работы с историей диалога.
  * Определяет: это новая команда или продолжение диалога?
+ * 
+ * ВАЖНО: НЕ используем regex для определения типа команды!
+ * Тип команды (финансовая/мета) определяет AI.
+ * Здесь только логика для истории диалога.
  */
 @Slf4j
 public class ConversationService {
 
     private static final int MAX_HISTORY_MESSAGES = 20;
-    
-    // Паттерны мета-команд (всегда начинают новый контекст)
-    private static final Pattern META_COMMAND_PATTERN = Pattern.compile(
-            "(?i)(запомни|помни|установи|поставь|покажи настройки|мои настройки|забудь|очисти)",
-            Pattern.UNICODE_CASE
-    );
-    
-    // Паттерны коротких ответов (вероятно ответ на уточнение)
-    private static final Pattern SHORT_ANSWER_PATTERN = Pattern.compile(
-            "(?i)^(да|нет|ок|окей|первый|второй|третий|1|2|3|\\d+|[а-яa-z]+)$",
-            Pattern.UNICODE_CASE
-    );
-    
-    // Паттерны чисел/сумм
-    private static final Pattern NUMBER_PATTERN = Pattern.compile(
-            "^\\d+([.,]\\d+)?\\s*(к|k|тыс|руб|rub|rsd|eur|usd)?$",
-            Pattern.CASE_INSENSITIVE | Pattern.UNICODE_CASE
-    );
 
     /**
      * Определяет, является ли сообщение новой командой или ответом на уточнение.
+     * НЕ определяет тип команды — это делает AI!
      * 
      * @return true если новая команда (нужно очистить историю)
      */
     public boolean isNewCommand(String message, UserContext context) {
         String trimmed = message.trim();
         
-        // 1. Мета-команды ВСЕГДА новая команда
-        if (isMetaCommand(trimmed)) {
-            log.debug("Meta command detected, starting new context");
-            return true;
-        }
-        
-        // 2. Если история пустая — новая команда
+        // 1. Если история пустая — новая команда
         List<ConversationMessage> history = context.getConversationHistory();
         if (history == null || history.isEmpty()) {
             log.debug("Empty history, starting new context");
             return true;
         }
         
-        // 3. Если последний ответ был уточняющим вопросом
+        // 2. Если последний ответ был уточняющим вопросом
         if (context.isAwaitingClarification()) {
-            // Проверяем, похоже ли это на ответ
+            // Короткое сообщение после уточнения — скорее всего ответ
             if (looksLikeAnswer(trimmed)) {
                 log.debug("Looks like answer to clarification, continuing context");
                 return false;  // Продолжаем диалог
             }
         }
         
-        // 4. По умолчанию — новая команда
+        // 3. По умолчанию — новая команда
         log.debug("Default: treating as new command");
         return true;
     }
 
     /**
-     * Проверяет, является ли сообщение мета-командой
-     */
-    public boolean isMetaCommand(String message) {
-        return META_COMMAND_PATTERN.matcher(message).find();
-    }
-
-    /**
-     * Проверяет, похоже ли сообщение на ответ (короткое, число, да/нет)
+     * Проверяет, похоже ли сообщение на ответ (короткое сообщение).
+     * НЕ парсит содержимое — просто проверяет длину и количество слов.
      */
     public boolean looksLikeAnswer(String message) {
         String trimmed = message.trim();
         
-        // Короткое сообщение (< 30 символов)
-        if (trimmed.length() < 30) {
-            // Число или сумма
-            if (NUMBER_PATTERN.matcher(trimmed).matches()) {
-                return true;
-            }
-            // Короткий ответ (да/нет/выбор)
-            if (SHORT_ANSWER_PATTERN.matcher(trimmed).matches()) {
-                return true;
-            }
-            // Просто короткое (1-3 слова)
-            if (trimmed.split("\\s+").length <= 3) {
-                return true;
-            }
-        }
-        
-        return false;
+        // Короткое сообщение (< 50 символов и <= 5 слов)
+        // Это может быть ответ на уточнение: "рубли", "карта", "да", "500" и т.д.
+        return trimmed.length() < 50 && trimmed.split("\\s+").length <= 5;
     }
 
     /**

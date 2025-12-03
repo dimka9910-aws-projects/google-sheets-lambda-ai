@@ -27,6 +27,9 @@ public class SheetsRecordDTO {
     private String secondAccount;
     private String secondCurrency;
     private Double accountRemains;
+    
+    // Флаг отмены операции (для удаления из Google Sheets)
+    private boolean undo;
 
     /**
      * Создаёт SheetsRecordDTO из ParsedCommand

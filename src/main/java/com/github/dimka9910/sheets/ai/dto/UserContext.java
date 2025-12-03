@@ -52,6 +52,28 @@ public class UserContext {
     @Builder.Default
     private List<ConversationMessage> conversationHistory = new ArrayList<>();
     
+    // Предложенная инструкция, ожидающая подтверждения (Learning)
+    private String pendingSuggestion;
+    
+    // Команда, ожидающая уточнений (частично заполненная)
+    // Сохраняем чтобы накапливать ответы пользователя
+    private ParsedCommand pendingCommand;
+    
+    // Состояние онбординга (для новых пользователей)
+    private String onboardingState;
+    
+    // Предпочитаемый язык общения (ISO code: en, ru, sr, es, etc.)
+    // null = английский по умолчанию
+    private String preferredLanguage;
+    
+    // Debug mode — показывать подробную информацию о работе системы
+    @Builder.Default
+    private Boolean debugMode = false;
+    
+    // Последние операции для возможности отмены (храним последние 5)
+    @Builder.Default
+    private List<ParsedCommand> lastOperations = new ArrayList<>();
+    
     @DynamoDbPartitionKey
     public String getUserId() {
         return userId;
@@ -142,5 +164,50 @@ public class UserContext {
                 conversationHistory.subList(conversationHistory.size() - maxMessages, conversationHistory.size())
             );
         }
+    }
+    
+    // ====== Last Operations (для отмены) ======
+    
+    private static final int MAX_UNDO_OPERATIONS = 5;
+    
+    /**
+     * Добавляет операцию в историю для возможности отмены
+     */
+    public void addOperation(ParsedCommand operation) {
+        if (lastOperations == null) {
+            lastOperations = new ArrayList<>();
+        }
+        lastOperations.add(operation);
+        // Храним только последние N
+        if (lastOperations.size() > MAX_UNDO_OPERATIONS) {
+            lastOperations.remove(0);
+        }
+    }
+    
+    /**
+     * Возвращает последнюю операцию (для отмены)
+     */
+    public ParsedCommand getLastOperation() {
+        if (lastOperations == null || lastOperations.isEmpty()) {
+            return null;
+        }
+        return lastOperations.get(lastOperations.size() - 1);
+    }
+    
+    /**
+     * Удаляет последнюю операцию из истории (после отмены)
+     */
+    public ParsedCommand popLastOperation() {
+        if (lastOperations == null || lastOperations.isEmpty()) {
+            return null;
+        }
+        return lastOperations.remove(lastOperations.size() - 1);
+    }
+    
+    /**
+     * Проверяет есть ли операции для отмены
+     */
+    public boolean hasOperationsToUndo() {
+        return lastOperations != null && !lastOperations.isEmpty();
     }
 }
