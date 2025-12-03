@@ -447,6 +447,16 @@ public class ChatCommandService {
             
             case "ADD_INSTRUCTION" -> {
                 if (value != null && !value.isBlank()) {
+                    // Проверка на дубликаты
+                    List<String> existing = userContext.getCustomInstructions();
+                    if (existing != null && existing.contains(value)) {
+                        log.info("Instruction already exists for user {}: {}", userId, value);
+                        return ChatResponse.builder()
+                                .chatId(chatId)
+                                .success(true)
+                                .message(aiMessage + " (уже было)")
+                                .build();
+                    }
                     userContext.addInstruction(value);
                     log.info("Added instruction for user {}: {}", userId, value);
                 } else {
