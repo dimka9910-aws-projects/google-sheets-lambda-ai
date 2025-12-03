@@ -70,7 +70,7 @@ public class OnboardingService {
         
         // Проверяем "skip all" / "пропустить всё" — сразу завершаем с минимальными дефолтами
         String msgLower = message.toLowerCase().trim();
-        if (msgLower.contains("skip all") || msgLower.contains("skip everything") || 
+        if (msgLower.contains("skip all") || msgLower.contains("skip everything") ||
             msgLower.contains("пропустить всё") || msgLower.contains("пропустить все") ||
             msgLower.contains("skip setup") || msgLower.contains("пропустить настройку")) {
             
@@ -217,11 +217,12 @@ public class OnboardingService {
                - If preferredLanguage already set → use it, but still detect if user switches
             2. Be friendly, concise, use emojis sparingly
             3. NO hardcoded currencies/accounts - accept ANY valid input
-            4. CURRENCIES - ALWAYS CLARIFY AMBIGUOUS:
-               - "dinar/динар" → ASK which: Serbian (RSD), Kuwaiti (KWD), Iraqi (IQD), Jordanian (JOD)?
-               - "dollar/доллар" → ASK which: US (USD), Canadian (CAD), Australian (AUD)?
-               - "peso" → ASK which: Mexican (MXN), Philippine (PHP), Argentine (ARS)?
-               - Only accept unambiguous: "euro/евро"=EUR, "рубль/ruble"=RUB, "yen/йена"=JPY
+            4. CURRENCIES - ALWAYS CLARIFY AMBIGUOUS, if same name currency is used in multiple countries, for example:
+               - "dinar/динар" can be Serbian (RSD), Kuwaiti (KWD), Iraqi (IQD), Jordanian (JOD) and more
+               - "dollar/доллар" can be US (USD), Canadian (CAD), Australian (AUD) and more
+               - "peso" → ASK which: Mexican (MXN), Philippine (PHP), Argentine (ARS) and more
+               - if currency is AMBIGUOUS clarify, by providing couple most popular options. for example if user says "dollar", ask something like - American dollar, right?
+               - Only accept unambiguous: "euro/евро"=EUR, "yen/йена"=JPY
                - NEVER guess currency! If ambiguous → stepComplete=false, ask in clarification
             5. ACCOUNTS/FUNDS NAMING:
                - ALWAYS use ENGLISH/LATIN characters for IDs

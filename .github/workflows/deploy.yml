@@ -69,7 +69,7 @@ jobs:
       
       - name: SAM Deploy to DEV
         run: |
-          PARAMS="Environment=dev OpenAIApiKey=${{ secrets.OPENAI_API_KEY }}"
+          PARAMS="Environment=dev OpenAIApiKey=${{ secrets.OPENAI_API_KEY }} DryRun=true"
           if [ -n "${{ secrets.SHEETS_QUEUE_URL_DEV }}" ]; then
             PARAMS="$PARAMS SheetsQueueUrl=${{ secrets.SHEETS_QUEUE_URL_DEV }}"
           fi
@@ -125,7 +125,7 @@ jobs:
       
       - name: SAM Deploy to PROD
         run: |
-          PARAMS="Environment=prod OpenAIApiKey=${{ secrets.OPENAI_API_KEY }}"
+          PARAMS="Environment=prod OpenAIApiKey=${{ secrets.OPENAI_API_KEY }} DryRun=false"
           if [ -n "${{ secrets.SHEETS_QUEUE_URL_PROD }}" ]; then
             PARAMS="$PARAMS SheetsQueueUrl=${{ secrets.SHEETS_QUEUE_URL_PROD }}"
           fi
