@@ -505,6 +505,17 @@ public class ChatCommandService {
                         .build();
             }
             
+            case "SET_DEFAULT_FUND" -> {
+                if (value != null && !value.isBlank()) {
+                    userContext.setDefaultFund(value.toUpperCase());
+                }
+                return ChatResponse.builder()
+                        .chatId(chatId)
+                        .success(true)
+                        .message(aiMessage)
+                        .build();
+            }
+            
             case "CLEAR_INSTRUCTIONS" -> {
                 userContext.clearInstructions();
                 return ChatResponse.builder()

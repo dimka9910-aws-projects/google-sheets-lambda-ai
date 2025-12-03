@@ -181,6 +181,7 @@ public class PromptBuilder {
               - ANY request to remember a rule/preference → ADD_INSTRUCTION
             | Set default currency ("установи валюту USD", "set currency EUR", "дефолтная валюта X") | SET_DEFAULT_CURRENCY | "USD" (ISO code) |
             | Set default account ("дефолтный счёт X", "по умолчанию счёт X") | SET_DEFAULT_ACCOUNT | "X" |
+            | Set default fund ("дефолтный фонд X", "траты по умолчанию на X", "все траты на X") | SET_DEFAULT_FUND | "FUND_NAME" |
             | Clear instructions ("забудь всё", "clear instructions") | CLEAR_INSTRUCTIONS | null |
             | Undo last ("отмени", "undo", "cancel") | UNDO | null |
             | Help ("помоги", "help", "как пользоваться?", "что ты умеешь?") | HELP | null |
