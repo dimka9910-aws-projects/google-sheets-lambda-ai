@@ -69,11 +69,8 @@ public class UsersController {
             if (body.has("defaultAccount")) {
                 userContextService.setDefaultAccount(userId, body.get("defaultAccount").asText());
             }
-            if (body.has("defaultPersonalFund")) {
-                userContextService.setDefaultPersonalFund(userId, body.get("defaultPersonalFund").asText());
-            }
-            if (body.has("defaultSharedFund")) {
-                userContextService.setDefaultSharedFund(userId, body.get("defaultSharedFund").asText());
+            if (body.has("defaultFund")) {
+                userContextService.setDefaultFund(userId, body.get("defaultFund").asText());
             }
             
             return createJsonResponse(200, Map.of(

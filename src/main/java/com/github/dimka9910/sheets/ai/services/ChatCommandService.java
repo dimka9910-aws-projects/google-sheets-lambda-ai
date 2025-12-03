@@ -176,7 +176,7 @@ public class ChatCommandService {
                     defaultsMsg.append("📌 Валюта по умолчанию: ").append(defaults.getCurrency()).append("\n");
                 }
                 if (defaults.getFund() != null) {
-                    userContext.setDefaultSharedFund(defaults.getFund());
+                    userContext.setDefaultFund(defaults.getFund());
                     defaultsMsg.append("📌 Фонд по умолчанию: ").append(defaults.getFund()).append("\n");
                 }
                 

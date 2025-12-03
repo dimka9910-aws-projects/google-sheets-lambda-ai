@@ -103,23 +103,13 @@ public class UserContextService {
     }
 
     /**
-     * Установить дефолтный фонд для личных трат
+     * Установить дефолтный фонд
      */
-    public void setDefaultPersonalFund(String userId, String fund) {
+    public void setDefaultFund(String userId, String fund) {
         UserContext context = getContext(userId);
-        context.setDefaultPersonalFund(fund);
+        context.setDefaultFund(fund);
         saveContext(context);
-        log.info("Set default personal fund for user {}: {}", userId, fund);
-    }
-
-    /**
-     * Установить дефолтный фонд для совместных трат
-     */
-    public void setDefaultSharedFund(String userId, String fund) {
-        UserContext context = getContext(userId);
-        context.setDefaultSharedFund(fund);
-        saveContext(context);
-        log.info("Set default shared fund for user {}: {}", userId, fund);
+        log.info("Set default fund for user {}: {}", userId, fund);
     }
 
     /**
@@ -189,12 +179,8 @@ public class UserContextService {
             sb.append("Счёт по умолчанию: ").append(context.getDefaultAccount()).append("\n");
         }
         
-        if (context.getDefaultPersonalFund() != null) {
-            sb.append("Фонд для личных трат: ").append(context.getDefaultPersonalFund()).append("\n");
-        }
-        
-        if (context.getDefaultSharedFund() != null) {
-            sb.append("Фонд для общих трат: ").append(context.getDefaultSharedFund()).append("\n");
+        if (context.getDefaultFund() != null) {
+            sb.append("Фонд по умолчанию: ").append(context.getDefaultFund()).append("\n");
         }
         
         List<String> accounts = context.getAccounts();

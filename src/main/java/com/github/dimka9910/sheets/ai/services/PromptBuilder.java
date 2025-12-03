@@ -382,17 +382,11 @@ public class PromptBuilder {
             prompt.append("- Default account: ⚠️ NOT SET - ASK USER which account to use!\n");
         }
         
-        // Дефолтный фонд — общий, используется когда не указано иное
-        if (context.getDefaultSharedFund() != null) {
-            prompt.append("- DEFAULT FUND (use when not specified): ").append(context.getDefaultSharedFund()).append("\n");
+        // Дефолтный фонд
+        if (context.getDefaultFund() != null) {
+            prompt.append("- DEFAULT FUND (use when not specified): ").append(context.getDefaultFund()).append("\n");
         } else {
             prompt.append("- DEFAULT FUND: ⚠️ NOT SET - ASK USER which fund/category to use!\n");
-        }
-        
-        // Личный фонд — ТОЛЬКО когда явно сказано "для себя", "личное", "моё", "мне"
-        if (context.getDefaultPersonalFund() != null) {
-            prompt.append("- Personal fund (ONLY when user says 'для себя', 'личное', 'моё', 'мне', 'for myself'): ")
-                  .append(context.getDefaultPersonalFund()).append("\n");
         }
         
         // Счета пользователя

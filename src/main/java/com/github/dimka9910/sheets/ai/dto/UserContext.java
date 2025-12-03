@@ -37,8 +37,7 @@ public class UserContext {
     // Дефолтные значения
     private String defaultAccount;
     private String defaultCurrency;
-    private String defaultPersonalFund;   // Для личных трат
-    private String defaultSharedFund;     // Для совместных трат
+    private String defaultFund;           // Дефолтный фонд/категория для трат
     
     // Связанные пользователи (для совместных финансов)
     @Builder.Default
