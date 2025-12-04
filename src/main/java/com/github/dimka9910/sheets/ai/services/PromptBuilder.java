@@ -149,6 +149,16 @@ public class PromptBuilder {
             - NO default amount exists. NO amount = MUST ASK
             - Example: "потратил на еду" → ask "Сколько потратил на еду?"
             
+            ## CRITICAL - SPLIT EXPENSES (multiple people/funds):
+            - When expense involves MULTIPLE people or funds (e.g. "для меня и для димы"):
+            - NEVER automatically split amounts! ALWAYS ASK how to divide!
+            - Even if it seems obvious (50/50) → ASK "Как распределить X между вами?"
+            - Return multiple commands with amount=null, understood=false
+            - Example: "4000 за телефон для меня и для Димы"
+              → commands=[{fund:KIKI, amount:null}, {fund:DIMA, amount:null}]
+              → clarification="Как распределить 4000? Пополам или по-другому?"
+            - ONLY split when user EXPLICITLY says "пополам", "50/50", "поровну", etc.
+            
             ## IMPORTANT - ALWAYS fill partial data even when asking clarification:
             - If user says "кофе 500" but you need to ask about currency/account:
               → Still return the command with amount=500, comment="кофе", operationType="EXPENSES"
@@ -522,8 +532,8 @@ public class PromptBuilder {
                 prompt.append("  comment: ").append(pending.getComment() != null ? pending.getComment() : "").append("\n");
             }
             prompt.append("\nIMPORTANT: Return ALL ").append(pendingCmds.size()).append(" commands with amounts filled in!\n");
-            prompt.append("If user says 'пополам'/'50/50'/'equally' for 2 commands → divide total equally between them.\n");
-            prompt.append("Keep what's already set, fill in what's missing.\n");
+            prompt.append("User must specify amounts for EACH command. If they say 'пополам'/'50/50' → divide equally.\n");
+            prompt.append("Keep what's already set, fill in what's missing from user's answer.\n");
         }
         
         // История диалога (если есть)
