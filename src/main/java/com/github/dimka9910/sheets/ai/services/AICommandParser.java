@@ -29,7 +29,7 @@ public class AICommandParser {
 
         this.model = OpenAiChatModel.builder()
                 .apiKey(apiKey)
-                .modelName("gpt-4o-mini")
+                .modelName("gpt-4o")
                 .temperature(0.1)
                 .timeout(Duration.ofSeconds(30))
                 .build();

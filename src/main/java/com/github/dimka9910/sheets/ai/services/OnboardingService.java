@@ -145,7 +145,7 @@ public class OnboardingService {
         
         try {
             String requestBody = objectMapper.writeValueAsString(new java.util.HashMap<String, Object>() {{
-                put("model", "gpt-4o-mini");
+                put("model", "gpt-4o");
                 put("messages", List.of(
                     new java.util.HashMap<String, String>() {{
                         put("role", "system");
