@@ -73,6 +73,9 @@ jobs:
           if [ -n "${{ secrets.SHEETS_QUEUE_URL_DEV }}" ]; then
             PARAMS="$PARAMS SheetsQueueUrl=${{ secrets.SHEETS_QUEUE_URL_DEV }}"
           fi
+          if [ -n "${{ secrets.TELEGRAM_BOT_TOKEN }}" ]; then
+            PARAMS="$PARAMS TelegramBotToken=${{ secrets.TELEGRAM_BOT_TOKEN }}"
+          fi
           sam deploy \
             --stack-name google-sheets-ai-parser-dev \
             --no-confirm-changeset \
@@ -128,6 +131,9 @@ jobs:
           PARAMS="Environment=prod OpenAIApiKey=${{ secrets.OPENAI_API_KEY }} DryRun=false"
           if [ -n "${{ secrets.SHEETS_QUEUE_URL_PROD }}" ]; then
             PARAMS="$PARAMS SheetsQueueUrl=${{ secrets.SHEETS_QUEUE_URL_PROD }}"
+          fi
+          if [ -n "${{ secrets.TELEGRAM_BOT_TOKEN_PROD }}" ]; then
+            PARAMS="$PARAMS TelegramBotToken=${{ secrets.TELEGRAM_BOT_TOKEN_PROD }}"
           fi
           sam deploy \
             --stack-name google-sheets-ai-parser-prod \
