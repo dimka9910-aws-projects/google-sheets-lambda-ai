@@ -102,7 +102,8 @@ public class AICommandParser {
         Map<String, Object> requestBody = new HashMap<>();
         requestBody.put("model", MODEL);
         // gpt-5-mini (reasoning model): use max_completion_tokens, no temperature
-        requestBody.put("max_completion_tokens", 2000);
+        // Increased from 2000 to 4000 for complex multi-person expenses
+        requestBody.put("max_completion_tokens", 4000);
         requestBody.put("messages", List.of(
                 Map.of("role", "user", "content", prompt)
         ));
