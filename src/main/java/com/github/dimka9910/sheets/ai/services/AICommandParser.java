@@ -24,9 +24,9 @@ public class AICommandParser {
     private static final String OPENAI_API_URL = "https://api.openai.com/v1/chat/completions";
     
     // Модель и цены - легко менять
-    private static final String MODEL = "gpt-4o-mini";
-    private static final double INPUT_PRICE_PER_1M = 0.15;  // gpt-4o-mini
-    private static final double OUTPUT_PRICE_PER_1M = 0.60; // gpt-4o-mini
+    private static final String MODEL = "gpt-5-mini";
+    private static final double INPUT_PRICE_PER_1M = 0.25;  // gpt-5-mini
+    private static final double OUTPUT_PRICE_PER_1M = 2.00; // gpt-5-mini (includes reasoning)
     
     private final String apiKey;
     private final HttpClient httpClient;
@@ -101,8 +101,8 @@ public class AICommandParser {
     private JsonNode callOpenAI(String prompt) throws Exception {
         Map<String, Object> requestBody = new HashMap<>();
         requestBody.put("model", MODEL);
-        requestBody.put("max_tokens", 1000);
-        requestBody.put("temperature", 0.1);
+        // gpt-5-mini (reasoning model): use max_completion_tokens, no temperature
+        requestBody.put("max_completion_tokens", 2000);
         requestBody.put("messages", List.of(
                 Map.of("role", "user", "content", prompt)
         ));
