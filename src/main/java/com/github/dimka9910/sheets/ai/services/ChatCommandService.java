@@ -155,13 +155,13 @@ public class ChatCommandService {
                 ParsedCommand lastOp = userContext.popLastOperation();
                 if (lastOp != null) {
                     log.info("Correction detected. Canceling old operation: {}", lastOp);
-                    sendCancelOperation(request, lastOp);
+                    sendCancelOperation(userContext, lastOp);
                 }
             }
             
             // Отправляем новые команды
             for (ParsedCommand cmd : parsedList.getCommands()) {
-                sendToSheetsLambda(request, cmd);
+                sendToSheetsLambda(userContext, cmd);
                 // Сохраняем для возможности отмены
                 userContext.addOperation(cmd);
             }
@@ -673,10 +673,12 @@ public class ChatCommandService {
                 .build();
     }
 
-    private void sendToSheetsLambda(ChatRequest request, ParsedCommand parsedCommand) {
+    private void sendToSheetsLambda(UserContext userContext, ParsedCommand parsedCommand) {
+        // Используем userName из DynamoDB (DIMA, KIKI), а не из Telegram (Dima, Ksenija)
+        String userName = userContext.getUserName() != null ? userContext.getUserName() : userContext.getUserId();
         SheetsRecordDTO sheetsRecord = SheetsRecordDTO.fromParsedCommand(
                 parsedCommand,
-                request.getUserName()
+                userName
         );
         sqsPublisher.sendToSheetsLambda(sheetsRecord);
     }
@@ -684,7 +686,7 @@ public class ChatCommandService {
     /**
      * Отправляет операцию отмены с отрицательной суммой (Event Sourcing style)
      */
-    private void sendCancelOperation(ChatRequest request, ParsedCommand originalOp) {
+    private void sendCancelOperation(UserContext userContext, ParsedCommand originalOp) {
         // Создаём копию с отрицательной суммой
         ParsedCommand cancelOp = ParsedCommand.builder()
                 .operationType(originalOp.getOperationType())
@@ -699,7 +701,7 @@ public class ChatCommandService {
                 .understood(true)
                 .build();
         
-        sendToSheetsLambda(request, cancelOp);
+        sendToSheetsLambda(userContext, cancelOp);
     }
 
     /**
