@@ -8,8 +8,12 @@ import software.amazon.awssdk.enhanced.dynamodb.mapper.annotations.DynamoDbBean;
 import software.amazon.awssdk.enhanced.dynamodb.mapper.annotations.DynamoDbPartitionKey;
 import software.amazon.awssdk.enhanced.dynamodb.mapper.annotations.DynamoDbSecondaryPartitionKey;
 
+import software.amazon.awssdk.enhanced.dynamodb.mapper.annotations.DynamoDbIgnore;
+
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 /**
  * Контекст пользователя - его настройки, счета, фонды, кастомные инструкции.
@@ -42,6 +46,14 @@ public class UserContext {
     // Связанные пользователи (для совместных финансов)
     @Builder.Default
     private List<String> linkedUsers = new ArrayList<>();
+    
+    // Имя пользователя (для отображения)
+    private String userName;
+    
+    // Транзиентное поле - контексты linked users (НЕ сохраняется в DynamoDB)
+    // Загружается динамически при обработке запроса
+    @Builder.Default
+    private transient Map<String, UserContext> linkedUserContexts = new HashMap<>();
     
     // Кастомные инструкции от пользователя
     @Builder.Default
@@ -208,5 +220,23 @@ public class UserContext {
      */
     public boolean hasOperationsToUndo() {
         return lastOperations != null && !lastOperations.isEmpty();
+    }
+    
+    // ====== Linked User Contexts (transient, не сохраняется в DynamoDB) ======
+    
+    @DynamoDbIgnore
+    public Map<String, UserContext> getLinkedUserContexts() {
+        return linkedUserContexts;
+    }
+    
+    public void setLinkedUserContexts(Map<String, UserContext> linkedUserContexts) {
+        this.linkedUserContexts = linkedUserContexts;
+    }
+    
+    public void addLinkedUserContext(String userId, UserContext context) {
+        if (linkedUserContexts == null) {
+            linkedUserContexts = new HashMap<>();
+        }
+        linkedUserContexts.put(userId, context);
     }
 }
