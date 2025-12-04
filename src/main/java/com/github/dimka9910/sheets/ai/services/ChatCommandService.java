@@ -3,6 +3,7 @@ package com.github.dimka9910.sheets.ai.services;
 import com.github.dimka9910.sheets.ai.dto.*;
 import lombok.extern.slf4j.Slf4j;
 
+import java.util.ArrayList;
 import java.util.List;
 
 /**
@@ -84,9 +85,9 @@ public class ChatCommandService {
         boolean isNewCommand = conversationService.isNewCommand(message, userContext);
         
         if (isNewCommand) {
-            log.info("New command detected, clearing conversation history and pending command");
+            log.info("New command detected, clearing conversation history and pending commands");
             conversationService.clearHistory(userContext);
-            userContext.setPendingCommand(null);  // Очищаем pending при новой команде
+            userContext.getPendingCommands().clear();  // Очищаем pending при новой команде
         } else {
             log.info("Continuing conversation, history size: {}", 
                     userContext.getConversationHistory() != null ? userContext.getConversationHistory().size() : 0);
@@ -108,13 +109,29 @@ public class ChatCommandService {
         log.info("Parsed commands: {} (count: {}), metaCommand: {}", 
                 parsedList, parsedList.size(), parsedList.getMetaCommand());
         
-        // Мержим с pending командой если есть (для уточнений)
-        ParsedCommand pendingCmd = userContext.getPendingCommand();
-        if (pendingCmd != null && parsedList.size() > 0) {
-            ParsedCommand newCmd = parsedList.getFirst();
-            ParsedCommand merged = mergePendingWithNew(pendingCmd, newCmd);
-            parsedList.getCommands().set(0, merged);
-            log.info("Merged pending command with new: {}", merged);
+        // Мержим с pending командами если есть (для уточнений)
+        List<ParsedCommand> pendingCmds = userContext.getPendingCommands();
+        if (pendingCmds != null && !pendingCmds.isEmpty() && parsedList.size() > 0) {
+            // Мержим каждую pending команду с соответствующей новой (если есть)
+            List<ParsedCommand> newCmds = parsedList.getCommands();
+            for (int i = 0; i < pendingCmds.size(); i++) {
+                ParsedCommand pending = pendingCmds.get(i);
+                // Если AI вернул команду для этого индекса — мержим
+                // Иначе берём из pending и обновляем amount из первой новой команды
+                if (i < newCmds.size()) {
+                    ParsedCommand merged = mergePendingWithNew(pending, newCmds.get(i));
+                    newCmds.set(i, merged);
+                    log.info("Merged pending command {} with new: {}", i, merged);
+                } else if (newCmds.size() > 0 && newCmds.get(0).getAmount() != null) {
+                    // AI вернул только одну команду с amount — возможно это ответ типа "пополам"
+                    // В этом случае нужно распределить сумму по всем pending командам
+                    // Пока просто добавляем pending команду как есть (AI должен был уточнить)
+                    ParsedCommand merged = mergePendingWithNew(pending, newCmds.get(0));
+                    newCmds.add(merged);
+                    log.info("Added pending command {} with merged amount: {}", i, merged);
+                }
+            }
+            parsedList.setCommands(newCmds);
         }
         
         // Проверяем: это мета-команда? (AI определил)
@@ -138,17 +155,17 @@ public class ChatCommandService {
         conversationService.addToHistory(userContext, 
                 ConversationMessage.assistantMessage(response.getMessage(), firstCmd, wasClarification));
 
-        // Управление pending command для накопления ответов на уточнения
-        if (wasClarification && firstCmd != null) {
-            // Сохраняем частично заполненную команду для следующего запроса
-            userContext.setPendingCommand(firstCmd);
-            log.info("Saved pending command for clarification: {}", firstCmd);
+        // Управление pending commands для накопления ответов на уточнения
+        if (wasClarification && parsedList.size() > 0) {
+            // Сохраняем ВСЕ частично заполненные команды для следующего запроса
+            userContext.setPendingCommands(new ArrayList<>(parsedList.getCommands()));
+            log.info("Saved {} pending commands for clarification", parsedList.size());
         }
 
         // Если успешно распарсили — отправляем команды в sheets
         if (response.isSuccess()) {
-            // Очищаем pending command — команда завершена
-            userContext.setPendingCommand(null);
+            // Очищаем pending commands — команды завершены
+            userContext.getPendingCommands().clear();
             
             // Если это коррекция — сначала отменяем старую операцию (отрицательная сумма)
             if (parsedList.isCorrection()) {
@@ -262,7 +279,7 @@ public class ChatCommandService {
         
         // Context state
         sb.append("\nContext:\n");
-        sb.append("  pendingCommand: ").append(userContext.getPendingCommand() != null ? "yes" : "no").append("\n");
+        sb.append("  pendingCommands: ").append(userContext.getPendingCommands() != null ? userContext.getPendingCommands().size() : 0).append("\n");
         sb.append("  awaitingClarification: ").append(userContext.isAwaitingClarification()).append("\n");
         sb.append("  historySize: ").append(
                 userContext.getConversationHistory() != null ? userContext.getConversationHistory().size() : 0

@@ -66,9 +66,10 @@ public class UserContext {
     // Предложенная инструкция, ожидающая подтверждения (Learning)
     private String pendingSuggestion;
     
-    // Команда, ожидающая уточнений (частично заполненная)
-    // Сохраняем чтобы накапливать ответы пользователя
-    private ParsedCommand pendingCommand;
+    // Команды, ожидающие уточнений (частично заполненные)
+    // Сохраняем чтобы накапливать ответы пользователя (может быть несколько команд!)
+    @Builder.Default
+    private List<ParsedCommand> pendingCommands = new ArrayList<>();
     
     // Состояние онбординга (для новых пользователей)
     private String onboardingState;
