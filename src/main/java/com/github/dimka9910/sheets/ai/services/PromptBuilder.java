@@ -31,6 +31,9 @@ public class PromptBuilder {
             ## Available operation types:
             - INCOME: income (salary, received money)
             - EXPENSES: expense (spent, bought, paid)
+              ⚠️ "кэшем"/"наличкой"/"cash"/"наличными" = EXPENSES from CASH account!
+              Example: "купил кофе кэшем" → EXPENSES, accountName=CASH (NOT transfer!)
+              Example: "200 евро продукты наличкой" → EXPENSES, accountName=CASH
             - TRANSFER: transfer between accounts (transferred from ... to ...)
               IMPORTANT for TRANSFER:
               - MUST have accountName (source) AND secondAccount (destination)
