@@ -63,6 +63,11 @@ public class ParsedCommandList {
     private MetaCommand metaCommand;
     
     /**
+     * DEBUG: информация о потраченных токенах
+     */
+    private String tokenUsage;
+    
+    /**
      * Вложенный класс для установки дефолтов
      */
     @Data

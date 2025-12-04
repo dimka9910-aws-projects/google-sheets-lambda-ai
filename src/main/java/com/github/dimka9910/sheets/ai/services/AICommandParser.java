@@ -6,8 +6,11 @@ import com.github.dimka9910.sheets.ai.dto.OperationTypeEnum;
 import com.github.dimka9910.sheets.ai.dto.ParsedCommand;
 import com.github.dimka9910.sheets.ai.dto.ParsedCommandList;
 import com.github.dimka9910.sheets.ai.dto.UserContext;
-import dev.langchain4j.model.chat.ChatLanguageModel;
+import dev.langchain4j.data.message.UserMessage;
+import dev.langchain4j.model.chat.request.ChatRequest;
+import dev.langchain4j.model.chat.response.ChatResponse;
 import dev.langchain4j.model.openai.OpenAiChatModel;
+import dev.langchain4j.model.output.TokenUsage;
 import lombok.extern.slf4j.Slf4j;
 
 import java.time.Duration;
@@ -16,7 +19,7 @@ import java.util.List;
 @Slf4j
 public class AICommandParser {
 
-    private final ChatLanguageModel model;
+    private final OpenAiChatModel model;
     private final ObjectMapper objectMapper;
     private final PromptBuilder promptBuilder;
 
@@ -39,7 +42,7 @@ public class AICommandParser {
     }
 
     // Конструктор для тестирования
-    public AICommandParser(ChatLanguageModel model) {
+    public AICommandParser(OpenAiChatModel model) {
         this.model = model;
         this.objectMapper = new ObjectMapper();
         this.promptBuilder = new PromptBuilder();
@@ -56,11 +59,29 @@ public class AICommandParser {
             String prompt = promptBuilder.buildPrompt(userContext, userMessage);
             log.debug("Full prompt: {}", prompt);
             
-            String response = model.generate(prompt);
+            // Используем chat() для получения информации о токенах
+            ChatRequest chatRequest = ChatRequest.builder()
+                    .messages(List.of(UserMessage.from(prompt)))
+                    .build();
+            ChatResponse chatResponse = model.chat(chatRequest);
+            String response = chatResponse.aiMessage().text();
             log.info("AI response: {}", response);
+            
+            // Формируем строку с информацией о токенах
+            String tokenUsageStr = null;
+            TokenUsage usage = chatResponse.tokenUsage();
+            if (usage != null) {
+                tokenUsageStr = String.format("🔢 Токены: in=%d, out=%d, total=%d", 
+                    usage.inputTokenCount(), 
+                    usage.outputTokenCount(), 
+                    usage.totalTokenCount());
+                log.info("Token usage: {}", tokenUsageStr);
+            }
 
             String cleanJson = cleanJsonResponse(response);
-            return objectMapper.readValue(cleanJson, ParsedCommandList.class);
+            ParsedCommandList result = objectMapper.readValue(cleanJson, ParsedCommandList.class);
+            result.setTokenUsage(tokenUsageStr);
+            return result;
 
         } catch (Exception e) {
             log.error("Error parsing command: {}", e.getMessage(), e);

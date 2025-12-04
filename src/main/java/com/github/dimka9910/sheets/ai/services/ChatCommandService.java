@@ -220,6 +220,11 @@ public class ChatCommandService {
         sb.append("🔧 DEBUG:\n");
         sb.append("━━━━━━━━━━━━━━━━━━━━\n");
         
+        // Token usage (если есть)
+        if (parsedList.getTokenUsage() != null) {
+            sb.append(parsedList.getTokenUsage()).append("\n");
+        }
+        
         // AI Response summary
         sb.append("understood: ").append(parsedList.isUnderstood()).append("\n");
         sb.append("commands: ").append(parsedList.size()).append("\n");
