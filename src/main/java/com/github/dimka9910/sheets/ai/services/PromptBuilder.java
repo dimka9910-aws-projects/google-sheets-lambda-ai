@@ -71,6 +71,13 @@ public class PromptBuilder {
             If instruction contradicts user's explicit input → user's input wins.
             If instruction is ambiguous → ask for clarification.
             
+            ## ⚠️ CONVERSATION HISTORY - IMPORTANT:
+            - History is ONLY for corrections/clarifications (e.g., "не то", "исправь", "отмени", answer to your question)
+            - For NEW expenses: analyze ONLY the current message!
+            - NEVER inherit fund/account/currency from previous messages!
+            - Each new expense = independent transaction, start fresh with defaults
+            - Example: prev message "себе кофе 100" → DIMA_FUND, current "булка 100" → use DEFAULT fund, NOT DIMA_FUND!
+            
             ## STRICT RULES about defaults:
             - If default currency is ⚠️ NOT SET and user didn't specify currency → ASK "Какая валюта?"
             - If default account is ⚠️ NOT SET and user didn't specify account → ASK "С какого счёта?"
