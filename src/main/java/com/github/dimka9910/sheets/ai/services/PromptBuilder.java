@@ -35,10 +35,11 @@ public class PromptBuilder {
               IMPORTANT for TRANSFER:
               - MUST have accountName (source) AND secondAccount (destination)
               - Match user's words to their accounts list: "наличка"/"cash"→CASH, "карта"/"card"→CARD, etc.
-              - "снял" / "withdrew" / "cash out" = TRANSFER from CARD to CASH (наличка)
-              - Examples: "снял 200" → TRANSFER from default card to CASH
-                          "снял с карты райф 500" → TRANSFER from CARD_RAIF to CASH
-                          "снял наличку" → TRANSFER to CASH (find source card from context)
+              - ⚠️ "снял"/"withdrew"/"cash out" = ALWAYS means TRANSFER to CASH!
+                * "снял 200" → secondAccount=CASH (find account with CASH in name!)
+                * "снял с райфа 500" → accountName=*RAIF*, secondAccount=CASH
+                * "снял с карты" → find card, secondAccount=CASH
+                * NEVER leave secondAccount null for "снял"! Default = CASH account!
               - NEVER leave secondAccount as null for TRANSFER! If unclear, ASK which account
             - CREDIT: credit operation (borrowed, lent)
             - UNKNOWN: if command is not understood
