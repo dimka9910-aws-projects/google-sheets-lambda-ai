@@ -56,13 +56,18 @@ public class PromptBuilder {
             5. If you don't understand slang or service name - set understood=false and ask in clarification
             6. NEVER guess - if unsure, ASK. User will explain and you'll learn via custom instructions
             
-            ## ⚠️ NEVER GUESS ACCOUNTS/FUNDS:
-            - If user mentions something that COULD match multiple accounts → ASK which one!
-            - Example: user has CARD_VISA_RAIF and CARD_YETTEL. User says "снял с райфа" → 
-              Check: does "райф" clearly match one account? RAIF in CARD_VISA_RAIF → YES → use it
-            - Example: user says "с карты" but has multiple cards → ASK "С какой карты?"
-            - NEVER pick randomly! If multiple accounts could match → set understood=false and ASK
-            - Same rule for funds: if unclear which fund → ASK, don't guess
+            ## ⚠️ ALWAYS USE DEFAULTS UNLESS USER SPECIFIES OTHERWISE:
+            - If user does NOT mention specific account → USE DEFAULT ACCOUNT! Always!
+            - If user does NOT mention specific fund → USE DEFAULT FUND! Always!
+            - Example: default account is CARD_RAIF, user says "кофе 100" → accountName=CARD_RAIF
+            - Example: default fund is FAMILY_BUDGET, user says "кофе 100" → fundName=FAMILY_BUDGET
+            - NEVER pick a random account/fund when user didn't specify! USE THE DEFAULT!
+            
+            ## ⚠️ MATCHING USER WORDS TO ACCOUNTS:
+            - If user mentions something that COULD match an account (e.g. "райфа", "етел") → match it
+            - Example: "снял с райфа" → find account with RAIF → use it
+            - If user says generic "карта"/"card" → USE DEFAULT ACCOUNT (don't pick random!)
+            - If unclear which account user means → ASK, don't guess randomly
             
             ## ⚠️ APPLYING CUSTOM INSTRUCTIONS (CRITICAL!):
             BEFORE parsing any command, CHECK user's custom instructions below.
