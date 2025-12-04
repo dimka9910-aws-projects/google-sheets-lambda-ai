@@ -506,18 +506,23 @@ public class PromptBuilder {
             prompt.append("(If user wants to correct this → set correction=true and provide corrected values)\n");
         }
         
-        // Pending command (команда ожидающая уточнений)
-        ParsedCommand pending = context.getPendingCommand();
-        if (pending != null) {
-            prompt.append("\n### PENDING COMMAND (waiting for clarification) ###\n");
-            prompt.append("User started this command, fill in missing fields from their answer:\n");
-            prompt.append("  operationType: ").append(pending.getOperationType()).append("\n");
-            prompt.append("  amount: ").append(pending.getAmount() != null ? pending.getAmount() : "NOT SET - need from user").append("\n");
-            prompt.append("  currency: ").append(pending.getCurrency() != null ? pending.getCurrency() : "NOT SET - need from user").append("\n");
-            prompt.append("  account: ").append(pending.getAccountName() != null ? pending.getAccountName() : "NOT SET - need from user").append("\n");
-            prompt.append("  fund: ").append(pending.getFundName() != null ? pending.getFundName() : "NOT SET - need from user").append("\n");
-            prompt.append("  comment: ").append(pending.getComment() != null ? pending.getComment() : "").append("\n");
-            prompt.append("\nIMPORTANT: Use values from pending command + extract new values from user's message!\n");
+        // Pending commands (команды ожидающие уточнений)
+        List<ParsedCommand> pendingCmds = context.getPendingCommands();
+        if (pendingCmds != null && !pendingCmds.isEmpty()) {
+            prompt.append("\n### PENDING COMMANDS (waiting for clarification) ###\n");
+            prompt.append("User started ").append(pendingCmds.size()).append(" command(s), fill in missing fields from their answer:\n");
+            for (int i = 0; i < pendingCmds.size(); i++) {
+                ParsedCommand pending = pendingCmds.get(i);
+                prompt.append("\n[Command ").append(i + 1).append("]:\n");
+                prompt.append("  operationType: ").append(pending.getOperationType()).append("\n");
+                prompt.append("  amount: ").append(pending.getAmount() != null ? pending.getAmount() : "NOT SET - need from user").append("\n");
+                prompt.append("  currency: ").append(pending.getCurrency() != null ? pending.getCurrency() : "NOT SET - need from user").append("\n");
+                prompt.append("  account: ").append(pending.getAccountName() != null ? pending.getAccountName() : "NOT SET - need from user").append("\n");
+                prompt.append("  fund: ").append(pending.getFundName() != null ? pending.getFundName() : "NOT SET - need from user").append("\n");
+                prompt.append("  comment: ").append(pending.getComment() != null ? pending.getComment() : "").append("\n");
+            }
+            prompt.append("\nIMPORTANT: Return ALL ").append(pendingCmds.size()).append(" commands with amounts filled in!\n");
+            prompt.append("If user says 'пополам'/'50/50'/'equally' for 2 commands → divide total equally between them.\n");
             prompt.append("Keep what's already set, fill in what's missing.\n");
         }
         
