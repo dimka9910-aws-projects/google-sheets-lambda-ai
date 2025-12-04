@@ -5,6 +5,7 @@ import com.github.dimka9910.sheets.ai.dto.ParsedCommand;
 import com.github.dimka9910.sheets.ai.dto.UserContext;
 
 import java.util.List;
+import java.util.Map;
 
 /**
  * Собирает финальный промпт из базового шаблона + контекста пользователя
@@ -442,14 +443,44 @@ public class PromptBuilder {
             prompt.append("\n## User's funds/categories: ⚠️ NONE CONFIGURED - ASK USER to name their expense categories!\n");
         }
         
-        // Связанные пользователи
+        // Связанные пользователи и их контексты
         List<String> linkedUsers = context.getLinkedUsers();
+        Map<String, UserContext> linkedContexts = context.getLinkedUserContexts();
         if (linkedUsers != null && !linkedUsers.isEmpty()) {
             prompt.append("\n## Linked users (for shared finances):\n");
             for (String linkedUser : linkedUsers) {
                 prompt.append("- ").append(linkedUser).append("\n");
             }
-            prompt.append("(If user mentions 'her', 'girlfriend', partner by name → this is the linked user)\n");
+            
+            // Если есть загруженные контексты linked users — показать их счета/фонды
+            if (linkedContexts != null && !linkedContexts.isEmpty()) {
+                prompt.append("\n### Linked user details (use for transfers/expenses involving them):\n");
+                for (Map.Entry<String, UserContext> entry : linkedContexts.entrySet()) {
+                    UserContext linked = entry.getValue();
+                    String name = linked.getUserName() != null ? linked.getUserName() : entry.getKey();
+                    prompt.append("\n**").append(name).append(":**\n");
+                    
+                    if (linked.getAccounts() != null && !linked.getAccounts().isEmpty()) {
+                        prompt.append("  Accounts: ").append(String.join(", ", linked.getAccounts())).append("\n");
+                    }
+                    if (linked.getDefaultAccount() != null) {
+                        prompt.append("  Default account: ").append(linked.getDefaultAccount()).append("\n");
+                    }
+                    if (linked.getFunds() != null && !linked.getFunds().isEmpty()) {
+                        prompt.append("  Funds: ").append(String.join(", ", linked.getFunds())).append("\n");
+                    }
+                    if (linked.getDefaultFund() != null) {
+                        prompt.append("  Default/personal fund: ").append(linked.getDefaultFund()).append("\n");
+                    }
+                }
+                prompt.append("\n⚠️ LINKED USER SCENARIOS:\n");
+                prompt.append("- 'перевёл ей/ему 100' → TRANSFER from MY default to THEIR default account\n");
+                prompt.append("- 'отдал наличкой ей 100' → TRANSFER from MY CASH to THEIR CASH\n");
+                prompt.append("- 'купил за неё/него косметику' → EXPENSES from MY account to THEIR personal fund\n");
+                prompt.append("- 'она/он оплатил за меня' → EXPENSES from THEIR account to MY personal fund (record under THEIR name!)\n");
+            } else {
+                prompt.append("(If user mentions 'her', 'girlfriend', partner by name → this is the linked user)\n");
+            }
         }
         
         // Кастомные инструкции (с индексами для REMOVE_INSTRUCTION)

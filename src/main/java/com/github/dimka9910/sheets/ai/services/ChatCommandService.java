@@ -59,6 +59,9 @@ public class ChatCommandService {
         // Получаем контекст пользователя
         UserContext userContext = userContextService.getContext(userId);
         
+        // Загружаем контексты linked users для полного контекста в промпте
+        loadLinkedUserContexts(userContext);
+        
         // Admin commands — обрабатываем ДО всего остального
         // Это служебные команды, не зависят от языка, начинаются с /
         if (message.startsWith("/") || message.toLowerCase().startsWith("ps:")) {
@@ -797,5 +800,50 @@ public class ChatCommandService {
                 .clarification(newCmd.getClarification())
                 .errorMessage(newCmd.getErrorMessage())
                 .build();
+    }
+    
+    /**
+     * Загружает контексты linked users и добавляет их в основной контекст.
+     * Это нужно для того, чтобы AI видел счета/фонды/defaults linked users.
+     */
+    private void loadLinkedUserContexts(UserContext userContext) {
+        List<String> linkedUsers = userContext.getLinkedUsers();
+        if (linkedUsers == null || linkedUsers.isEmpty()) {
+            return;
+        }
+        
+        for (String linkedUserEntry : linkedUsers) {
+            // linkedUserEntry формат: "NAME (userId)" или просто "userId"
+            String linkedUserId = extractUserId(linkedUserEntry);
+            if (linkedUserId != null && !linkedUserId.equals(userContext.getUserId())) {
+                try {
+                    UserContext linkedContext = userContextService.getContext(linkedUserId);
+                    if (linkedContext != null && linkedContext.getUserId() != null) {
+                        userContext.addLinkedUserContext(linkedUserId, linkedContext);
+                        log.info("Loaded linked user context: {} for user {}", 
+                                linkedContext.getUserName(), userContext.getUserId());
+                    }
+                } catch (Exception e) {
+                    log.warn("Failed to load linked user context for {}: {}", linkedUserId, e.getMessage());
+                }
+            }
+        }
+    }
+    
+    /**
+     * Извлекает userId из строки формата "NAME (userId)" или просто "userId"
+     */
+    private String extractUserId(String linkedUserEntry) {
+        if (linkedUserEntry == null || linkedUserEntry.isBlank()) {
+            return null;
+        }
+        // Если формат "NAME (userId)" — извлекаем userId из скобок
+        int start = linkedUserEntry.lastIndexOf('(');
+        int end = linkedUserEntry.lastIndexOf(')');
+        if (start != -1 && end != -1 && end > start) {
+            return linkedUserEntry.substring(start + 1, end).trim();
+        }
+        // Иначе считаем что это просто userId
+        return linkedUserEntry.trim();
     }
 }
