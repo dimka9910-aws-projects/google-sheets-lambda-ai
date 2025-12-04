@@ -105,6 +105,15 @@ public class ChatCommandService {
         log.info("Parsed commands: {} (count: {}), metaCommand: {}", 
                 parsedList, parsedList.size(), parsedList.getMetaCommand());
         
+        // Мержим с pending командой если есть (для уточнений)
+        ParsedCommand pendingCmd = userContext.getPendingCommand();
+        if (pendingCmd != null && parsedList.size() > 0) {
+            ParsedCommand newCmd = parsedList.getFirst();
+            ParsedCommand merged = mergePendingWithNew(pendingCmd, newCmd);
+            parsedList.getCommands().set(0, merged);
+            log.info("Merged pending command with new: {}", merged);
+        }
+        
         // Проверяем: это мета-команда? (AI определил)
         if (parsedList.getMetaCommand() != null && parsedList.getMetaCommand().isPresent()) {
             ChatResponse metaResponse = handleAIMetaCommand(request, parsedList, userContext);
@@ -762,5 +771,26 @@ public class ChatCommandService {
         if (a == null && b == null) return true;
         if (a == null || b == null) return false;
         return a.equals(b);
+    }
+    
+    /**
+     * Мержит pending команду с новым ответом AI.
+     * Новые non-null значения перезаписывают, остальные берутся из pending.
+     */
+    private ParsedCommand mergePendingWithNew(ParsedCommand pending, ParsedCommand newCmd) {
+        return ParsedCommand.builder()
+                .operationType(newCmd.getOperationType() != null ? newCmd.getOperationType() : pending.getOperationType())
+                .amount(newCmd.getAmount() != null && newCmd.getAmount() > 0 ? newCmd.getAmount() : pending.getAmount())
+                .currency(newCmd.getCurrency() != null ? newCmd.getCurrency() : pending.getCurrency())
+                .accountName(newCmd.getAccountName() != null ? newCmd.getAccountName() : pending.getAccountName())
+                .fundName(newCmd.getFundName() != null ? newCmd.getFundName() : pending.getFundName())
+                .comment(newCmd.getComment() != null ? newCmd.getComment() : pending.getComment())
+                .secondAccount(newCmd.getSecondAccount() != null ? newCmd.getSecondAccount() : pending.getSecondAccount())
+                .secondPerson(newCmd.getSecondPerson() != null ? newCmd.getSecondPerson() : pending.getSecondPerson())
+                .secondCurrency(newCmd.getSecondCurrency() != null ? newCmd.getSecondCurrency() : pending.getSecondCurrency())
+                .understood(newCmd.isUnderstood())
+                .clarification(newCmd.getClarification())
+                .errorMessage(newCmd.getErrorMessage())
+                .build();
     }
 }
