@@ -67,15 +67,21 @@ public class AICommandParser {
             String response = chatResponse.aiMessage().text();
             log.info("AI response: {}", response);
             
-            // Формируем строку с информацией о токенах
+            // Формируем строку с информацией о токенах и стоимости
             String tokenUsageStr = null;
             TokenUsage usage = chatResponse.tokenUsage();
             if (usage != null) {
-                tokenUsageStr = String.format("🔢 Токены: in=%d, out=%d, total=%d", 
+                // Цены gpt-4o: input $2.50/1M, output $10.00/1M
+                double inputCost = usage.inputTokenCount() * 2.50 / 1_000_000;
+                double outputCost = usage.outputTokenCount() * 10.00 / 1_000_000;
+                double totalCost = inputCost + outputCost;
+                
+                tokenUsageStr = String.format("🔢 Токены: in=%d, out=%d | 💰 ~$%.4f", 
                     usage.inputTokenCount(), 
                     usage.outputTokenCount(), 
-                    usage.totalTokenCount());
-                log.info("Token usage: {}", tokenUsageStr);
+                    totalCost);
+                log.info("Token usage: in={}, out={}, cost=${}", 
+                    usage.inputTokenCount(), usage.outputTokenCount(), totalCost);
             }
 
             String cleanJson = cleanJsonResponse(response);
