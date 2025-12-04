@@ -33,7 +33,8 @@ public class AICommandParser {
         this.model = OpenAiChatModel.builder()
                 .apiKey(apiKey)
                 .modelName("gpt-5-mini")
-                .timeout(Duration.ofSeconds(30))
+                .maxCompletionTokens(2000) // для reasoning моделей - включает думание + ответ
+                .timeout(Duration.ofSeconds(60)) // reasoning может думать дольше
                 .build();
 
         this.objectMapper = new ObjectMapper();
