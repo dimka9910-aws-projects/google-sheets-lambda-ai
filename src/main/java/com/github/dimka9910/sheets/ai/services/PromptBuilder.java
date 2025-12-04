@@ -55,6 +55,14 @@ public class PromptBuilder {
             5. If you don't understand slang or service name - set understood=false and ask in clarification
             6. NEVER guess - if unsure, ASK. User will explain and you'll learn via custom instructions
             
+            ## ⚠️ NEVER GUESS ACCOUNTS/FUNDS:
+            - If user mentions something that COULD match multiple accounts → ASK which one!
+            - Example: user has CARD_VISA_RAIF and CARD_YETTEL. User says "снял с райфа" → 
+              Check: does "райф" clearly match one account? RAIF in CARD_VISA_RAIF → YES → use it
+            - Example: user says "с карты" but has multiple cards → ASK "С какой карты?"
+            - NEVER pick randomly! If multiple accounts could match → set understood=false and ASK
+            - Same rule for funds: if unclear which fund → ASK, don't guess
+            
             ## ⚠️ APPLYING CUSTOM INSTRUCTIONS (CRITICAL!):
             BEFORE parsing any command, CHECK user's custom instructions below.
             Instructions may contain:
