@@ -32,9 +32,9 @@ public class AICommandParser {
 
         this.model = OpenAiChatModel.builder()
                 .apiKey(apiKey)
-                .modelName("gpt-5-mini")
-                .maxCompletionTokens(2000) // для reasoning моделей - включает думание + ответ
-                .timeout(Duration.ofSeconds(60)) // reasoning может думать дольше
+                .modelName("gpt-4o-mini")
+                .temperature(0.1)
+                .timeout(Duration.ofSeconds(30))
                 .build();
 
         this.objectMapper = new ObjectMapper();
@@ -71,12 +71,12 @@ public class AICommandParser {
             String tokenUsageStr = null;
             TokenUsage usage = chatResponse.tokenUsage();
             if (usage != null) {
-                // Цены gpt-5-mini: input $0.25/1M, output $2.00/1M
-                double inputCost = usage.inputTokenCount() * 0.25 / 1_000_000;
-                double outputCost = usage.outputTokenCount() * 2.00 / 1_000_000;
+                // Цены gpt-4o-mini: input $0.15/1M, output $0.60/1M
+                double inputCost = usage.inputTokenCount() * 0.15 / 1_000_000;
+                double outputCost = usage.outputTokenCount() * 0.60 / 1_000_000;
                 double totalCost = inputCost + outputCost;
                 
-                tokenUsageStr = String.format("🔢 Токены: in=%d, out=%d | 💰 ~$%.5f (gpt-5-mini)", 
+                tokenUsageStr = String.format("🔢 Токены: in=%d, out=%d | 💰 ~$%.5f (gpt-4o-mini)", 
                     usage.inputTokenCount(), 
                     usage.outputTokenCount(), 
                     totalCost);
