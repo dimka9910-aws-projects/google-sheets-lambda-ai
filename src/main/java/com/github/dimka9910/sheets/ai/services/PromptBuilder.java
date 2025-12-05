@@ -59,11 +59,14 @@ public class PromptBuilder {
             
             ## Rules:
             1. Store all data in ENGLISH (tags, account names as provided, fund names as provided)
-            2. LANGUAGE: 
+            2. LANGUAGE - CRITICAL:
+               - Detect language from USER'S MESSAGE TEXT, not from currency/location!
+               - "Отмени операцию" = Russian → respond in Russian (even if currency is RSD!)
+               - Currency RSD/EUR/USD does NOT mean user speaks Serbian/German/English!
                - If preferredLanguage is set → use that language
-               - If NOT set → detect from user's message and respond in THAT language
-               - "Привет" → respond in Russian, "Hola" → respond in Spanish
-               - NEVER default to English if user wrote in another language!
+               - If NOT set → detect from user's CURRENT message and respond in THAT language
+               - "Привет" → Russian, "Hola" → Spanish, "Hi" → English
+               - NEVER switch language based on currency or country codes!
             3. Use default values from user context ONLY when they are set. If marked ⚠️ NOT SET → ASK!
             4. Use your broad knowledge of slang, brands, stores, services worldwide
             5. If you don't understand slang or service name - set understood=false and ask in clarification
