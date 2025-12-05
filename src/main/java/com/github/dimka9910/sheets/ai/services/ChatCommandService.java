@@ -65,7 +65,7 @@ public class ChatCommandService {
         
         // Admin commands — обрабатываем ДО всего остального
         // Это служебные команды, не зависят от языка, начинаются с /
-        if (message.startsWith("/") || message.toLowerCase().startsWith("ps:")) {
+        if (message.startsWith("/")) {
             ChatResponse adminResponse = handleAdminCommand(request, message, userContext);
             if (adminResponse != null) {
                 sqsPublisher.sendResponse(adminResponse);
@@ -358,8 +358,6 @@ public class ChatCommandService {
                 /reset     — delete user and start fresh
                 /note TEXT — save note to logs for developer
                 /info      — show this help
-                
-                ps: TEXT   — same as /note (save feedback to logs)
                 """;
             return ChatResponse.builder()
                     .chatId(chatId)
@@ -409,7 +407,7 @@ public class ChatCommandService {
         }
         
         // /note или ps: — сохранить заметку в логи
-        if (msgLower.startsWith("/note") || msgLower.startsWith("ps:")) {
+        if (msgLower.startsWith("/note")) {
             String note = message.startsWith("/note") 
                     ? message.substring(5).trim() 
                     : message.substring(3).trim();
