@@ -64,7 +64,7 @@ class MessageClassifierTest {
         @Test
         @DisplayName("New expense without context → isResponse=false")
         void newExpense() {
-            var result = classifier.classify("кофе 300");
+            var result = classifier.classify("кофе 300", null);
             
             assertFalse(result.responseType() == ResponseType.YES);
         }
@@ -79,7 +79,7 @@ class MessageClassifierTest {
         @Test
         @DisplayName("Expense → FINANCIAL tag")
         void expenseTag() {
-            var result = classifier.classify("кофе 300");
+            var result = classifier.classify("кофе 300", null);
             
             assertTrue(result.tags().contains(Tag.FINANCIAL));
             System.out.println("Tags: " + result.tags());
@@ -88,7 +88,7 @@ class MessageClassifierTest {
         @Test
         @DisplayName("Income → FINANCIAL tag")
         void incomeTag() {
-            var result = classifier.classify("зарплата 5000 EUR");
+            var result = classifier.classify("зарплата 5000 EUR", null);
             
             assertTrue(result.tags().contains(Tag.FINANCIAL));
         }
@@ -96,7 +96,7 @@ class MessageClassifierTest {
         @Test
         @DisplayName("Settings → SETTINGS tag")
         void settingsTag() {
-            var result = classifier.classify("запомни дефолтная валюта динары");
+            var result = classifier.classify("запомни дефолтная валюта динары", null);
             
             assertTrue(result.tags().contains(Tag.SETTINGS));
         }
@@ -104,7 +104,7 @@ class MessageClassifierTest {
         @Test
         @DisplayName("Question → QUESTION or SETTINGS tag")
         void questionTag() {
-            var result = classifier.classify("как добавить счёт?");
+            var result = classifier.classify("как добавить счёт?", null);
             
             // Model may interpret as QUESTION or SETTINGS
             assertTrue(result.tags().contains(Tag.QUESTION) || result.tags().contains(Tag.SETTINGS),
@@ -114,7 +114,7 @@ class MessageClassifierTest {
         @Test
         @DisplayName("Greeting → OFF_TOPIC tag")
         void greetingTag() {
-            var result = classifier.classify("привет");
+            var result = classifier.classify("привет", null);
             
             assertTrue(result.tags().contains(Tag.OFF_TOPIC));
         }
@@ -129,7 +129,7 @@ class MessageClassifierTest {
         @Test
         @DisplayName("Expense + Settings → both tags")
         void expenseAndSettings() {
-            var result = classifier.classify("кофе 300 и запомни дефолт динары");
+            var result = classifier.classify("кофе 300 и запомни дефолт динары", null);
             
             System.out.println("Tags for 'expense + settings': " + result.tags());
             
@@ -143,7 +143,7 @@ class MessageClassifierTest {
         @Test
         @DisplayName("Multiple expenses → FINANCIAL tag (no split)")
         void multipleExpenses() {
-            var result = classifier.classify("кофе 300 и чай 200");
+            var result = classifier.classify("кофе 300 и чай 200", null);
             
             assertTrue(result.tags().contains(Tag.FINANCIAL));
             // No split - just one FINANCIAL tag
@@ -153,7 +153,7 @@ class MessageClassifierTest {
         @Test
         @DisplayName("Question about settings → may have both tags")
         void questionAboutSettings() {
-            var result = classifier.classify("покажи мои настройки");
+            var result = classifier.classify("покажи мои настройки", null);
             
             System.out.println("Tags for 'show settings': " + result.tags());
             assertTrue(result.tags().contains(Tag.QUESTION) || result.tags().contains(Tag.SETTINGS));
@@ -170,7 +170,7 @@ class MessageClassifierTest {
         @DisplayName("Same message, different context")
         void sameMessageDifferentContext() {
             // Without context - standalone
-            var r1 = classifier.classify("500");
+            var r1 = classifier.classify("500", null);
             System.out.println("'500' without context: responseType=" + r1.responseType() + ", tags=" + r1.tags());
             
             // With question - response
@@ -201,7 +201,7 @@ class MessageClassifierTest {
         @Test
         @DisplayName("Classification < 3 seconds")
         void timing() {
-            var result = classifier.classify("кофе 300");
+            var result = classifier.classify("кофе 300", null);
             
             assertTrue(result.latencyMs() < 3000, 
                     "Should complete in under 3s, took " + result.latencyMs() + "ms");
@@ -211,7 +211,7 @@ class MessageClassifierTest {
         @Test
         @DisplayName("Token usage < 1000")
         void tokens() {
-            var result = classifier.classify("кофе 300 и запомни дефолт");
+            var result = classifier.classify("кофе 300 и запомни дефолт", null);
             
             assertTrue(result.tokensUsed() < 1000, 
                     "Should use < 1000 tokens, used " + result.tokensUsed());
@@ -228,21 +228,21 @@ class MessageClassifierTest {
         @Test
         @DisplayName("English")
         void english() {
-            var result = classifier.classify("coffee 300");
+            var result = classifier.classify("coffee 300", null);
             assertTrue(result.tags().contains(Tag.FINANCIAL));
         }
         
         @Test
         @DisplayName("Serbian")
         void serbian() {
-            var result = classifier.classify("kafa 300 RSD");
+            var result = classifier.classify("kafa 300 RSD", null);
             assertTrue(result.tags().contains(Tag.FINANCIAL));
         }
         
         @Test
         @DisplayName("Mixed")
         void mixed() {
-            var result = classifier.classify("bought кофе for 300");
+            var result = classifier.classify("bought кофе for 300", null);
             assertTrue(result.tags().contains(Tag.FINANCIAL));
         }
     }
@@ -256,7 +256,7 @@ class MessageClassifierTest {
         @Test
         @DisplayName("Empty message → fallback")
         void emptyMessage() {
-            var result = classifier.classify("");
+            var result = classifier.classify("", null);
             
             assertNotNull(result);
             assertFalse(result.tags().isEmpty());
@@ -265,7 +265,7 @@ class MessageClassifierTest {
         @Test
         @DisplayName("Just number")
         void justNumber() {
-            var result = classifier.classify("500");
+            var result = classifier.classify("500", null);
             
             assertNotNull(result);
             System.out.println("Just '500': tags=" + result.tags());
@@ -274,7 +274,7 @@ class MessageClassifierTest {
         @Test
         @DisplayName("Special characters")
         void specialChars() {
-            var result = classifier.classify("кофе 300₽ @cafe #утро");
+            var result = classifier.classify("кофе 300₽ @cafe #утро", null);
             
             assertTrue(result.tags().contains(Tag.FINANCIAL));
         }
@@ -291,7 +291,7 @@ class MessageClassifierTest {
         @Test
         @DisplayName("'Что ты умеешь?' → QUESTION, not OFF_TOPIC")
         void whatCanYouDo_shouldBeQuestion() {
-            var result = classifier.classify("Что ты умеешь?");
+            var result = classifier.classify("Что ты умеешь?", null);
             
             assertTrue(result.tags().contains(Tag.QUESTION), 
                     "Question about capabilities should be QUESTION, got: " + result.tags());
@@ -301,7 +301,7 @@ class MessageClassifierTest {
         @Test
         @DisplayName("Single product name 'кофе' → FINANCIAL")
         void singleProductName_shouldBeFinancial() {
-            var result = classifier.classify("кофе");
+            var result = classifier.classify("кофе", null);
             
             assertTrue(result.tags().contains(Tag.FINANCIAL), 
                     "Single product name should be FINANCIAL (user forgot amount), got: " + result.tags());
@@ -311,7 +311,7 @@ class MessageClassifierTest {
         @Test
         @DisplayName("Single product name 'кофейня' → FINANCIAL")
         void singleServiceName_shouldBeFinancial() {
-            var result = classifier.classify("кофейня");
+            var result = classifier.classify("кофейня", null);
             
             assertTrue(result.tags().contains(Tag.FINANCIAL), 
                     "Single service name should be FINANCIAL, got: " + result.tags());
@@ -356,7 +356,7 @@ class MessageClassifierTest {
         @Test
         @DisplayName("'поездка на такси' → FINANCIAL")
         void tripByTaxi_shouldBeFinancial() {
-            var result = classifier.classify("поездка на такси");
+            var result = classifier.classify("поездка на такси", null);
             
             assertTrue(result.tags().contains(Tag.FINANCIAL), 
                     "Taxi trip description should be FINANCIAL, got: " + result.tags());
@@ -365,7 +365,7 @@ class MessageClassifierTest {
         @Test
         @DisplayName("'купил порося' → FINANCIAL")
         void boughtSomething_shouldBeFinancial() {
-            var result = classifier.classify("купил порося");
+            var result = classifier.classify("купил порося", null);
             
             assertTrue(result.tags().contains(Tag.FINANCIAL), 
                     "Purchase statement should be FINANCIAL, got: " + result.tags());
@@ -374,7 +374,7 @@ class MessageClassifierTest {
         @Test
         @DisplayName("'RSD, всегда их используй' → SETTINGS")
         void rememberCurrency_shouldBeSettings() {
-            var result = classifier.classify("RSD, всегда их короче используй");
+            var result = classifier.classify("RSD, всегда их короче используй", null);
             
             assertTrue(result.tags().contains(Tag.SETTINGS), 
                     "Instruction to remember currency should be SETTINGS, got: " + result.tags());

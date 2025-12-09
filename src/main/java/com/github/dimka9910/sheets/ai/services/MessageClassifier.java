@@ -254,12 +254,6 @@ public class MessageClassifier {
             """.formatted(previousBotMessage, message);
     }
     
-    /**
-     * Classify without previous context (new conversation).
-     */
-    public ClassificationResult classify(String message) {
-        return classify(message, null);
-    }
     
     private String buildTagsPrompt(String message, String previousBotMessage) {
         StringBuilder sb = new StringBuilder();
