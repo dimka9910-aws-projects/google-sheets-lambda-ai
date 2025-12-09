@@ -1,6 +1,6 @@
 package com.github.dimka9910.sheets.ai.services;
 
-import com.github.dimka9910.sheets.ai.services.MessageClassifier.ClassificationResult;
+import com.github.dimka9910.sheets.ai.services.MessageClassifier.ResponseType;
 import com.github.dimka9910.sheets.ai.services.MessageClassifier.Tag;
 import org.junit.jupiter.api.*;
 import org.junit.jupiter.api.condition.EnabledIfEnvironmentVariable;
@@ -33,7 +33,7 @@ class MessageClassifierTest {
         void shortAnswerAfterQuestion() {
             var result = classifier.classify("да", "Записать кофе 300 RSD?");
             
-            assertTrue(result.isResponse(), "Short answer to question should be RESPONSE");
+            assertTrue(result.responseType() == ResponseType.YES, "Short answer to question should be RESPONSE");
             System.out.println("Tags: " + result.tags());
         }
         
@@ -42,7 +42,7 @@ class MessageClassifierTest {
         void currencyAnswer() {
             var result = classifier.classify("RSD", "В какой валюте?");
             
-            assertTrue(result.isResponse());
+            assertTrue(result.responseType() == ResponseType.YES);
         }
         
         @Test
@@ -50,7 +50,7 @@ class MessageClassifierTest {
         void accountAnswer() {
             var result = classifier.classify("карта", "С какого счёта?");
             
-            assertTrue(result.isResponse());
+            assertTrue(result.responseType() == ResponseType.YES);
         }
         
         @Test
@@ -58,7 +58,7 @@ class MessageClassifierTest {
         void correction() {
             var result = classifier.classify("не 300 а 500", "Записал: кофе 300 RSD");
             
-            assertTrue(result.isResponse());
+            assertTrue(result.responseType() == ResponseType.YES);
         }
         
         @Test
@@ -66,7 +66,7 @@ class MessageClassifierTest {
         void newExpense() {
             var result = classifier.classify("кофе 300");
             
-            assertFalse(result.isResponse());
+            assertFalse(result.responseType() == ResponseType.YES);
         }
     }
     
@@ -171,13 +171,13 @@ class MessageClassifierTest {
         void sameMessageDifferentContext() {
             // Without context - standalone
             var r1 = classifier.classify("500");
-            System.out.println("'500' without context: isResponse=" + r1.isResponse() + ", tags=" + r1.tags());
+            System.out.println("'500' without context: responseType=" + r1.responseType() + ", tags=" + r1.tags());
             
             // With question - response
             var r2 = classifier.classify("500", "Какая сумма?");
-            System.out.println("'500' after question: isResponse=" + r2.isResponse() + ", tags=" + r2.tags());
+            System.out.println("'500' after question: responseType=" + r2.responseType() + ", tags=" + r2.tags());
             
-            assertTrue(r2.isResponse(), "'500' after question should be RESPONSE");
+            assertEquals(ResponseType.YES, r2.responseType(), "'500' after question should be RESPONSE");
         }
         
         @Test
@@ -187,7 +187,7 @@ class MessageClassifierTest {
             
             // Should at least have FINANCIAL tag
             assertTrue(result.hasTag(Tag.FINANCIAL));
-            System.out.println("New after success: isResponse=" + result.isResponse() + ", tags=" + result.tags());
+            System.out.println("New after success: isResponse=" + result.responseType() == ResponseType.YES + ", tags=" + result.tags());
             // Note: model might see it as response (correction?) or new - both valid interpretations
         }
     }
@@ -321,23 +321,23 @@ class MessageClassifierTest {
         // === isResponse issues ===
         
         @Test
-        @DisplayName("Answer with account+amount after 'какой счёт, какая сумма?' → isResponse=true")
+        @DisplayName("Answer with account+amount after 'какой счёт, какая сумма?' → YES")
         void accountAndAmount_afterQuestion_shouldBeResponse() {
             var result = classifier.classify("райф 200", "какой счёт, какая сумма?");
             
-            assertTrue(result.isResponse(), 
-                    "User provides requested account+amount = RESPONSE, got isResponse=" + result.isResponse());
-            System.out.println("'райф 200' after question: isResponse=" + result.isResponse());
+            assertEquals(ResponseType.YES, result.responseType(), 
+                    "User provides requested account+amount = RESPONSE, got: " + result.responseType());
+            System.out.println("'райф 200' after question: " + result.responseType());
         }
         
         @Test
-        @DisplayName("Vague answer 'много' after 'сколько стоила?' → isResponse=true")
+        @DisplayName("Vague answer 'много' after 'сколько стоила?' → YES")
         void vagueAnswer_afterQuestion_shouldBeResponse() {
             var result = classifier.classify("много", "сколько она стоила?");
             
-            assertTrue(result.isResponse(), 
-                    "Even vague/incomplete answer is still a RESPONSE, got isResponse=" + result.isResponse());
-            System.out.println("'много' after price question: isResponse=" + result.isResponse());
+            assertEquals(ResponseType.YES, result.responseType(), 
+                    "Even vague/incomplete answer is still a RESPONSE, got: " + result.responseType());
+            System.out.println("'много' after price question: " + result.responseType());
         }
         
         @Test
@@ -347,7 +347,7 @@ class MessageClassifierTest {
             
             // This is tricky - user might be answering OR starting new transaction
             // Log for observation, don't assert strictly
-            System.out.println("'кофе 200' after 'какие динары?': isResponse=" + result.isResponse() + ", tags=" + result.tags());
+            System.out.println("'кофе 200' after 'какие динары?': isResponse=" + result.responseType() == ResponseType.YES + ", tags=" + result.tags());
             
             // At minimum should be FINANCIAL
             assertTrue(result.hasTag(Tag.FINANCIAL), "Should have FINANCIAL tag");

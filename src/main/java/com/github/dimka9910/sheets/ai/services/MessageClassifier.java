@@ -70,55 +70,14 @@ public class MessageClassifier {
     
     // Classification result
     public record ClassificationResult(
-            String originalMessage,
             ResponseType responseType,  // YES/NO/NEED_HISTORY
             Set<Tag> tags,              // Which context sections to load
             String rawJson,             // Raw JSON from model (for debug)
             long latencyMs,
             int tokensUsed
     ) {
-        // Convenience methods
-        public boolean isResponse() {
-            return responseType == ResponseType.YES;
-        }
-        
-        public boolean needsMoreHistory() {
-            return responseType == ResponseType.NEED_HISTORY;
-        }
-        
-        public boolean needsPreviousContext() {
-            return responseType != ResponseType.NO;
-        }
-        
         public boolean hasTag(Tag tag) {
             return tags.contains(tag);
-        }
-        
-        public boolean isFinancial() {
-            return tags.contains(Tag.FINANCIAL);
-        }
-        
-        public boolean isSettings() {
-            return tags.contains(Tag.SETTINGS);
-        }
-        
-        public boolean isTransfer() {
-            return tags.contains(Tag.TRANSFER);
-        }
-        
-        public boolean involvesThirdParty() {
-            return tags.contains(Tag.THIRD_PARTY);
-        }
-        
-        public boolean isComplex() {
-            return tags.contains(Tag.COMPLEX);
-        }
-        
-        /**
-         * Should this request go to gpt-5-mini (smart) instead of gpt-4o-mini (fast)?
-         */
-        public boolean needsSmartModel() {
-            return isComplex();  // COMPLEX tag indicates need for smarter model
         }
     }
     
@@ -173,7 +132,6 @@ public class MessageClassifier {
                     tagsResult.latencyMs, MODEL_FAST, latency, responseType);
             
             return new ClassificationResult(
-                    message,
                     responseType,  // From gpt-4o (smart): YES/NO/NEED_HISTORY
                     tagsResult.tags,  // From gpt-4o-mini (fast)
                     tagsResult.rawJson + " | responseType(gpt-4o)=" + responseType,
@@ -185,7 +143,6 @@ public class MessageClassifier {
             logger.error("Parallel classification failed: {}", e.getMessage(), e);
             long latency = System.currentTimeMillis() - startTime;
             return new ClassificationResult(
-                    message,
                     ResponseType.NO,
                     Set.of(Tag.FINANCIAL),
                     "{\"error\": \"" + e.getMessage() + "\"}",
@@ -210,13 +167,12 @@ public class MessageClassifier {
             String content = response.path("choices").get(0).path("message").path("content").asText();
             
             long latency = System.currentTimeMillis() - startTime;
-            return parseTagsResponse(content, message, ResponseType.NO, latency, tokens);
+            return parseTagsResponse(content, ResponseType.NO, latency, tokens);
             
         } catch (Exception e) {
             logger.error("Tags classification failed: {}", e.getMessage(), e);
             long latency = System.currentTimeMillis() - startTime;
             return new ClassificationResult(
-                    message,
                     ResponseType.NO,
                     Set.of(Tag.FINANCIAL),
                     "{\"error\": \"" + e.getMessage() + "\"}",
@@ -421,7 +377,7 @@ public class MessageClassifier {
         return sb.toString();
     }
     
-    private ClassificationResult parseTagsResponse(String content, String originalMessage, ResponseType responseType, long latency, int tokens) {
+    private ClassificationResult parseTagsResponse(String content, ResponseType responseType, long latency, int tokens) {
         String json = extractJson(content);
         
         try {
@@ -444,12 +400,11 @@ public class MessageClassifier {
                 tags.add(Tag.FINANCIAL);
             }
             
-            return new ClassificationResult(originalMessage, responseType, tags, json, latency, tokens);
+            return new ClassificationResult(responseType, tags, json, latency, tokens);
             
         } catch (Exception e) {
             logger.error("Failed to parse response: {}", content, e);
             return new ClassificationResult(
-                    originalMessage,
                     responseType,
                     Set.of(Tag.FINANCIAL),
                     json,
