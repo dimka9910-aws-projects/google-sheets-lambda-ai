@@ -45,6 +45,7 @@ public class GoogleSheetsLambdaFunction implements RequestHandler<APIGatewayProx
     public GoogleSheetsLambdaFunction(ChatCommandService chatCommandService, UsersController usersController) {
         this.chatCommandService = chatCommandService;
         this.usersController = usersController;
+        this.orchestrator = new Orchestrator();
     }
 
     @Override
