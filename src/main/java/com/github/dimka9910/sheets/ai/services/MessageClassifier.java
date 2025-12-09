@@ -16,119 +16,105 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
 /**
- * Message Classifier - determines what context to load for Main Agent.
+ * Message Classifier - determines context for Main Agent.
  * 
- * NO SPLITTING! Just tags for context loading.
- * Main Agent (gpt-5-mini) handles complex messages itself.
- * 
- * Output:
- * - responseType: YES/NO/NEED_HISTORY
- * - tags: which context sections to load (can be multiple)
+ * Parallel execution:
+ * - gpt-4o-mini → tags (fast, cheap)
+ * - gpt-4o → responseType (smart, dialog understanding)
  */
 public class MessageClassifier {
+    
     private static final Logger logger = LoggerFactory.getLogger(MessageClassifier.class);
     
+    // ==================== CONSTANTS ====================
+    
     private static final String OPENAI_API_URL = "https://api.openai.com/v1/chat/completions";
-    
-    // Fast model for tags classification
     private static final String MODEL_FAST = "gpt-4o-mini";
-    // Smart model for isResponse (parallel) - better at understanding dialog context
     private static final String MODEL_SMART = "gpt-4o";
-    
     private static final int MAX_TOKENS_TAGS = 500;
-    private static final int MAX_TOKENS_IS_RESPONSE = 50;  // Very simple task
+    private static final int MAX_TOKENS_RESPONSE_TYPE = 50;
     private static final Duration TIMEOUT = Duration.ofSeconds(30);
+    
+    // ==================== FIELDS ====================
     
     private final String apiKey;
     private final HttpClient httpClient;
     private final ObjectMapper objectMapper;
     private final ExecutorService executor;
     
-    // Context tags - what sections to load for Main Agent
+    // ==================== TYPES ====================
+    
     public enum Tag {
-        // Primary categories
-        FINANCIAL,      // Any money transaction (expense, income)
-        SETTINGS,       // Configuration changes
-        QUESTION,       // Questions about system
-        OFF_TOPIC,      // Unrelated to finance
-        
-        // Financial sub-tags (can combine with FINANCIAL)
-        TRANSFER,           // Transfer between OWN accounts
-        THIRD_PARTY,        // Involves another person (linked user, external)
-        
-        // Complexity indicator
-        COMPLEX             // Multiple operations, math, conditions, corrections
-                            // → route to smarter model (gpt-5-mini)
+        FINANCIAL,    // Money transaction
+        SETTINGS,     // Configuration
+        QUESTION,     // Help/capabilities
+        OFF_TOPIC,    // Unrelated
+        TRANSFER,     // Between own accounts
+        THIRD_PARTY,  // Involves another person
+        COMPLEX       // Needs smart model
     }
     
-    // Response type from gpt-4o
     public enum ResponseType {
-        YES,           // Definitely a response to previous bot message
-        NO,            // New topic, not related to bot's message
-        NEED_HISTORY   // Looks like response but need more conversation history to understand context
+        YES,          // Response to last bot message
+        NO,           // New topic
+        NEED_HISTORY  // Response to earlier message
     }
     
-    // Classification result
     public record ClassificationResult(
-            ResponseType responseType,  // YES/NO/NEED_HISTORY
-            Set<Tag> tags,              // Which context sections to load
-            String rawJson,             // Raw JSON from model (for debug)
+            ResponseType responseType,
+            Set<Tag> tags,
+            String rawJson,
             long latencyMs,
             int tokensUsed
     ) {}
     
+    private record TagsResult(Set<Tag> tags, String rawJson, long latencyMs, int tokens) {}
+    
+    // ==================== CONSTRUCTORS ====================
+    
     public MessageClassifier() {
         this.apiKey = System.getProperty("OPENAI_API_KEY", System.getenv("OPENAI_API_KEY"));
-        this.httpClient = HttpClient.newBuilder()
-                .connectTimeout(TIMEOUT)
-                .build();
-        this.objectMapper = new ObjectMapper();
-        this.executor = Executors.newFixedThreadPool(2); // For parallel calls
-    }
-    
-    public MessageClassifier(String apiKey) {
-        this.apiKey = apiKey;
-        this.httpClient = HttpClient.newBuilder()
-                .connectTimeout(TIMEOUT)
-                .build();
+        this.httpClient = HttpClient.newBuilder().connectTimeout(TIMEOUT).build();
         this.objectMapper = new ObjectMapper();
         this.executor = Executors.newFixedThreadPool(2);
     }
     
+    public MessageClassifier(String apiKey) {
+        this.apiKey = apiKey;
+        this.httpClient = HttpClient.newBuilder().connectTimeout(TIMEOUT).build();
+        this.objectMapper = new ObjectMapper();
+        this.executor = Executors.newFixedThreadPool(2);
+    }
+    
+    // ==================== PUBLIC API ====================
+    
     /**
-     * Classify message with previous bot message context.
-     * 
-     * PARALLEL EXECUTION:
-     * - gpt-4o-mini → tags classification (fast, cheap)
-     * - gpt-4o → isResponse detection (smart, better at dialog understanding)
+     * Classify message. If previousBotMessage is null, responseType = NO.
+     * Otherwise runs parallel classification for tags and responseType.
      */
     public ClassificationResult classify(String message, String previousBotMessage) {
         long startTime = System.currentTimeMillis();
         
         try {
-            // No previous message → just classify tags, responseType = NO
             if (previousBotMessage == null || previousBotMessage.isBlank()) {
                 TagsResult tagsResult = classifyTags(message, null);
-                long latency = System.currentTimeMillis() - startTime;
                 return new ClassificationResult(
                         ResponseType.NO,
                         tagsResult.tags,
                         tagsResult.rawJson,
-                        latency,
+                        System.currentTimeMillis() - startTime,
                         tagsResult.tokens
                 );
             }
             
-            // PARALLEL: tags (gpt-4o-mini) + responseType (gpt-4o)
+            // Parallel: tags + responseType
             CompletableFuture<TagsResult> tagsFuture = CompletableFuture.supplyAsync(
                     () -> classifyTags(message, previousBotMessage), executor);
-            
             CompletableFuture<ResponseType> responseFuture = CompletableFuture.supplyAsync(
                     () -> classifyResponseType(message, previousBotMessage), executor);
             
             TagsResult tagsResult = tagsFuture.join();
             ResponseType responseType = responseFuture.join();
-            
             long latency = System.currentTimeMillis() - startTime;
             
             logger.info("Parallel: tags={}ms, responseType={}, total={}ms", 
@@ -154,12 +140,8 @@ public class MessageClassifier {
         }
     }
     
-    // Internal result for tags
-    private record TagsResult(Set<Tag> tags, String rawJson, long latencyMs, int tokens) {}
+    // ==================== CLASSIFICATION ====================
     
-    /**
-     * Classify tags using gpt-4o-mini.
-     */
     private TagsResult classifyTags(String message, String previousBotMessage) {
         long start = System.currentTimeMillis();
         try {
@@ -170,20 +152,7 @@ public class MessageClassifier {
             String content = response.path("choices").get(0).path("message").path("content").asText();
             String json = extractJson(content);
             
-            JsonNode root = objectMapper.readTree(json);
-            
-            Set<Tag> tags = new HashSet<>();
-            JsonNode tagsNode = root.path("tags");
-            if (tagsNode.isArray()) {
-                for (JsonNode tagNode : tagsNode) {
-                    Tag tag = parseTag(tagNode.asText());
-                    if (tag != null) tags.add(tag);
-                }
-            }
-            if (tags.isEmpty()) {
-                tags.add(Tag.FINANCIAL);
-            }
-            
+            Set<Tag> tags = parseTags(objectMapper.readTree(json));
             return new TagsResult(tags, json, System.currentTimeMillis() - start, tokens);
             
         } catch (Exception e) {
@@ -193,21 +162,14 @@ public class MessageClassifier {
         }
     }
     
-    /**
-     * Classify isResponse using gpt-4o (smart).
-     * Simple task = small prompt = cheap even with gpt-4o.
-     * Returns: YES / NO / NEED_HISTORY
-     */
     private ResponseType classifyResponseType(String message, String previousBotMessage) {
         try {
-            String prompt = buildIsResponsePrompt(message, previousBotMessage);
-            JsonNode response = callOpenAI(MODEL_SMART, MAX_TOKENS_IS_RESPONSE, prompt);
+            String prompt = buildResponseTypePrompt(message, previousBotMessage);
+            JsonNode response = callOpenAI(MODEL_SMART, MAX_TOKENS_RESPONSE_TYPE, prompt);
             
             String content = response.path("choices").get(0).path("message").path("content").asText().trim();
             String json = extractJson(content);
-            JsonNode root = objectMapper.readTree(json);
-            
-            String answer = root.path("answer").asText("NO").toUpperCase();
+            String answer = objectMapper.readTree(json).path("answer").asText("NO").toUpperCase();
             
             ResponseType result = switch (answer) {
                 case "YES" -> ResponseType.YES;
@@ -215,45 +177,17 @@ public class MessageClassifier {
                 default -> ResponseType.NO;
             };
             
-            logger.debug("gpt-4o isResponse: {} → {}", json, result);
+            logger.debug("gpt-4o responseType: {} → {}", json, result);
             return result;
             
         } catch (Exception e) {
-            logger.error("isResponse classification error: {}", e.getMessage());
-            // Fallback: if bot asked question, assume it's a response
+            logger.error("ResponseType classification error: {}", e.getMessage());
             return previousBotMessage != null && previousBotMessage.contains("?") 
-                    ? ResponseType.YES 
-                    : ResponseType.NO;
+                    ? ResponseType.YES : ResponseType.NO;
         }
     }
     
-    /**
-     * Simple prompt for isResponse (gpt-4o).
-     * Returns JSON with strict format.
-     */
-    private String buildIsResponsePrompt(String message, String previousBotMessage) {
-        return """
-            Is the user's message a RESPONSE to the bot's LAST message?
-            
-            Possible answers:
-            - YES: User responds to THIS bot message (answering, confirming, correcting it)
-            - NO: New topic, not related to bot's message
-            - NEED_HISTORY: Looks like response but to an EARLIER message (not this one)
-            
-            When NEED_HISTORY:
-            - User corrects something not mentioned in THIS bot message
-            - User references earlier actions: "as I said", "you already recorded", "remember what you did"
-            - User asks to recall something clearly not in THIS message
-            - User says "that one", "the previous one", "like before" about something not shown here
-            
-            Bot: %s
-            User: %s
-            
-            JSON response (no explanation):
-            {"answer": "YES"} or {"answer": "NO"} or {"answer": "NEED_HISTORY"}
-            """.formatted(previousBotMessage, message);
-    }
-    
+    // ==================== PROMPTS ====================
     
     private String buildTagsPrompt(String message, String previousBotMessage) {
         StringBuilder sb = new StringBuilder();
@@ -262,131 +196,105 @@ public class MessageClassifier {
             You are a context classifier for a personal finance bot.
             Users write in ANY language (Russian, English, Serbian, mixed, etc).
             
-            ## Your Task
-            Determine what context the main AI agent needs to process this message.
-            DO NOT process the message itself - just classify what context to load.
+            ## Task
+            Classify what context to load. DO NOT process the message.
             
-            ## Output: tags (array - can have multiple)
+            ## Tags
             
-            **Primary categories:**
+            **FINANCIAL** - money transaction, expense, income
+            - Single product/service name = FINANCIAL (user means "I bought X")
             
-            **FINANCIAL** - message involves money transactions or purchase record
-            - Recording expense, income, or transfer
-            - Mentions amount, currency, account, purchase
-            - IMPORTANT: Single word that is a product/service name (coffee, taxi, lunch, etc.) = FINANCIAL
-            - User might just say product name meaning "I bought X" - this is FINANCIAL, not OFF_TOPIC!
-            - if it looks like a product/service name, but it seems like user forgot to provide amount, it's FINANCIAL, not OFF_TOPIC!
+            **SETTINGS** - configuration, defaults, remember something
             
-            **SETTINGS** - message involves configuration
-            - Setting defaults (account, currency, fund)
-            - Adding/changing custom instructions or aliases
-            - Request to remember something, adjust behavior, teaching you something, noting something, "btw", "by the way", "just so you know", etc.
+            **QUESTION** - help, capabilities, "what can you do?"
             
-            **QUESTION** - message asks about the system or its capabilities
-            - How to use the bot
-            - What can you do? What are your capabilities? How to do this and that?
-            - Help requests
-            - Questions about user's data: accounts, funds, settings
+            **OFF_TOPIC** - unrelated to finance
             
-            **OFF_TOPIC** - message completely unrelated to finance or the bot
-            - Jokes, weather, general knowledge questions
-            - Requests that a finance bot cannot fulfill
-            - NOTE: "What can you do?" is QUESTION, not OFF_TOPIC!
+            **TRANSFER** - between user's OWN accounts (add with FINANCIAL)
             
-            **Financial sub-tags (add together with FINANCIAL):**
+            **THIRD_PARTY** - involves another person (add with FINANCIAL)
             
-            **TRANSFER** - moving money between user's OWN accounts
-            - Message describes moving money from one personal account to another
-            - Both source and destination belong to the same user
-            - Key words: transfer, move, from X to Y (where X and Y are accounts)
-            
-            **THIRD_PARTY** - involves another person
-            - Message mentions someone else by name or relationship
-            - Paying FOR someone, receiving FROM someone, splitting with someone
-            - Any person reference: names, nicknames, "him", "here", "friend", "mom", "girlfriend", etc.
-            
-            **Complexity indicator:**
-            
-            **COMPLEX** - needs smarter model (gpt-5-mini)
-            Add this tag when:
-            - Multiple financial operations in one message
-            - Mathematical expressions or calculations needed
-            - Conditional logic ("if... then...")
-            - Corrections referencing previous transactions
-            - Ambiguous or hard to parse request
-            - Slang, abbreviations, incomplete sentences
+            **COMPLEX** - multiple operations, math, conditions, corrections, ambiguous
             
             ## Rules
-            - Tags can be MULTIPLE: ["FINANCIAL", "TRANSFER"] or ["FINANCIAL", "THIRD_PARTY", "COMPLEX"]
-            - When in doubt about complexity → add COMPLEX (better safe)
-            - Simple single expense → just ["FINANCIAL"]
-            - Transfer to another person + expense → ["FINANCIAL", "THIRD_PARTY", "COMPLEX"]
+            - Tags can be multiple: ["FINANCIAL", "THIRD_PARTY"]
+            - When in doubt → add COMPLEX
             
-            ## Response Format (JSON only, no explanation)
-            
-            ```json
-            {
-              "tags": ["FINANCIAL"]
-            }
-            ```
+            ## Response (JSON only)
+            {"tags": ["FINANCIAL"]}
             
             """);
         
-        // Add context if available
         if (previousBotMessage != null && !previousBotMessage.isBlank()) {
-            sb.append("\n## Previous Bot Message\n");
-            sb.append("```\n").append(previousBotMessage).append("\n```\n\n");
-        } else {
-            sb.append("\n## Previous Bot Message\nNone (new conversation)\n\n");
+            sb.append("## Previous Bot Message\n```\n").append(previousBotMessage).append("\n```\n\n");
         }
         
-        sb.append("## User Message\n```\n").append(message).append("\n```\n\n");
-        sb.append("JSON response:");
-        
+        sb.append("## User Message\n```\n").append(message).append("\n```\n\nJSON:");
         return sb.toString();
+    }
+    
+    private String buildResponseTypePrompt(String message, String previousBotMessage) {
+        return """
+            Is user's message a RESPONSE to bot's LAST message?
+            
+            - YES: responds to THIS message
+            - NO: new topic
+            - NEED_HISTORY: responds to EARLIER message (not this one)
+            
+            NEED_HISTORY when:
+            - Corrects something not in THIS message
+            - References "as I said", "you already recorded", "that one"
+            
+            Bot: %s
+            User: %s
+            
+            JSON: {"answer": "YES"} or {"answer": "NO"} or {"answer": "NEED_HISTORY"}
+            """.formatted(previousBotMessage, message);
+    }
+    
+    // ==================== UTILS ====================
+    
+    private Set<Tag> parseTags(JsonNode root) {
+        Set<Tag> tags = new HashSet<>();
+        JsonNode tagsNode = root.path("tags");
+        if (tagsNode.isArray()) {
+            for (JsonNode tagNode : tagsNode) {
+                try {
+                    tags.add(Tag.valueOf(tagNode.asText().toUpperCase().trim()));
+                } catch (IllegalArgumentException e) {
+                    logger.warn("Unknown tag: {}", tagNode.asText());
+                }
+            }
+        }
+        return tags.isEmpty() ? Set.of(Tag.FINANCIAL) : tags;
     }
     
     private String extractJson(String content) {
         int start = content.indexOf("{");
         int end = content.lastIndexOf("}");
-        if (start >= 0 && end > start) {
-            return content.substring(start, end + 1);
-        }
-        return content;
-    }
-    
-    private Tag parseTag(String tagStr) {
-        try {
-            return Tag.valueOf(tagStr.toUpperCase().trim());
-        } catch (IllegalArgumentException e) {
-            logger.warn("Unknown tag '{}', ignoring", tagStr);
-            return null;
-        }
+        return (start >= 0 && end > start) ? content.substring(start, end + 1) : content;
     }
     
     private JsonNode callOpenAI(String model, int maxTokens, String prompt) throws Exception {
-        Map<String, Object> requestBody = new HashMap<>();
-        requestBody.put("model", model);
-        requestBody.put("max_tokens", maxTokens);
-        requestBody.put("temperature", 0.1);
-        requestBody.put("messages", List.of(
-                Map.of("role", "user", "content", prompt)
-        ));
-        
-        String jsonBody = objectMapper.writeValueAsString(requestBody);
+        Map<String, Object> body = Map.of(
+                "model", model,
+                "max_tokens", maxTokens,
+                "temperature", 0.1,
+                "messages", List.of(Map.of("role", "user", "content", prompt))
+        );
         
         HttpRequest request = HttpRequest.newBuilder()
                 .uri(URI.create(OPENAI_API_URL))
                 .header("Content-Type", "application/json")
                 .header("Authorization", "Bearer " + apiKey)
                 .timeout(TIMEOUT)
-                .POST(HttpRequest.BodyPublishers.ofString(jsonBody))
+                .POST(HttpRequest.BodyPublishers.ofString(objectMapper.writeValueAsString(body)))
                 .build();
         
         HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
         
         if (response.statusCode() != 200) {
-            throw new RuntimeException("OpenAI API error: " + response.statusCode() + " - " + response.body());
+            throw new RuntimeException("OpenAI error: " + response.statusCode() + " - " + response.body());
         }
         
         return objectMapper.readTree(response.body());
