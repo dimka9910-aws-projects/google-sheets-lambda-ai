@@ -64,18 +64,34 @@ public class MessageClassifier {
     
     public enum Confidence { HIGH, MEDIUM, LOW }
     
+    // Response type from gpt-4o
+    public enum ResponseType {
+        YES,           // Definitely a response to previous bot message
+        NO,            // New topic, not related to bot's message
+        NEED_HISTORY   // Looks like response but need more conversation history to understand context
+    }
+    
     // Classification result
     public record ClassificationResult(
             String originalMessage,
-            boolean isResponse,         // Load previous conversation context?
+            ResponseType responseType,  // YES/NO/NEED_HISTORY
             Set<Tag> tags,              // Which context sections to load
             Confidence confidence,
             String rawJson,             // Raw JSON from model (for debug)
             long latencyMs,
             int tokensUsed
     ) {
+        // Convenience methods
+        public boolean isResponse() {
+            return responseType == ResponseType.YES;
+        }
+        
+        public boolean needsMoreHistory() {
+            return responseType == ResponseType.NEED_HISTORY;
+        }
+        
         public boolean needsPreviousContext() {
-            return isResponse;
+            return responseType != ResponseType.NO;
         }
         
         public boolean hasTag(Tag tag) {
@@ -148,24 +164,24 @@ public class MessageClassifier {
             CompletableFuture<TagsResult> tagsFuture = CompletableFuture.supplyAsync(
                     () -> classifyTags(message, previousBotMessage), executor);
             
-            CompletableFuture<Boolean> isResponseFuture = CompletableFuture.supplyAsync(
+            CompletableFuture<ResponseType> isResponseFuture = CompletableFuture.supplyAsync(
                     () -> classifyIsResponse(message, previousBotMessage), executor);
             
             // Wait for both to complete
             TagsResult tagsResult = tagsFuture.join();
-            Boolean isResponse = isResponseFuture.join();
+            ResponseType responseType = isResponseFuture.join();
             
             long latency = System.currentTimeMillis() - startTime;
             
-            logger.info("Parallel classification: tags={}ms ({}), isResponse={}ms (gpt-4o={})", 
-                    tagsResult.latencyMs, MODEL_FAST, latency, isResponse);
+            logger.info("Parallel classification: tags={}ms ({}), responseType={}ms (gpt-4o={})", 
+                    tagsResult.latencyMs, MODEL_FAST, latency, responseType);
             
             return new ClassificationResult(
                     message,
-                    isResponse,  // From gpt-4o (smart)
+                    responseType,  // From gpt-4o (smart): YES/NO/NEED_HISTORY
                     tagsResult.tags,  // From gpt-4o-mini (fast)
                     tagsResult.confidence,
-                    tagsResult.rawJson + " | isResponse(gpt-4o)=" + isResponse,
+                    tagsResult.rawJson + " | responseType(gpt-4o)=" + responseType,
                     latency,
                     tagsResult.tokens
             );
@@ -175,7 +191,7 @@ public class MessageClassifier {
             long latency = System.currentTimeMillis() - startTime;
             return new ClassificationResult(
                     message,
-                    false,
+                    ResponseType.NO,
                     Set.of(Tag.FINANCIAL),
                     Confidence.LOW,
                     "{\"error\": \"" + e.getMessage() + "\"}",
@@ -200,14 +216,14 @@ public class MessageClassifier {
             String content = response.path("choices").get(0).path("message").path("content").asText();
             
             long latency = System.currentTimeMillis() - startTime;
-            return parseTagsResponse(content, message, false, latency, tokens);
+            return parseTagsResponse(content, message, ResponseType.NO, latency, tokens);
             
         } catch (Exception e) {
             logger.error("Tags classification failed: {}", e.getMessage(), e);
             long latency = System.currentTimeMillis() - startTime;
             return new ClassificationResult(
                     message,
-                    false,
+                    ResponseType.NO,
                     Set.of(Tag.FINANCIAL),
                     Confidence.LOW,
                     "{\"error\": \"" + e.getMessage() + "\"}",
@@ -258,39 +274,59 @@ public class MessageClassifier {
     /**
      * Classify isResponse using gpt-4o (smart).
      * Simple task = small prompt = cheap even with gpt-4o.
+     * Returns: YES / NO / NEED_HISTORY
      */
-    private boolean classifyIsResponse(String message, String previousBotMessage) {
+    private ResponseType classifyIsResponse(String message, String previousBotMessage) {
         try {
             String prompt = buildIsResponsePrompt(message, previousBotMessage);
             JsonNode response = callOpenAI(MODEL_SMART, MAX_TOKENS_IS_RESPONSE, prompt);
             
-            String content = response.path("choices").get(0).path("message").path("content").asText().toLowerCase().trim();
+            String content = response.path("choices").get(0).path("message").path("content").asText().toUpperCase().trim();
             
-            // Simple parsing: look for "true" or "false"
-            boolean result = content.contains("true");
+            // Parse response
+            ResponseType result;
+            if (content.contains("NEED_HISTORY") || content.contains("NEED") || content.contains("HISTORY") || content.contains("UNCLEAR")) {
+                result = ResponseType.NEED_HISTORY;
+            } else if (content.contains("YES") || content.contains("TRUE")) {
+                result = ResponseType.YES;
+            } else {
+                result = ResponseType.NO;
+            }
+            
             logger.debug("gpt-4o isResponse: '{}' → {}", content, result);
             return result;
             
         } catch (Exception e) {
             logger.error("isResponse classification error: {}", e.getMessage());
-            // Fallback: if bot asked question, assume response
-            return previousBotMessage != null && previousBotMessage.contains("?");
+            // Fallback: if bot asked question, assume it's a response
+            return previousBotMessage != null && previousBotMessage.contains("?") 
+                    ? ResponseType.YES 
+                    : ResponseType.NO;
         }
     }
     
     /**
      * Simple prompt for isResponse (gpt-4o).
+     * Three possible answers: YES, NO, NEED_HISTORY
      */
     private String buildIsResponsePrompt(String message, String previousBotMessage) {
         return """
             Is the user's message a RESPONSE to the bot's message?
-            A response continues the conversation. Even vague answers like "a lot", "maybe", "I don't know" are responses.
-            A new standalone request is NOT a response.
+            
+            Answer ONE of:
+            - YES: User is responding to or continuing from bot's message
+            - NO: User starts a completely new topic, ignoring bot
+            - NEED_HISTORY: Looks like a response, but I need to see earlier messages to understand context
+            
+            Examples of NEED_HISTORY:
+            - References to "that", "it", "the usual" without clarity
+            - Short answers that could relate to multiple previous topics
+            - Corrections or confirmations where the original context is unclear
             
             Bot: %s
             User: %s
             
-            Answer only: true or false
+            Answer only: YES, NO, or NEED_HISTORY
             """.formatted(previousBotMessage, message);
     }
     
@@ -393,7 +429,7 @@ public class MessageClassifier {
         return sb.toString();
     }
     
-    private ClassificationResult parseTagsResponse(String content, String originalMessage, boolean isResponse, long latency, int tokens) {
+    private ClassificationResult parseTagsResponse(String content, String originalMessage, ResponseType responseType, long latency, int tokens) {
         String json = extractJson(content);
         
         try {
@@ -420,13 +456,13 @@ public class MessageClassifier {
                 confidence = Confidence.LOW;
             }
             
-            return new ClassificationResult(originalMessage, isResponse, tags, confidence, json, latency, tokens);
+            return new ClassificationResult(originalMessage, responseType, tags, confidence, json, latency, tokens);
             
         } catch (Exception e) {
             logger.error("Failed to parse response: {}", content, e);
             return new ClassificationResult(
                     originalMessage,
-                    isResponse,
+                    responseType,
                     Set.of(Tag.FINANCIAL),
                     Confidence.LOW,
                     json,
