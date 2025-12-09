@@ -108,7 +108,7 @@ public class MessageClassifier {
         try {
             // No previous message → just classify tags, responseType = NO
             if (previousBotMessage == null || previousBotMessage.isBlank()) {
-                TagsResult tagsResult = classifyTags(message);
+                TagsResult tagsResult = classifyTags(message, null);
                 long latency = System.currentTimeMillis() - startTime;
                 return new ClassificationResult(
                         ResponseType.NO,
@@ -121,7 +121,7 @@ public class MessageClassifier {
             
             // PARALLEL: tags (gpt-4o-mini) + responseType (gpt-4o)
             CompletableFuture<TagsResult> tagsFuture = CompletableFuture.supplyAsync(
-                    () -> classifyTags(message), executor);
+                    () -> classifyTags(message, previousBotMessage), executor);
             
             CompletableFuture<ResponseType> responseFuture = CompletableFuture.supplyAsync(
                     () -> classifyResponseType(message, previousBotMessage), executor);
@@ -160,10 +160,10 @@ public class MessageClassifier {
     /**
      * Classify tags using gpt-4o-mini.
      */
-    private TagsResult classifyTags(String message) {
+    private TagsResult classifyTags(String message, String previousBotMessage) {
         long start = System.currentTimeMillis();
         try {
-            String prompt = buildTagsPrompt(message, null);
+            String prompt = buildTagsPrompt(message, previousBotMessage);
             JsonNode response = callOpenAI(MODEL_FAST, MAX_TOKENS_TAGS, prompt);
             
             int tokens = response.path("usage").path("total_tokens").asInt(0);
