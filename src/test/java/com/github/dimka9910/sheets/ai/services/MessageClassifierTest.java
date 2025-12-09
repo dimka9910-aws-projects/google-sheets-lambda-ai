@@ -1,7 +1,6 @@
 package com.github.dimka9910.sheets.ai.services;
 
 import com.github.dimka9910.sheets.ai.services.MessageClassifier.ClassificationResult;
-import com.github.dimka9910.sheets.ai.services.MessageClassifier.Confidence;
 import com.github.dimka9910.sheets.ai.services.MessageClassifier.Tag;
 import org.junit.jupiter.api.*;
 import org.junit.jupiter.api.condition.EnabledIfEnvironmentVariable;

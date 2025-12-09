@@ -22,9 +22,8 @@ import java.util.concurrent.Executors;
  * Main Agent (gpt-5-mini) handles complex messages itself.
  * 
  * Output:
- * - isResponse: should we load previous conversation context?
+ * - responseType: YES/NO/NEED_HISTORY
  * - tags: which context sections to load (can be multiple)
- * - confidence: how sure is the classifier
  */
 public class MessageClassifier {
     private static final Logger logger = LoggerFactory.getLogger(MessageClassifier.class);
@@ -62,8 +61,6 @@ public class MessageClassifier {
                             // → route to smarter model (gpt-5-mini)
     }
     
-    public enum Confidence { HIGH, MEDIUM, LOW }
-    
     // Response type from gpt-4o
     public enum ResponseType {
         YES,           // Definitely a response to previous bot message
@@ -76,7 +73,6 @@ public class MessageClassifier {
             String originalMessage,
             ResponseType responseType,  // YES/NO/NEED_HISTORY
             Set<Tag> tags,              // Which context sections to load
-            Confidence confidence,
             String rawJson,             // Raw JSON from model (for debug)
             long latencyMs,
             int tokensUsed
@@ -122,7 +118,7 @@ public class MessageClassifier {
          * Should this request go to gpt-5-mini (smart) instead of gpt-4o-mini (fast)?
          */
         public boolean needsSmartModel() {
-            return isComplex() || confidence == Confidence.LOW;
+            return isComplex();  // COMPLEX tag indicates need for smarter model
         }
     }
     
@@ -180,7 +176,6 @@ public class MessageClassifier {
                     message,
                     responseType,  // From gpt-4o (smart): YES/NO/NEED_HISTORY
                     tagsResult.tags,  // From gpt-4o-mini (fast)
-                    tagsResult.confidence,
                     tagsResult.rawJson + " | responseType(gpt-4o)=" + responseType,
                     latency,
                     tagsResult.tokens
@@ -193,7 +188,6 @@ public class MessageClassifier {
                     message,
                     ResponseType.NO,
                     Set.of(Tag.FINANCIAL),
-                    Confidence.LOW,
                     "{\"error\": \"" + e.getMessage() + "\"}",
                     latency,
                     0
@@ -202,7 +196,7 @@ public class MessageClassifier {
     }
     
     // Internal result for tags classification
-    private record TagsResult(Set<Tag> tags, Confidence confidence, String rawJson, long latencyMs, int tokens) {}
+    private record TagsResult(Set<Tag> tags, String rawJson, long latencyMs, int tokens) {}
     
     /**
      * Classify tags only (no previous context).
@@ -225,7 +219,6 @@ public class MessageClassifier {
                     message,
                     ResponseType.NO,
                     Set.of(Tag.FINANCIAL),
-                    Confidence.LOW,
                     "{\"error\": \"" + e.getMessage() + "\"}",
                     latency,
                     0
@@ -247,7 +240,6 @@ public class MessageClassifier {
             String json = extractJson(content);
             
             JsonNode root = objectMapper.readTree(json);
-            Confidence confidence = parseConfidence(root.path("confidence").asText("MEDIUM"));
             
             Set<Tag> tags = new HashSet<>();
             JsonNode tagsNode = root.path("tags");
@@ -259,14 +251,13 @@ public class MessageClassifier {
             }
             if (tags.isEmpty()) {
                 tags.add(Tag.FINANCIAL);
-                confidence = Confidence.LOW;
             }
             
-            return new TagsResult(tags, confidence, json, System.currentTimeMillis() - start, tokens);
+            return new TagsResult(tags, json, System.currentTimeMillis() - start, tokens);
             
         } catch (Exception e) {
             logger.error("Tags classification error: {}", e.getMessage());
-            return new TagsResult(Set.of(Tag.FINANCIAL), Confidence.LOW, "{\"error\":\"" + e.getMessage() + "\"}", 
+            return new TagsResult(Set.of(Tag.FINANCIAL), "{\"error\":\"" + e.getMessage() + "\"}", 
                     System.currentTimeMillis() - start, 0);
         }
     }
@@ -410,8 +401,7 @@ public class MessageClassifier {
             
             ```json
             {
-              "tags": ["FINANCIAL"],
-              "confidence": "HIGH"
+              "tags": ["FINANCIAL"]
             }
             ```
             
@@ -437,9 +427,6 @@ public class MessageClassifier {
         try {
             JsonNode root = objectMapper.readTree(json);
             
-            String confidenceStr = root.path("confidence").asText("MEDIUM");
-            Confidence confidence = parseConfidence(confidenceStr);
-            
             Set<Tag> tags = new HashSet<>();
             JsonNode tagsNode = root.path("tags");
             
@@ -455,10 +442,9 @@ public class MessageClassifier {
             // If no valid tags, default to FINANCIAL
             if (tags.isEmpty()) {
                 tags.add(Tag.FINANCIAL);
-                confidence = Confidence.LOW;
             }
             
-            return new ClassificationResult(originalMessage, responseType, tags, confidence, json, latency, tokens);
+            return new ClassificationResult(originalMessage, responseType, tags, json, latency, tokens);
             
         } catch (Exception e) {
             logger.error("Failed to parse response: {}", content, e);
@@ -466,7 +452,6 @@ public class MessageClassifier {
                     originalMessage,
                     responseType,
                     Set.of(Tag.FINANCIAL),
-                    Confidence.LOW,
                     json,
                     latency,
                     tokens
@@ -489,14 +474,6 @@ public class MessageClassifier {
         } catch (IllegalArgumentException e) {
             logger.warn("Unknown tag '{}', ignoring", tagStr);
             return null;
-        }
-    }
-    
-    private Confidence parseConfidence(String str) {
-        try {
-            return Confidence.valueOf(str.toUpperCase().trim());
-        } catch (IllegalArgumentException e) {
-            return Confidence.MEDIUM;
         }
     }
     

@@ -32,7 +32,6 @@ public class Orchestrator {
         boolean isResponse,
         Set<Tag> tags,
         ModelChoice model,
-        Confidence confidence,
         String rawJson,         // Raw JSON from classifier
         long latencyMs,
         int tokensUsed
@@ -83,7 +82,6 @@ public class Orchestrator {
             result.isResponse(),
             result.tags(),
             model,
-            result.confidence(),
             result.rawJson(),
             result.latencyMs(),
             result.tokensUsed()
