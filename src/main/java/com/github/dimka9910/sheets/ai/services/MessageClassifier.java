@@ -198,7 +198,7 @@ public class MessageClassifier {
             
             **QUESTION** - message asks about the system or its capabilities
             - How to use the bot
-            - What can you do? What are your capabilities?
+            - What can you do? What are your capabilities? How to do this and that?
             - Help requests
             - Questions about user's data: accounts, funds, settings
             
