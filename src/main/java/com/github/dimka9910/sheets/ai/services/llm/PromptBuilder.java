@@ -3,7 +3,7 @@ package com.github.dimka9910.sheets.ai.services.llm;
 import com.github.dimka9910.sheets.ai.dto.ConversationMessage;
 import com.github.dimka9910.sheets.ai.dto.ParsedCommand;
 import com.github.dimka9910.sheets.ai.dto.UserContext;
-import com.github.dimka9910.sheets.ai.services.llm.MessageClassifier.Tag;
+import com.github.dimka9910.sheets.ai.services.llm.MessageClassifierAgent.Tag;
 
 import java.util.List;
 import java.util.Map;
@@ -48,7 +48,6 @@ public class PromptBuilder {
             1. Store all data in ENGLISH (tags, account names as provided, fund names as provided)
             2. LANGUAGE - CRITICAL:
                - Detect language from USER'S MESSAGE TEXT, not from currency/location!
-               - "Отмени операцию" = Russian → respond in Russian (even if currency is RSD!)
                - Currency RSD/EUR/USD does NOT mean user speaks Serbian/German/English!
                - If preferredLanguage is set → use that language
                - If NOT set → detect from user's CURRENT message and respond in THAT language

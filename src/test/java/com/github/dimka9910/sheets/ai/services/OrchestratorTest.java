@@ -1,6 +1,6 @@
 package com.github.dimka9910.sheets.ai.services;
 
-import com.github.dimka9910.sheets.ai.services.llm.MessageClassifier.Tag;
+import com.github.dimka9910.sheets.ai.services.llm.MessageClassifierAgent.Tag;
 import com.github.dimka9910.sheets.ai.services.Orchestrator.ModelChoice;
 import org.junit.jupiter.api.*;
 import org.junit.jupiter.api.condition.EnabledIfEnvironmentVariable;
@@ -91,7 +91,6 @@ class OrchestratorTest {
             var result = orchestrator.process("кофе 300");
             
             assertNotNull(result.rawJson());
-            assertTrue(result.rawJson().contains("isResponse"));
             assertTrue(result.rawJson().contains("tags"));
             System.out.println("Raw: " + result.rawJson());
         }
@@ -106,8 +105,8 @@ class OrchestratorTest {
         void latency() {
             var result = orchestrator.process("кофе 300");
             
-            assertTrue(result.latencyMs() < 3000);
-            System.out.println("Latency: " + result.latencyMs() + "ms");
+            assertTrue(result.totalLatencyMs() < 3000);
+            System.out.println("Latency: " + result.totalLatencyMs() + "ms");
         }
     }
 }

@@ -1,6 +1,6 @@
 package com.github.dimka9910.sheets.ai.dto;
 
-import com.github.dimka9910.sheets.ai.services.llm.MessageClassifier.Tag;
+import com.github.dimka9910.sheets.ai.services.llm.MessageClassifierAgent.Tag;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;

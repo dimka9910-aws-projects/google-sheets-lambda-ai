@@ -211,7 +211,7 @@ public class GoogleSheetsLambdaFunction implements RequestHandler<APIGatewayProx
             sb.append("user: ").append(userMessage).append("\n\n");
             
             sb.append("model: ").append(result.model()).append("\n");
-            sb.append("⏱ ").append(result.latencyMs()).append("ms\n\n");
+            sb.append("⏱ ").append(result.totalLatencyMs()).append("ms\n\n");
             
             sb.append(result.rawJson());
             
