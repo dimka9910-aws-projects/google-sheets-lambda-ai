@@ -160,12 +160,15 @@ public class ResponseMatcherAgent {
             - User answers the bot's question (provides requested info)
             - User confirms or denies what bot asked
             - User gives the value bot asked for (amount, account, currency, yes/no, etc.)
-            - Even vague answers like "много", "не помню", "примерно 500" count as YES
+            - Even vague/incomplete answers that seem related to bot's question count as YES
+            - User asks additional question related to bot's question
+            - User gives a complex answer, part of which is related to bot's question
             
             NO means:
             - User starts a completely NEW topic, ignoring the question
-            - User asks their own question unrelated to bot's question
+            - User asks their own question completely unrelated to bot's question
             - User gives a command that has nothing to do with what was asked
+            - User reports new financial transaction
             
             Bot asked: %s
             User replied: %s
@@ -184,17 +187,18 @@ public class ResponseMatcherAgent {
             Is the user's message a CORRECTION or MODIFICATION of what bot did?
             
             YES means:
-            - User disagrees with what bot recorded ("не то", "неправильно", "нет")
-            - User wants to change/fix something ("исправь", "поменяй", "не X а Y")
+            - User disagrees with what bot recorded (wrong, no, not that)
+            - User wants to change/fix something (fix it, change to, not X but Y)
             - User says it was wrong amount/account/category
-            - User wants to undo or cancel ("отмени", "удали")
+            - User wants to undo or cancel (undo, delete, cancel)
             - User references the previous action to modify it
+            - User expresses dissatisfaction with bot's response (angry, complaining, upset)
             
             NO means:
             - User starts a NEW transaction (even if similar to previous)
             - User says something unrelated to what bot did
             - User accepts and moves on to something new
-            - "кофе 200" after "✅ Записал: чай 100" = NEW transaction, not correction
+            - New expense after confirmation = NEW transaction, not correction
             
             Bot said: %s
             User said: %s
