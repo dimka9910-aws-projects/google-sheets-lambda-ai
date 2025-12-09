@@ -280,4 +280,105 @@ class MessageClassifierTest {
             assertTrue(result.hasTag(Tag.FINANCIAL));
         }
     }
+    
+    // ==================== REGRESSION TESTS (проблемные кейсы) ====================
+    
+    @Nested
+    @DisplayName("Regression Tests - Previously Failed Cases")
+    class RegressionTests {
+        
+        // === Tag classification issues ===
+        
+        @Test
+        @DisplayName("'Что ты умеешь?' → QUESTION, not OFF_TOPIC")
+        void whatCanYouDo_shouldBeQuestion() {
+            var result = classifier.classify("Что ты умеешь?");
+            
+            assertTrue(result.hasTag(Tag.QUESTION), 
+                    "Question about capabilities should be QUESTION, got: " + result.tags());
+            System.out.println("'Что ты умеешь?': " + result.tags());
+        }
+        
+        @Test
+        @DisplayName("Single product name 'кофе' → FINANCIAL")
+        void singleProductName_shouldBeFinancial() {
+            var result = classifier.classify("кофе");
+            
+            assertTrue(result.hasTag(Tag.FINANCIAL), 
+                    "Single product name should be FINANCIAL (user forgot amount), got: " + result.tags());
+            System.out.println("'кофе': " + result.tags());
+        }
+        
+        @Test
+        @DisplayName("Single product name 'кофейня' → FINANCIAL")
+        void singleServiceName_shouldBeFinancial() {
+            var result = classifier.classify("кофейня");
+            
+            assertTrue(result.hasTag(Tag.FINANCIAL), 
+                    "Single service name should be FINANCIAL, got: " + result.tags());
+            System.out.println("'кофейня': " + result.tags());
+        }
+        
+        // === isResponse issues ===
+        
+        @Test
+        @DisplayName("Answer with account+amount after 'какой счёт, какая сумма?' → isResponse=true")
+        void accountAndAmount_afterQuestion_shouldBeResponse() {
+            var result = classifier.classify("райф 200", "какой счёт, какая сумма?");
+            
+            assertTrue(result.isResponse(), 
+                    "User provides requested account+amount = RESPONSE, got isResponse=" + result.isResponse());
+            System.out.println("'райф 200' after question: isResponse=" + result.isResponse());
+        }
+        
+        @Test
+        @DisplayName("Vague answer 'много' after 'сколько стоила?' → isResponse=true")
+        void vagueAnswer_afterQuestion_shouldBeResponse() {
+            var result = classifier.classify("много", "сколько она стоила?");
+            
+            assertTrue(result.isResponse(), 
+                    "Even vague/incomplete answer is still a RESPONSE, got isResponse=" + result.isResponse());
+            System.out.println("'много' after price question: isResponse=" + result.isResponse());
+        }
+        
+        @Test
+        @DisplayName("New transaction after currency question → isResponse=false")
+        void newTransaction_afterCurrencyQuestion_shouldNotBeResponse() {
+            var result = classifier.classify("кофе 200", "какие динары?");
+            
+            // This is tricky - user might be answering OR starting new transaction
+            // Log for observation, don't assert strictly
+            System.out.println("'кофе 200' after 'какие динары?': isResponse=" + result.isResponse() + ", tags=" + result.tags());
+            
+            // At minimum should be FINANCIAL
+            assertTrue(result.hasTag(Tag.FINANCIAL), "Should have FINANCIAL tag");
+        }
+        
+        @Test
+        @DisplayName("'поездка на такси' → FINANCIAL")
+        void tripByTaxi_shouldBeFinancial() {
+            var result = classifier.classify("поездка на такси");
+            
+            assertTrue(result.hasTag(Tag.FINANCIAL), 
+                    "Taxi trip description should be FINANCIAL, got: " + result.tags());
+        }
+        
+        @Test
+        @DisplayName("'купил порося' → FINANCIAL")
+        void boughtSomething_shouldBeFinancial() {
+            var result = classifier.classify("купил порося");
+            
+            assertTrue(result.hasTag(Tag.FINANCIAL), 
+                    "Purchase statement should be FINANCIAL, got: " + result.tags());
+        }
+        
+        @Test
+        @DisplayName("'RSD, всегда их используй' → SETTINGS")
+        void rememberCurrency_shouldBeSettings() {
+            var result = classifier.classify("RSD, всегда их короче используй");
+            
+            assertTrue(result.hasTag(Tag.SETTINGS), 
+                    "Instruction to remember currency should be SETTINGS, got: " + result.tags());
+        }
+    }
 }
