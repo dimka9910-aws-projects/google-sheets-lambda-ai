@@ -75,6 +75,7 @@ Resources:
       Description: Parses natural language commands using AI and sends to sheets-lambda
       Environment:
         Variables:
+          ENVIRONMENT: !Ref Environment
           OPENAI_API_KEY: !Ref OpenAIApiKey
           SHEETS_QUEUE_URL: !Ref SheetsQueueUrl
           RESPONSE_QUEUE_URL: !Ref ResponseQueue
