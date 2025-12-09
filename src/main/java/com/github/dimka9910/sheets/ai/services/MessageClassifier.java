@@ -190,7 +190,8 @@ public class MessageClassifier {
             **FINANCIAL** - message involves money transactions or purchase record
             - Recording expense, income, or transfer
             - Mentions amount, currency, account, purchase
-            - The name of some product or service without any other context
+            - IMPORTANT: Single word that is a product/service name (coffee, taxi, lunch, etc.) = FINANCIAL
+            - User might just say product name meaning "I bought X" - this is FINANCIAL, not OFF_TOPIC!
             
             **SETTINGS** - message involves configuration
             - Setting defaults (account, currency, fund)

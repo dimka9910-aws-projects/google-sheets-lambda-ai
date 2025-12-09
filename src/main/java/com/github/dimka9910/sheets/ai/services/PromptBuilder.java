@@ -259,6 +259,7 @@ public class PromptBuilder {
               ⚠️ If user mentions a FUND NAME from their list → SET_DEFAULT_FUND, NOT ADD_INSTRUCTION!
             | Clear instructions ("забудь всё", "clear instructions") | CLEAR_INSTRUCTIONS | null |
             | Undo last ("отмени", "undo", "cancel") | UNDO | null |
+            | Undo last ("отмени", "undo", "cancel") | UNDO | null |
             | Help ("помоги", "help", "как пользоваться?", "что ты умеешь?") | HELP | null |
             | REMOVE/CANCEL instruction — see INSTRUCTION MANAGEMENT below | REMOVE_INSTRUCTION | index (0-based) of instruction to remove |
             
