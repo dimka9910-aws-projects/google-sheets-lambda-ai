@@ -117,22 +117,17 @@ public class SQSHandler implements RequestHandler<SQSEvent, Void> {
             var result = orchestrator.process(userMessage, previousBotMessage);
             
             StringBuilder sb = new StringBuilder();
-            sb.append("🔍 *CLASSIFIER DEBUG*\n\n");
+            sb.append("🔍 CLASSIFIER\n\n");
             
             if (previousBotMessage != null) {
-                sb.append("📨 Bot said: `").append(previousBotMessage).append("`\n");
+                sb.append("bot: ").append(previousBotMessage).append("\n");
             }
-            sb.append("💬 User: `").append(userMessage).append("`\n\n");
+            sb.append("user: ").append(userMessage).append("\n\n");
             
-            sb.append("*Result:*\n");
-            sb.append("• isResponse: ").append(result.isResponse() ? "✅ YES" : "❌ NO").append("\n");
-            sb.append("• tags: `").append(result.tags()).append("`\n");
-            sb.append("• model: ").append(result.model()).append("\n");
-            sb.append("• sections: `").append(result.sections()).append("`\n");
-            sb.append("• confidence: ").append(result.confidence()).append("\n\n");
+            sb.append("model: ").append(result.model()).append("\n");
+            sb.append("⏱ ").append(result.latencyMs()).append("ms\n\n");
             
-            sb.append("⏱ ").append(result.latencyMs()).append("ms, ");
-            sb.append("🎫 ").append(result.tokensUsed()).append(" tokens");
+            sb.append(result.rawJson());
             
             return sb.toString();
             

@@ -60,6 +60,7 @@ public class MessageClassifier {
             boolean isResponse,         // Load previous conversation context?
             Set<Tag> tags,              // Which context sections to load
             Confidence confidence,
+            String rawJson,             // Raw JSON from model (for debug)
             long latencyMs,
             int tokensUsed
     ) {
@@ -140,6 +141,7 @@ public class MessageClassifier {
                     false,
                     Set.of(Tag.FINANCIAL),
                     Confidence.LOW,
+                    "{\"error\": \"" + e.getMessage() + "\"}",
                     latency,
                     0
             );
@@ -255,8 +257,9 @@ public class MessageClassifier {
     }
     
     private ClassificationResult parseResponse(String content, String originalMessage, long latency, int tokens) {
+        String json = extractJson(content);
+        
         try {
-            String json = extractJson(content);
             JsonNode root = objectMapper.readTree(json);
             
             boolean isResponse = root.path("isResponse").asBoolean(false);
@@ -281,7 +284,7 @@ public class MessageClassifier {
                 confidence = Confidence.LOW;
             }
             
-            return new ClassificationResult(originalMessage, isResponse, tags, confidence, latency, tokens);
+            return new ClassificationResult(originalMessage, isResponse, tags, confidence, json, latency, tokens);
             
         } catch (Exception e) {
             logger.error("Failed to parse response: {}", content, e);
@@ -290,6 +293,7 @@ public class MessageClassifier {
                     false,
                     Set.of(Tag.FINANCIAL),
                     Confidence.LOW,
+                    json,
                     latency,
                     tokens
             );
