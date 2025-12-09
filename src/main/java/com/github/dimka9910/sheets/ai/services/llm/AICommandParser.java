@@ -7,6 +7,9 @@ import com.github.dimka9910.sheets.ai.dto.OperationTypeEnum;
 import com.github.dimka9910.sheets.ai.dto.ParsedCommand;
 import com.github.dimka9910.sheets.ai.dto.ParsedCommandList;
 import com.github.dimka9910.sheets.ai.dto.UserContext;
+import com.github.dimka9910.sheets.ai.services.Orchestrator.MatchedLinkedUser;
+import com.github.dimka9910.sheets.ai.services.Orchestrator.OrchestrationResult;
+import com.github.dimka9910.sheets.ai.services.llm.MessageClassifierAgent.Tag;
 import lombok.extern.slf4j.Slf4j;
 
 import java.net.URI;
@@ -17,16 +20,17 @@ import java.time.Duration;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 @Slf4j
 public class AICommandParser {
 
     private static final String OPENAI_API_URL = "https://api.openai.com/v1/chat/completions";
     
-    // Модель и цены - легко менять
+    // Model and pricing
     private static final String MODEL = "gpt-5-mini";
-    private static final double INPUT_PRICE_PER_1M = 0.25;  // gpt-5-mini
-    private static final double OUTPUT_PRICE_PER_1M = 2.00; // gpt-5-mini (includes reasoning)
+    private static final double INPUT_PRICE_PER_1M = 0.25;
+    private static final double OUTPUT_PRICE_PER_1M = 2.00;
     
     private final String apiKey;
     private final HttpClient httpClient;
@@ -47,7 +51,6 @@ public class AICommandParser {
         this.mainAgent = new MainAgent();
     }
 
-    // Конструктор для тестирования
     public AICommandParser(String apiKey) {
         this.apiKey = apiKey;
         this.httpClient = HttpClient.newBuilder()
@@ -57,31 +60,50 @@ public class AICommandParser {
         this.mainAgent = new MainAgent();
     }
 
+    // ═══════════════════════════════════════════════════════════════════════════
+    // PRIMARY API - Use with Orchestrator
+    // ═══════════════════════════════════════════════════════════════════════════
+
     /**
-     * Парсит команду(ы) с учётом контекста пользователя.
-     * Поддерживает multi-command: "кофе 300, такси 500" → 2 операции
+     * Parse user message with orchestration result (tags, isResponse, matchedLinkedUser).
+     * This is the preferred method - uses dynamic context loading.
      */
-    public ParsedCommandList parseMultiple(String userMessage, UserContext userContext) {
-        log.info("Parsing message (multi-command) with context: {}", userMessage);
+    public ParsedCommandList parse(String userMessage, 
+                                   UserContext userContext, 
+                                   OrchestrationResult orchestration) {
+        return parse(userMessage, userContext, 
+                orchestration.tags(), 
+                orchestration.isResponse(), 
+                orchestration.matchedLinkedUser());
+    }
+
+    /**
+     * Parse with explicit tags and response flag.
+     */
+    public ParsedCommandList parse(String userMessage, 
+                                   UserContext userContext,
+                                   Set<Tag> tags,
+                                   boolean isResponse,
+                                   MatchedLinkedUser matchedLinkedUser) {
+        log.info("Parsing: \"{}\" | tags={} | isResponse={}", 
+                truncate(userMessage, 50), tags, isResponse);
 
         try {
-            String prompt = mainAgent.buildPrompt(userContext, userMessage);
-            log.debug("Full prompt length: {} chars", prompt.length());
+            String prompt = mainAgent.buildPrompt(userContext, userMessage, tags, isResponse, matchedLinkedUser);
+            log.debug("Prompt length: {} chars", prompt.length());
             
-            // Вызываем OpenAI API напрямую
             JsonNode apiResponse = callOpenAI(prompt);
-            
-            // Извлекаем ответ
             String content = apiResponse.path("choices").get(0).path("message").path("content").asText();
-            log.info("AI response: {}", content);
+            log.info("AI response: {}", truncate(content, 200));
             
-            // Извлекаем token usage
             String tokenUsageStr = extractTokenUsage(apiResponse);
-            
-            // Парсим JSON ответ
             String cleanJson = cleanJsonResponse(content);
+            
             ParsedCommandList result = objectMapper.readValue(cleanJson, ParsedCommandList.class);
             result.setTokenUsage(tokenUsageStr);
+            
+            // TODO: Handle needsContext response - re-run with additional context
+            
             return result;
 
         } catch (Exception e) {
@@ -93,6 +115,21 @@ public class AICommandParser {
                     .clarification("Sorry, please try again.")
                     .build();
         }
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // LEGACY API - For backward compatibility
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    /**
+     * Legacy method - uses all tags (full context).
+     * @deprecated Use parse(message, context, orchestrationResult) instead
+     */
+    @Deprecated
+    public ParsedCommandList parseMultiple(String userMessage, UserContext userContext) {
+        // Load full context for backward compatibility
+        Set<Tag> allTags = Set.of(Tag.FINANCIAL, Tag.TRANSFER, Tag.THIRD_PARTY, Tag.SETTINGS);
+        return parse(userMessage, userContext, allTags, false, null);
     }
     
     /**
@@ -164,78 +201,13 @@ public class AICommandParser {
         return result;
     }
 
-    /**
-     * Парсит команду с учётом контекста пользователя.
-     * @deprecated Используй parseMultiple() для поддержки нескольких команд
-     */
-    @Deprecated
-    public ParsedCommand parse(String userMessage, UserContext userContext) {
-        log.info("Parsing message with context: {}", userMessage);
+    // ═══════════════════════════════════════════════════════════════════════════
+    // PRIVATE HELPERS
+    // ═══════════════════════════════════════════════════════════════════════════
 
-        ParsedCommandList result = parseMultiple(userMessage, userContext);
-        
-        if (result.getCommands() != null && !result.getCommands().isEmpty()) {
-            ParsedCommand first = result.getFirst();
-            first.setUnderstood(result.isUnderstood());
-            if (result.getClarification() != null) {
-                first.setClarification(result.getClarification());
-            }
-            if (result.getErrorMessage() != null) {
-                first.setErrorMessage(result.getErrorMessage());
-            }
-            return first;
-        }
-        
-        return ParsedCommand.builder()
-                .operationType(OperationTypeEnum.UNKNOWN)
-                .understood(result.isUnderstood())
-                .clarification(result.getClarification())
-                .errorMessage(result.getErrorMessage())
-                .build();
-    }
-
-    /**
-     * Парсит команду без контекста (для обратной совместимости и тестов)
-     * @deprecated Используй parseMultiple() для поддержки нескольких команд
-     */
-    @Deprecated
-    public ParsedCommand parse(String userMessage) {
-        log.info("Parsing message without context: {}", userMessage);
-
-        try {
-            String prompt = mainAgent.buildSimplePrompt(userMessage);
-            JsonNode apiResponse = callOpenAI(prompt);
-            String content = apiResponse.path("choices").get(0).path("message").path("content").asText();
-            log.info("AI response: {}", content);
-
-            String cleanJson = cleanJsonResponse(content);
-            ParsedCommandList result = objectMapper.readValue(cleanJson, ParsedCommandList.class);
-            
-            if (result.getCommands() != null && !result.getCommands().isEmpty()) {
-                ParsedCommand first = result.getFirst();
-                first.setUnderstood(result.isUnderstood());
-                if (result.getClarification() != null) {
-                    first.setClarification(result.getClarification());
-                }
-                return first;
-            }
-            
-            return ParsedCommand.builder()
-                    .operationType(OperationTypeEnum.UNKNOWN)
-                    .understood(result.isUnderstood())
-                    .clarification(result.getClarification())
-                    .errorMessage(result.getErrorMessage())
-                    .build();
-
-        } catch (Exception e) {
-            log.error("Error parsing command: {}", e.getMessage(), e);
-            return ParsedCommand.builder()
-                    .operationType(OperationTypeEnum.UNKNOWN)
-                    .understood(false)
-                    .errorMessage("Error: " + e.getMessage())
-                    .clarification("Sorry, please try again.")
-                    .build();
-        }
+    private String truncate(String s, int maxLen) {
+        if (s == null) return null;
+        return s.length() <= maxLen ? s : s.substring(0, maxLen) + "...";
     }
 
     private String cleanJsonResponse(String response) {
