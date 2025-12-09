@@ -105,86 +105,65 @@ public class MessageClassifier {
     public ClassificationResult classify(String message, String previousBotMessage) {
         long startTime = System.currentTimeMillis();
         
-        // If no previous message, no need for parallel isResponse call
-        if (previousBotMessage == null || previousBotMessage.isBlank()) {
-            return classifyTagsOnly(message, startTime);
-        }
-        
         try {
-            // PARALLEL: Launch both requests simultaneously
+            // No previous message → just classify tags, responseType = NO
+            if (previousBotMessage == null || previousBotMessage.isBlank()) {
+                TagsResult tagsResult = classifyTags(message);
+                long latency = System.currentTimeMillis() - startTime;
+                return new ClassificationResult(
+                        ResponseType.NO,
+                        tagsResult.tags,
+                        tagsResult.rawJson,
+                        latency,
+                        tagsResult.tokens
+                );
+            }
+            
+            // PARALLEL: tags (gpt-4o-mini) + responseType (gpt-4o)
             CompletableFuture<TagsResult> tagsFuture = CompletableFuture.supplyAsync(
-                    () -> classifyTags(message, previousBotMessage), executor);
+                    () -> classifyTags(message), executor);
             
-            CompletableFuture<ResponseType> isResponseFuture = CompletableFuture.supplyAsync(
-                    () -> classifyIsResponse(message, previousBotMessage), executor);
+            CompletableFuture<ResponseType> responseFuture = CompletableFuture.supplyAsync(
+                    () -> classifyResponseType(message, previousBotMessage), executor);
             
-            // Wait for both to complete
             TagsResult tagsResult = tagsFuture.join();
-            ResponseType responseType = isResponseFuture.join();
+            ResponseType responseType = responseFuture.join();
             
             long latency = System.currentTimeMillis() - startTime;
             
-            logger.info("Parallel classification: tags={}ms ({}), responseType={}ms (gpt-4o={})", 
-                    tagsResult.latencyMs, MODEL_FAST, latency, responseType);
+            logger.info("Parallel: tags={}ms, responseType={}, total={}ms", 
+                    tagsResult.latencyMs, responseType, latency);
             
             return new ClassificationResult(
-                    responseType,  // From gpt-4o (smart): YES/NO/NEED_HISTORY
-                    tagsResult.tags,  // From gpt-4o-mini (fast)
-                    tagsResult.rawJson + " | responseType(gpt-4o)=" + responseType,
+                    responseType,
+                    tagsResult.tags,
+                    tagsResult.rawJson + " | responseType=" + responseType,
                     latency,
                     tagsResult.tokens
             );
             
         } catch (Exception e) {
-            logger.error("Parallel classification failed: {}", e.getMessage(), e);
-            long latency = System.currentTimeMillis() - startTime;
+            logger.error("Classification failed: {}", e.getMessage(), e);
             return new ClassificationResult(
                     ResponseType.NO,
                     Set.of(Tag.FINANCIAL),
                     "{\"error\": \"" + e.getMessage() + "\"}",
-                    latency,
+                    System.currentTimeMillis() - startTime,
                     0
             );
         }
     }
     
-    // Internal result for tags classification
+    // Internal result for tags
     private record TagsResult(Set<Tag> tags, String rawJson, long latencyMs, int tokens) {}
     
     /**
-     * Classify tags only (no previous context).
+     * Classify tags using gpt-4o-mini.
      */
-    private ClassificationResult classifyTagsOnly(String message, long startTime) {
-        try {
-            String prompt = buildTagsPrompt(message, null);
-            JsonNode response = callOpenAI(MODEL_FAST, MAX_TOKENS_TAGS, prompt);
-            
-            int tokens = response.path("usage").path("total_tokens").asInt(0);
-            String content = response.path("choices").get(0).path("message").path("content").asText();
-            
-            long latency = System.currentTimeMillis() - startTime;
-            return parseTagsResponse(content, ResponseType.NO, latency, tokens);
-            
-        } catch (Exception e) {
-            logger.error("Tags classification failed: {}", e.getMessage(), e);
-            long latency = System.currentTimeMillis() - startTime;
-            return new ClassificationResult(
-                    ResponseType.NO,
-                    Set.of(Tag.FINANCIAL),
-                    "{\"error\": \"" + e.getMessage() + "\"}",
-                    latency,
-                    0
-            );
-        }
-    }
-    
-    /**
-     * Classify tags using gpt-4o-mini (fast).
-     */
-    private TagsResult classifyTags(String message, String previousBotMessage) {
+    private TagsResult classifyTags(String message) {
         long start = System.currentTimeMillis();
         try {
-            String prompt = buildTagsPrompt(message, previousBotMessage);
+            String prompt = buildTagsPrompt(message, null);
             JsonNode response = callOpenAI(MODEL_FAST, MAX_TOKENS_TAGS, prompt);
             
             int tokens = response.path("usage").path("total_tokens").asInt(0);
@@ -219,7 +198,7 @@ public class MessageClassifier {
      * Simple task = small prompt = cheap even with gpt-4o.
      * Returns: YES / NO / NEED_HISTORY
      */
-    private ResponseType classifyIsResponse(String message, String previousBotMessage) {
+    private ResponseType classifyResponseType(String message, String previousBotMessage) {
         try {
             String prompt = buildIsResponsePrompt(message, previousBotMessage);
             JsonNode response = callOpenAI(MODEL_SMART, MAX_TOKENS_IS_RESPONSE, prompt);
@@ -371,43 +350,6 @@ public class MessageClassifier {
         sb.append("JSON response:");
         
         return sb.toString();
-    }
-    
-    private ClassificationResult parseTagsResponse(String content, ResponseType responseType, long latency, int tokens) {
-        String json = extractJson(content);
-        
-        try {
-            JsonNode root = objectMapper.readTree(json);
-            
-            Set<Tag> tags = new HashSet<>();
-            JsonNode tagsNode = root.path("tags");
-            
-            if (tagsNode.isArray()) {
-                for (JsonNode tagNode : tagsNode) {
-                    Tag tag = parseTag(tagNode.asText());
-                    if (tag != null) {
-                        tags.add(tag);
-                    }
-                }
-            }
-            
-            // If no valid tags, default to FINANCIAL
-            if (tags.isEmpty()) {
-                tags.add(Tag.FINANCIAL);
-            }
-            
-            return new ClassificationResult(responseType, tags, json, latency, tokens);
-            
-        } catch (Exception e) {
-            logger.error("Failed to parse response: {}", content, e);
-            return new ClassificationResult(
-                    responseType,
-                    Set.of(Tag.FINANCIAL),
-                    json,
-                    latency,
-                    tokens
-            );
-        }
     }
     
     private String extractJson(String content) {
