@@ -81,7 +81,7 @@ class MessageClassifierTest {
         void expenseTag() {
             var result = classifier.classify("кофе 300");
             
-            assertTrue(result.hasTag(Tag.FINANCIAL));
+            assertTrue(result.tags().contains(Tag.FINANCIAL));
             System.out.println("Tags: " + result.tags());
         }
         
@@ -90,7 +90,7 @@ class MessageClassifierTest {
         void incomeTag() {
             var result = classifier.classify("зарплата 5000 EUR");
             
-            assertTrue(result.hasTag(Tag.FINANCIAL));
+            assertTrue(result.tags().contains(Tag.FINANCIAL));
         }
         
         @Test
@@ -98,7 +98,7 @@ class MessageClassifierTest {
         void settingsTag() {
             var result = classifier.classify("запомни дефолтная валюта динары");
             
-            assertTrue(result.hasTag(Tag.SETTINGS));
+            assertTrue(result.tags().contains(Tag.SETTINGS));
         }
         
         @Test
@@ -107,7 +107,7 @@ class MessageClassifierTest {
             var result = classifier.classify("как добавить счёт?");
             
             // Model may interpret as QUESTION or SETTINGS
-            assertTrue(result.hasTag(Tag.QUESTION) || result.hasTag(Tag.SETTINGS),
+            assertTrue(result.tags().contains(Tag.QUESTION) || result.tags().contains(Tag.SETTINGS),
                     "Should have QUESTION or SETTINGS, got: " + result.tags());
         }
         
@@ -116,7 +116,7 @@ class MessageClassifierTest {
         void greetingTag() {
             var result = classifier.classify("привет");
             
-            assertTrue(result.hasTag(Tag.OFF_TOPIC));
+            assertTrue(result.tags().contains(Tag.OFF_TOPIC));
         }
     }
     
@@ -136,7 +136,7 @@ class MessageClassifierTest {
             // Should have both tags (or at least not fail)
             assertTrue(result.tags().size() >= 1);
             // Ideally both, but model might only catch one - that's ok
-            assertTrue(result.hasTag(Tag.FINANCIAL) || result.hasTag(Tag.SETTINGS),
+            assertTrue(result.tags().contains(Tag.FINANCIAL) || result.tags().contains(Tag.SETTINGS),
                     "Should have at least FINANCIAL or SETTINGS");
         }
         
@@ -145,7 +145,7 @@ class MessageClassifierTest {
         void multipleExpenses() {
             var result = classifier.classify("кофе 300 и чай 200");
             
-            assertTrue(result.hasTag(Tag.FINANCIAL));
+            assertTrue(result.tags().contains(Tag.FINANCIAL));
             // No split - just one FINANCIAL tag
             System.out.println("Tags: " + result.tags());
         }
@@ -156,7 +156,7 @@ class MessageClassifierTest {
             var result = classifier.classify("покажи мои настройки");
             
             System.out.println("Tags for 'show settings': " + result.tags());
-            assertTrue(result.hasTag(Tag.QUESTION) || result.hasTag(Tag.SETTINGS));
+            assertTrue(result.tags().contains(Tag.QUESTION) || result.tags().contains(Tag.SETTINGS));
         }
     }
     
@@ -186,7 +186,7 @@ class MessageClassifierTest {
             var result = classifier.classify("чай 200", "✅ Записал: кофе 300 RSD");
             
             // Should at least have FINANCIAL tag
-            assertTrue(result.hasTag(Tag.FINANCIAL));
+            assertTrue(result.tags().contains(Tag.FINANCIAL));
             System.out.println("New after success: isResponse=" + result.responseType() == ResponseType.YES + ", tags=" + result.tags());
             // Note: model might see it as response (correction?) or new - both valid interpretations
         }
@@ -229,21 +229,21 @@ class MessageClassifierTest {
         @DisplayName("English")
         void english() {
             var result = classifier.classify("coffee 300");
-            assertTrue(result.hasTag(Tag.FINANCIAL));
+            assertTrue(result.tags().contains(Tag.FINANCIAL));
         }
         
         @Test
         @DisplayName("Serbian")
         void serbian() {
             var result = classifier.classify("kafa 300 RSD");
-            assertTrue(result.hasTag(Tag.FINANCIAL));
+            assertTrue(result.tags().contains(Tag.FINANCIAL));
         }
         
         @Test
         @DisplayName("Mixed")
         void mixed() {
             var result = classifier.classify("bought кофе for 300");
-            assertTrue(result.hasTag(Tag.FINANCIAL));
+            assertTrue(result.tags().contains(Tag.FINANCIAL));
         }
     }
     
@@ -276,7 +276,7 @@ class MessageClassifierTest {
         void specialChars() {
             var result = classifier.classify("кофе 300₽ @cafe #утро");
             
-            assertTrue(result.hasTag(Tag.FINANCIAL));
+            assertTrue(result.tags().contains(Tag.FINANCIAL));
         }
     }
     
@@ -293,7 +293,7 @@ class MessageClassifierTest {
         void whatCanYouDo_shouldBeQuestion() {
             var result = classifier.classify("Что ты умеешь?");
             
-            assertTrue(result.hasTag(Tag.QUESTION), 
+            assertTrue(result.tags().contains(Tag.QUESTION), 
                     "Question about capabilities should be QUESTION, got: " + result.tags());
             System.out.println("'Что ты умеешь?': " + result.tags());
         }
@@ -303,7 +303,7 @@ class MessageClassifierTest {
         void singleProductName_shouldBeFinancial() {
             var result = classifier.classify("кофе");
             
-            assertTrue(result.hasTag(Tag.FINANCIAL), 
+            assertTrue(result.tags().contains(Tag.FINANCIAL), 
                     "Single product name should be FINANCIAL (user forgot amount), got: " + result.tags());
             System.out.println("'кофе': " + result.tags());
         }
@@ -313,7 +313,7 @@ class MessageClassifierTest {
         void singleServiceName_shouldBeFinancial() {
             var result = classifier.classify("кофейня");
             
-            assertTrue(result.hasTag(Tag.FINANCIAL), 
+            assertTrue(result.tags().contains(Tag.FINANCIAL), 
                     "Single service name should be FINANCIAL, got: " + result.tags());
             System.out.println("'кофейня': " + result.tags());
         }
@@ -350,7 +350,7 @@ class MessageClassifierTest {
             System.out.println("'кофе 200' after 'какие динары?': isResponse=" + result.responseType() == ResponseType.YES + ", tags=" + result.tags());
             
             // At minimum should be FINANCIAL
-            assertTrue(result.hasTag(Tag.FINANCIAL), "Should have FINANCIAL tag");
+            assertTrue(result.tags().contains(Tag.FINANCIAL), "Should have FINANCIAL tag");
         }
         
         @Test
@@ -358,7 +358,7 @@ class MessageClassifierTest {
         void tripByTaxi_shouldBeFinancial() {
             var result = classifier.classify("поездка на такси");
             
-            assertTrue(result.hasTag(Tag.FINANCIAL), 
+            assertTrue(result.tags().contains(Tag.FINANCIAL), 
                     "Taxi trip description should be FINANCIAL, got: " + result.tags());
         }
         
@@ -367,7 +367,7 @@ class MessageClassifierTest {
         void boughtSomething_shouldBeFinancial() {
             var result = classifier.classify("купил порося");
             
-            assertTrue(result.hasTag(Tag.FINANCIAL), 
+            assertTrue(result.tags().contains(Tag.FINANCIAL), 
                     "Purchase statement should be FINANCIAL, got: " + result.tags());
         }
         
@@ -376,7 +376,7 @@ class MessageClassifierTest {
         void rememberCurrency_shouldBeSettings() {
             var result = classifier.classify("RSD, всегда их короче используй");
             
-            assertTrue(result.hasTag(Tag.SETTINGS), 
+            assertTrue(result.tags().contains(Tag.SETTINGS), 
                     "Instruction to remember currency should be SETTINGS, got: " + result.tags());
         }
     }

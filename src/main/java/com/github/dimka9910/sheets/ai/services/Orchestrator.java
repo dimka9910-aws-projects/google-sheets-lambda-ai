@@ -58,7 +58,7 @@ public class Orchestrator {
         ClassificationResult result = classifier.classify(message, previousBotMessage);
         
         // Choose model: COMPLEX tag → SMART model
-        ModelChoice model = result.hasTag(Tag.COMPLEX) ? ModelChoice.SMART : ModelChoice.FAST;
+        ModelChoice model = result.tags().contains(Tag.COMPLEX) ? ModelChoice.SMART : ModelChoice.FAST;
         
         logger.info("Result: responseType={}, tags={}, model={}", 
                 result.responseType(), result.tags(), model);

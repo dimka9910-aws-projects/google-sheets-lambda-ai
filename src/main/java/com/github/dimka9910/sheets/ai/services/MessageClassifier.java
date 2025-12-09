@@ -75,11 +75,7 @@ public class MessageClassifier {
             String rawJson,             // Raw JSON from model (for debug)
             long latencyMs,
             int tokensUsed
-    ) {
-        public boolean hasTag(Tag tag) {
-            return tags.contains(tag);
-        }
-    }
+    ) {}
     
     public MessageClassifier() {
         this.apiKey = System.getProperty("OPENAI_API_KEY", System.getenv("OPENAI_API_KEY"));
