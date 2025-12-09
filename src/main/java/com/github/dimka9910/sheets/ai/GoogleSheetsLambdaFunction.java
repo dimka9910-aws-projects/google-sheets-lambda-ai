@@ -9,6 +9,7 @@ import com.github.dimka9910.sheets.ai.controller.UsersController;
 import com.github.dimka9910.sheets.ai.dto.ChatRequest;
 import com.github.dimka9910.sheets.ai.dto.ChatResponse;
 import com.github.dimka9910.sheets.ai.services.ChatCommandService;
+import com.github.dimka9910.sheets.ai.services.Orchestrator;
 import com.github.dimka9910.sheets.ai.services.UserContextService;
 import lombok.extern.slf4j.Slf4j;
 
@@ -27,11 +28,17 @@ public class GoogleSheetsLambdaFunction implements RequestHandler<APIGatewayProx
     private final ObjectMapper objectMapper = new ObjectMapper();
     private final ChatCommandService chatCommandService;
     private final UsersController usersController;
+    private final Orchestrator orchestrator;
+    
+    // Debug mode on DEV: messages starting with ">" test the classifier
+    private static final boolean DEBUG_CLASSIFIER = "dev".equalsIgnoreCase(
+            System.getenv().getOrDefault("ENVIRONMENT", "prod"));
 
     public GoogleSheetsLambdaFunction() {
         UserContextService userContextService = new UserContextService();
         this.chatCommandService = new ChatCommandService(userContextService);
         this.usersController = new UsersController(userContextService, objectMapper);
+        this.orchestrator = new Orchestrator();
     }
 
     // Для тестирования
@@ -144,11 +151,74 @@ public class GoogleSheetsLambdaFunction implements RequestHandler<APIGatewayProx
         try {
             log.info("Parsing command from body: {}", request.getBody());
             ChatRequest chatRequest = objectMapper.readValue(request.getBody(), ChatRequest.class);
+            
+            String message = chatRequest.getMessage();
+            
+            // DEBUG MODE: Test classifier with "> prev\nreply" format
+            if (DEBUG_CLASSIFIER && message != null && message.startsWith(">")) {
+                log.info("DEBUG MODE: Testing classifier");
+                String debugResponse = handleDebugClassifier(message);
+                ChatResponse response = ChatResponse.builder()
+                        .success(true)
+                        .message(debugResponse)
+                        .build();
+                return createResponse(200, response);
+            }
+            
+            // Normal flow
             ChatResponse response = chatCommandService.processCommand(chatRequest);
             return createResponse(200, response);
         } catch (Exception e) {
             log.error("Error parsing command: {}", e.getMessage(), e);
             return createErrorResponse(400, "Invalid request: " + e.getMessage());
+        }
+    }
+    
+    /**
+     * DEBUG: Test classifier with format:
+     * > previous bot message
+     * user reply
+     * 
+     * Or just:
+     * > single message (no previous context)
+     */
+    private String handleDebugClassifier(String input) {
+        try {
+            String previousBotMessage = null;
+            String userMessage;
+            
+            String content = input.substring(1).trim(); // Remove ">"
+            
+            if (content.contains("\n")) {
+                int newlineIndex = content.indexOf("\n");
+                previousBotMessage = content.substring(0, newlineIndex).trim();
+                userMessage = content.substring(newlineIndex + 1).trim();
+            } else {
+                userMessage = content;
+            }
+            
+            log.info("DEBUG Classifier: prev='{}', msg='{}'", previousBotMessage, userMessage);
+            
+            var result = orchestrator.process(userMessage, previousBotMessage);
+            
+            StringBuilder sb = new StringBuilder();
+            sb.append("🔍 CLASSIFIER\n\n");
+            
+            if (previousBotMessage != null) {
+                sb.append("bot: ").append(previousBotMessage).append("\n");
+            }
+            sb.append("user: ").append(userMessage).append("\n\n");
+            
+            sb.append("model: ").append(result.model()).append("\n");
+            sb.append("⏱ ").append(result.latencyMs()).append("ms\n\n");
+            
+            sb.append(result.rawJson());
+            
+            return sb.toString();
+            
+        } catch (Exception e) {
+            log.error("Debug classifier error: {}", e.getMessage(), e);
+            return "❌ Error: " + e.getMessage();
         }
     }
 
