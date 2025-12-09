@@ -82,27 +82,8 @@ public class ChatCommandService {
             return onboardingResponse;
         }
 
-        // Проверяем: это новая команда или продолжение диалога?
-        boolean isNewCommand = conversationService.isNewCommand(message, userContext);
-        
-        if (isNewCommand) {
-            log.info("New command detected, clearing conversation history and pending commands");
-            conversationService.clearHistory(userContext);
-            userContext.getPendingCommands().clear();  // Очищаем pending при новой команде
-        } else {
-            log.info("Continuing conversation, history size: {}", 
-                    userContext.getConversationHistory() != null ? userContext.getConversationHistory().size() : 0);
-        }
-
-        // Проверяем: ответ на предложение сохранить инструкцию (Learning)
-        // НЕ сохраняем userContext здесь — addInstruction уже сохранил с новой инструкцией
-        ChatResponse learningResponse = handleLearningSuggestionResponse(request, message, userContext);
-        if (learningResponse != null) {
-            sqsPublisher.sendResponse(learningResponse);
-            return learningResponse;
-        }
-
         // Добавляем сообщение пользователя в историю
+        // AI сам определяет через историю диалога - это новая команда или продолжение
         conversationService.addToHistory(userContext, ConversationMessage.userMessage(message));
 
         // Парсим команду через AI (финансовая или мета-команда — AI сам определит)
@@ -184,36 +165,20 @@ public class ChatCommandService {
                 userContext.addOperation(cmd);
             }
             
-            // Learning: если AI предложил инструкцию — добавляем в ответ и сохраняем pending
-            if (parsedList.getSuggestedInstruction() != null && !parsedList.getSuggestedInstruction().isBlank()) {
-                String suggestion = parsedList.getSuggestedInstruction();
-                userContext.setPendingSuggestion(suggestion);
-                response.setMessage(response.getMessage() + 
-                    "\n\n💡 Запомнить: \"" + suggestion + "\"? (да/нет)");
-            }
-            
             // SetAsDefault: если пользователь попросил установить дефолты
+            // AI уже генерирует сообщение, здесь только применяем настройки
             if (parsedList.getSetAsDefault() != null && parsedList.getSetAsDefault().hasAny()) {
                 ParsedCommandList.SetAsDefault defaults = parsedList.getSetAsDefault();
-                StringBuilder defaultsMsg = new StringBuilder();
-                
                 if (defaults.getAccount() != null) {
                     userContext.setDefaultAccount(defaults.getAccount());
-                    defaultsMsg.append("📌 Счёт по умолчанию: ").append(defaults.getAccount()).append("\n");
                 }
                 if (defaults.getCurrency() != null) {
                     userContext.setDefaultCurrency(defaults.getCurrency());
-                    defaultsMsg.append("📌 Валюта по умолчанию: ").append(defaults.getCurrency()).append("\n");
                 }
                 if (defaults.getFund() != null) {
                     userContext.setDefaultFund(defaults.getFund());
-                    defaultsMsg.append("📌 Фонд по умолчанию: ").append(defaults.getFund()).append("\n");
                 }
-                
-                if (defaultsMsg.length() > 0) {
-                    response.setMessage(response.getMessage() + "\n\n" + defaultsMsg.toString().trim());
-                    log.info("Updated defaults for user: {}", defaults);
-                }
+                log.info("Updated defaults for user: {}", defaults);
             }
             
             // После успешной операции — очищаем историю (но НЕ pendingSuggestion!)
@@ -290,55 +255,6 @@ public class ChatCommandService {
         return sb.toString();
     }
 
-    /**
-     * Обрабатывает ответ на предложение сохранить инструкцию (Learning)
-     */
-    private ChatResponse handleLearningSuggestionResponse(ChatRequest request, String message, UserContext userContext) {
-        String pending = userContext.getPendingSuggestion();
-        if (pending == null || pending.isBlank()) {
-            return null; // Нет ожидающего предложения
-        }
-        
-        String lower = message.toLowerCase().trim();
-        
-        // Проверяем положительный ответ
-        if (lower.matches("да|yes|ок|окей|ok|okay|конечно|запомни|сохрани|ага|угу|давай|го|1|\\+")) {
-            // Сначала получаем свежий контекст, добавляем инструкцию
-            UserContext freshContext = userContextService.getContext(userContext.getUserId());
-            freshContext.addInstruction(pending);
-            freshContext.setPendingSuggestion(null);
-            freshContext.clearHistory();
-            userContextService.saveContext(freshContext);
-            
-            log.info("Learning: saved instruction '{}' for user {}", pending, userContext.getUserId());
-            
-            return ChatResponse.builder()
-                    .chatId(request.getChatId())
-                    .success(true)
-                    .message("✅ Запомнил: \"" + pending + "\"")
-                    .operationsCount(0)
-                    .build();
-        }
-        
-        // Проверяем отрицательный ответ
-        if (lower.matches("нет|no|не надо|не нужно|отмена|cancel|0|\\-|неа|не")) {
-            userContext.setPendingSuggestion(null);
-            conversationService.clearHistory(userContext);
-            userContextService.saveContext(userContext);
-            
-            return ChatResponse.builder()
-                    .chatId(request.getChatId())
-                    .success(true)
-                    .message("👌 Ок, не запоминаю")
-                    .operationsCount(0)
-                    .build();
-        }
-        
-        // Не похоже на ответ да/нет — очищаем pending и обрабатываем как новую команду
-        userContext.setPendingSuggestion(null);
-        userContextService.saveContext(userContext);
-        return null;
-    }
 
     /**
      * Обрабатывает admin/debug команды.
@@ -480,18 +396,14 @@ public class ChatCommandService {
             
             case "ADD_INSTRUCTION" -> {
                 if (value != null && !value.isBlank()) {
-                    // Проверка на дубликаты
+                    // Проверка на дубликаты - если уже есть, просто логируем
                     List<String> existing = userContext.getCustomInstructions();
                     if (existing != null && existing.contains(value)) {
                         log.info("Instruction already exists for user {}: {}", userId, value);
-                        return ChatResponse.builder()
-                                .chatId(chatId)
-                                .success(true)
-                                .message(aiMessage + " (уже было)")
-                                .build();
+                    } else {
+                        userContext.addInstruction(value);
+                        log.info("Added instruction for user {}: {}", userId, value);
                     }
-                    userContext.addInstruction(value);
-                    log.info("Added instruction for user {}: {}", userId, value);
                 } else {
                     log.warn("ADD_INSTRUCTION called but value is empty for user {}", userId);
                 }
@@ -646,46 +558,25 @@ public class ChatCommandService {
                 && commands.stream().allMatch(cmd -> 
                         cmd.getOperationType() != null && cmd.getOperationType() != OperationTypeEnum.UNKNOWN);
         
-        if (allValid) {
-            String message;
-            if (parsedList.isCorrection()) {
-                // Форматируем сообщение о коррекции
-                ParsedCommand lastOp = userContext.getLastOperation();
-                message = formatCorrectionMessage(lastOp, commands.get(0));
-            } else {
-                message = formatSuccessMessage(commands);
-            }
-            
-            return ChatResponse.builder()
-                    .chatId(request.getChatId())
-                    .success(true)
-                    .message(message)
-                    .parsedCommands(commands)
-                    .parsedCommand(parsedList.getFirst()) // для обратной совместимости
-                    .operationsCount(commands.size())
-                    .build();
-        }
-
-        // Если AI не вернул clarification — используем errorMessage или пустой ответ
+        // AI генерирует сообщение в clarification — используем его
         // НЕ хардкодим сообщения на конкретном языке!
         String message = parsedList.getClarification();
         if (message == null || message.isBlank()) {
             message = parsedList.getErrorMessage();
         }
         if (message == null || message.isBlank()) {
-            // Fallback — просим AI сгенерировать сообщение
-            // Но если даже AI молчит — логируем и возвращаем минимальный ответ
+            // Minimal fallback — AI должен всегда генерировать сообщение
             log.warn("No clarification or error message from AI for user {}", request.getUserId());
-            message = "?"; // Минимальный индикатор что что-то не так
+            message = allValid ? "✓" : "?";
         }
         
         return ChatResponse.builder()
                 .chatId(request.getChatId())
-                .success(false)
+                .success(allValid)
                 .message(message)
                 .parsedCommands(commands)
                 .parsedCommand(parsedList.getFirst())
-                .operationsCount(0)
+                .operationsCount(allValid ? commands.size() : 0)
                 .build();
     }
 
@@ -720,84 +611,6 @@ public class ChatCommandService {
         sendToSheetsLambda(userContext, cancelOp);
     }
 
-    /**
-     * Форматирует сообщение об успехе для нескольких команд
-     */
-    private String formatSuccessMessage(List<ParsedCommand> commands) {
-        if (commands.size() == 1) {
-            return formatSingleCommand(commands.get(0));
-        }
-        
-        // Несколько команд — формируем список
-        StringBuilder sb = new StringBuilder();
-        sb.append("✅ Записал ").append(commands.size()).append(" операции:\n");
-        
-        for (int i = 0; i < commands.size(); i++) {
-            ParsedCommand cmd = commands.get(i);
-            sb.append(i + 1).append(". ").append(formatSingleCommandShort(cmd)).append("\n");
-        }
-        
-        return sb.toString().trim();
-    }
-
-    private String formatSingleCommand(ParsedCommand cmd) {
-        return switch (cmd.getOperationType()) {
-            case EXPENSES -> String.format("✅ Записал расход: %.2f %s на %s (%s)",
-                    cmd.getAmount(), cmd.getCurrency(), cmd.getFundName(), cmd.getAccountName());
-            case INCOME -> String.format("✅ Записал доход: %.2f %s на счёт %s",
-                    cmd.getAmount(), cmd.getCurrency(), cmd.getAccountName());
-            case TRANSFER -> String.format("✅ Записал перевод: %.2f %s с %s на %s",
-                    cmd.getAmount(), cmd.getCurrency(), cmd.getAccountName(), cmd.getSecondAccount());
-            case CREDIT -> String.format("✅ Записал кредитную операцию: %.2f %s",
-                    cmd.getAmount(), cmd.getCurrency());
-            default -> "✅ Операция записана";
-        };
-    }
-
-    private String formatSingleCommandShort(ParsedCommand cmd) {
-        String comment = cmd.getComment() != null ? cmd.getComment() : cmd.getFundName();
-        return switch (cmd.getOperationType()) {
-            case EXPENSES -> String.format("%.0f %s — %s", cmd.getAmount(), cmd.getCurrency(), comment);
-            case INCOME -> String.format("+%.0f %s — доход", cmd.getAmount(), cmd.getCurrency());
-            case TRANSFER -> String.format("%.0f %s — перевод", cmd.getAmount(), cmd.getCurrency());
-            case CREDIT -> String.format("%.0f %s — кредит", cmd.getAmount(), cmd.getCurrency());
-            default -> "операция";
-        };
-    }
-    
-    /**
-     * Форматирует сообщение о коррекции операции
-     */
-    private String formatCorrectionMessage(ParsedCommand oldOp, ParsedCommand newOp) {
-        StringBuilder sb = new StringBuilder("✏️ Исправил: ");
-        
-        // Сравниваем что изменилось
-        boolean amountChanged = oldOp != null && !oldOp.getAmount().equals(newOp.getAmount());
-        boolean accountChanged = oldOp != null && !safeEquals(oldOp.getAccountName(), newOp.getAccountName());
-        boolean fundChanged = oldOp != null && !safeEquals(oldOp.getFundName(), newOp.getFundName());
-        boolean commentChanged = oldOp != null && !safeEquals(oldOp.getComment(), newOp.getComment());
-        
-        if (amountChanged && oldOp != null) {
-            sb.append(String.format("%.0f → %.0f %s", oldOp.getAmount(), newOp.getAmount(), newOp.getCurrency()));
-        } else if (accountChanged && oldOp != null) {
-            sb.append(String.format("%s → %s", oldOp.getAccountName(), newOp.getAccountName()));
-        } else if (fundChanged && oldOp != null) {
-            sb.append(String.format("%s → %s", oldOp.getFundName(), newOp.getFundName()));
-        } else if (commentChanged && oldOp != null) {
-            sb.append(String.format("'%s' → '%s'", oldOp.getComment(), newOp.getComment()));
-        } else {
-            // Общий формат если не смогли определить что изменилось
-            sb.append(formatSingleCommandShort(newOp));
-        }
-        
-        return sb.toString();
-    }
-    
-    private boolean safeEquals(String a, String b) {
-        if (a == null && b == null) return true;
-        if (a == null || b == null) return false;
-        return a.equals(b);
-    }
     
     /**
      * Мержит pending команду с новым ответом AI.
