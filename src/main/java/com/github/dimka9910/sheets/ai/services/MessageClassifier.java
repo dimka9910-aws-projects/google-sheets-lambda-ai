@@ -187,14 +187,15 @@ public class MessageClassifier {
             
             **Primary categories:**
             
-            **FINANCIAL** - message involves money transactions
+            **FINANCIAL** - message involves money transactions or purchase record
             - Recording expense, income, or transfer
             - Mentions amount, currency, account, purchase
-            - The name of some product or service
+            - The name of some product or service without any other context
             
             **SETTINGS** - message involves configuration
             - Setting defaults (account, currency, fund)
             - Adding/changing custom instructions or aliases
+            - Request to remember something, adjust behavior, teaching you something, noting something, "btw", "by the way", "just so you know", etc.
             
             **QUESTION** - message asks about the system or its capabilities
             - How to use the bot
