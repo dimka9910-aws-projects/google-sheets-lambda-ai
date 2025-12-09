@@ -177,8 +177,7 @@ public class MessageClassifier {
             - Bot asked "which account?" → user says "card" or "cash" = TRUE
             
             FALSE when user starts NEW topic or action (even if bot asked something):
-            - Bot asked "which currency?" → user says "coffee 200" = FALSE (new transaction!)
-            - Bot asked anything → user says product+amount = FALSE (new expense!)
+            - Bot asked "which currency?" → user says new financial transaction or purchase record = FALSE
             - Message is a complete standalone request
             - Message would make sense even without bot's question
             
