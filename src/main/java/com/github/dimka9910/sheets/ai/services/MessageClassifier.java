@@ -171,14 +171,16 @@ public class MessageClassifier {
             ### 1. isResponse (true/false)
             Is this message semantically connected to the previous bot message?
             
-            TRUE when:
+            CRITICAL: If "Previous Bot Message" is "None" or empty → isResponse MUST be false!
+            
+            TRUE when (ONLY if there IS a previous bot message):
             - Message answers a question the bot asked
             - Message confirms, denies, or modifies something bot proposed
             - Message provides information that bot requested
             - Message would be unclear without knowing what bot said before
-            - Short message (1-3 words) right after bot asked something
             
             FALSE when:
+            - NO previous bot message exists (isResponse MUST be false!)
             - Message is a new standalone request
             - Message makes complete sense without previous context
             - Message starts a new topic
