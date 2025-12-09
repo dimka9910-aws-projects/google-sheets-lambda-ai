@@ -10,17 +10,17 @@ import java.util.Map;
 import java.util.Set;
 
 /**
- * Собирает финальный промпт из секций + контекста пользователя.
+ * MainAgent - builds the final prompt from sections + user context.
  * 
- * Секции подгружаются динамически на основе тегов от MessageClassifier:
- * - FINANCIAL → операции с деньгами
- * - TRANSFER → переводы между счетами
- * - THIRD_PARTY → операции с другими людьми
- * - SETTINGS → настройки, счета, фонды
- * - QUESTION → вопросы о боте
- * - OFF_TOPIC → не по теме
+ * Sections are loaded dynamically based on tags from MessageClassifierAgent:
+ * - FINANCIAL → money operations
+ * - TRANSFER → transfers between accounts
+ * - THIRD_PARTY → operations involving other people
+ * - SETTINGS → configuration, accounts, funds
+ * - QUESTION → questions about the bot
+ * - OFF_TOPIC → unrelated topics
  */
-public class PromptBuilder {
+public class MainAgent {
 
     // ═══════════════════════════════════════════════════════════════════════════
     // SECTION: SECURITY (всегда включается)
@@ -238,31 +238,6 @@ public class PromptBuilder {
             If instruction is ambiguous → ask for clarification.
             """;
 
-    // ═══════════════════════════════════════════════════════════════════════════
-    // SECTION: LAZY SETUP (для FINANCIAL)
-    // ═══════════════════════════════════════════════════════════════════════════
-    private static final String SECTION_LAZY_SETUP = """
-            
-            ## MISSING DEFAULTS - Lazy Setup:
-            When default is NOT SET and user didn't specify value in message:
-            1. Ask in clarification which value to use
-            2. Wait for user's answer
-            
-            When user ANSWERS your clarification:
-            
-            **CASE A: Just the value (no "default" mentioned)**
-            → Use it for THIS operation only, don't save as default
-            
-            **CASE B: Value + "use as default" / "сделай дефолтом" / "всегда так" / etc.**
-            → Do BOTH: complete the operation AND set as default!
-            → Fill the command fields (currency/account/fund) for the operation
-            → ALSO fill "setAsDefault": { "currency": "RSD" } (or account/fund)
-            
-            **Detection phrases for "set as default":**
-            - "используй как дефолт", "сделай дефолтом", "пусть будет по умолчанию"
-            - "всегда так", "запомни", "в дальнейшем так же"
-            - "use as default", "make it default", "always use this"
-            """;
 
     // ═══════════════════════════════════════════════════════════════════════════
     // SECTION: SETTINGS / META COMMANDS (для SETTINGS)
@@ -346,7 +321,6 @@ public class PromptBuilder {
             + SECTION_GENERAL_RULES
             + SECTION_CUSTOM_INSTRUCTIONS
             + SECTION_CORRECTION
-            + SECTION_LAZY_SETUP
             + SECTION_THIRD_PARTY
             + SECTION_SETTINGS
             + SECTION_RESPONSE_FORMAT;
@@ -369,7 +343,6 @@ public class PromptBuilder {
         // ═══ По тегам ═══
         if (tags.contains(Tag.FINANCIAL)) {
             prompt.append(SECTION_FINANCIAL_OPS);
-            prompt.append(SECTION_LAZY_SETUP);
         }
         
         if (tags.contains(Tag.TRANSFER)) {

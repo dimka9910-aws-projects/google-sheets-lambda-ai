@@ -31,7 +31,7 @@ public class AICommandParser {
     private final String apiKey;
     private final HttpClient httpClient;
     private final ObjectMapper objectMapper;
-    private final PromptBuilder promptBuilder;
+    private final MainAgent mainAgent;
 
     public AICommandParser() {
         this.apiKey = AppConfig.getOpenAiApiKey();
@@ -44,7 +44,7 @@ public class AICommandParser {
                 .connectTimeout(Duration.ofSeconds(10))
                 .build();
         this.objectMapper = new ObjectMapper();
-        this.promptBuilder = new PromptBuilder();
+        this.mainAgent = new MainAgent();
     }
 
     // Конструктор для тестирования
@@ -54,7 +54,7 @@ public class AICommandParser {
                 .connectTimeout(Duration.ofSeconds(10))
                 .build();
         this.objectMapper = new ObjectMapper();
-        this.promptBuilder = new PromptBuilder();
+        this.mainAgent = new MainAgent();
     }
 
     /**
@@ -65,7 +65,7 @@ public class AICommandParser {
         log.info("Parsing message (multi-command) with context: {}", userMessage);
 
         try {
-            String prompt = promptBuilder.buildPrompt(userContext, userMessage);
+            String prompt = mainAgent.buildPrompt(userContext, userMessage);
             log.debug("Full prompt length: {} chars", prompt.length());
             
             // Вызываем OpenAI API напрямую
@@ -203,7 +203,7 @@ public class AICommandParser {
         log.info("Parsing message without context: {}", userMessage);
 
         try {
-            String prompt = promptBuilder.buildSimplePrompt(userMessage);
+            String prompt = mainAgent.buildSimplePrompt(userMessage);
             JsonNode apiResponse = callOpenAI(prompt);
             String content = apiResponse.path("choices").get(0).path("message").path("content").asText();
             log.info("AI response: {}", content);
