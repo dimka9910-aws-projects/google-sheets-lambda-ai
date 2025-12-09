@@ -1,6 +1,7 @@
 package com.github.dimka9910.sheets.ai;
 
 import com.github.dimka9910.sheets.ai.dto.ParsedCommand;
+import com.github.dimka9910.sheets.ai.dto.ParsedCommandList;
 import com.github.dimka9910.sheets.ai.dto.UserContext;
 import com.github.dimka9910.sheets.ai.services.llm.AICommandParser;
 
@@ -96,9 +97,8 @@ public class LocalTest {
         System.out.println("📝 Input: " + message);
 
         try {
-            ParsedCommand result = context != null
-                    ? parser.parse(message, context)
-                    : parser.parse(message);
+            ParsedCommandList resultList = parser.parseMultiple(message, context != null ? context : new UserContext());
+            ParsedCommand result = resultList.getFirst();
 
             if (result.isUnderstood()) {
                 System.out.println("✅ Parsed:");

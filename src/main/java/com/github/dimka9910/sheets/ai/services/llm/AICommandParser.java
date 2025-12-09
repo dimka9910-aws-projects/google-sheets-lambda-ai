@@ -10,6 +10,7 @@ import com.github.dimka9910.sheets.ai.dto.UserContext;
 import com.github.dimka9910.sheets.ai.services.Orchestrator.MatchedLinkedUser;
 import com.github.dimka9910.sheets.ai.services.Orchestrator.OrchestrationResult;
 import com.github.dimka9910.sheets.ai.services.llm.MessageClassifierAgent.Tag;
+import com.github.dimka9910.sheets.ai.telemetry.RequestTelemetry;
 import lombok.extern.slf4j.Slf4j;
 
 import java.net.URI;
@@ -78,16 +79,20 @@ public class AICommandParser {
     }
 
     /**
-     * Parse with explicit tags and response flag.
+     * Parse with explicit tags, response flag, and telemetry.
+     * PRIMARY METHOD with full telemetry support.
      */
     public ParsedCommandList parse(String userMessage, 
                                    UserContext userContext,
                                    Set<Tag> tags,
                                    boolean isResponse,
-                                   MatchedLinkedUser matchedLinkedUser) {
+                                   MatchedLinkedUser matchedLinkedUser,
+                                   RequestTelemetry telemetry) {
         log.info("Parsing: \"{}\" | tags={} | isResponse={}", 
                 truncate(userMessage, 50), tags, isResponse);
 
+        long startTime = System.currentTimeMillis();
+        
         try {
             String prompt = mainAgent.buildPrompt(userContext, userMessage, tags, isResponse, matchedLinkedUser);
             log.debug("Prompt length: {} chars", prompt.length());
@@ -96,18 +101,39 @@ public class AICommandParser {
             String content = apiResponse.path("choices").get(0).path("message").path("content").asText();
             log.info("AI response: {}", truncate(content, 200));
             
+            // Extract token usage
+            JsonNode usage = apiResponse.path("usage");
+            int totalTokens = usage.path("total_tokens").asInt();
+            int reasoningTokens = usage.path("completion_tokens_details").path("reasoning_tokens").asInt(0);
+            
             String tokenUsageStr = extractTokenUsage(apiResponse);
             String cleanJson = cleanJsonResponse(content);
             
             ParsedCommandList result = objectMapper.readValue(cleanJson, ParsedCommandList.class);
             result.setTokenUsage(tokenUsageStr);
             
-            // TODO: Handle needsContext response - re-run with additional context
+            long latency = System.currentTimeMillis() - startTime;
+            
+            // Record telemetry
+            if (telemetry != null) {
+                String resultSummary = result.isUnderstood() 
+                        ? "OK: " + result.size() + " cmd(s)" 
+                        : "CLARIFY: " + truncate(result.getClarification(), 50);
+                telemetry.recordAgent("MainAgent", MODEL, resultSummary, latency, totalTokens);
+                
+                if (reasoningTokens > 0) {
+                    telemetry.recordAgent("MainAgent.reasoning", null, 
+                            reasoningTokens + " tokens", 0, reasoningTokens);
+                }
+            }
             
             return result;
 
         } catch (Exception e) {
             log.error("Error parsing command: {}", e.getMessage(), e);
+            if (telemetry != null) {
+                telemetry.setError("MainAgent: " + e.getMessage());
+            }
             return ParsedCommandList.builder()
                     .commands(List.of())
                     .understood(false)
@@ -115,6 +141,17 @@ public class AICommandParser {
                     .clarification("Sorry, please try again.")
                     .build();
         }
+    }
+
+    /**
+     * Parse without telemetry (backward compatible).
+     */
+    public ParsedCommandList parse(String userMessage, 
+                                   UserContext userContext,
+                                   Set<Tag> tags,
+                                   boolean isResponse,
+                                   MatchedLinkedUser matchedLinkedUser) {
+        return parse(userMessage, userContext, tags, isResponse, matchedLinkedUser, null);
     }
 
     // ═══════════════════════════════════════════════════════════════════════════
