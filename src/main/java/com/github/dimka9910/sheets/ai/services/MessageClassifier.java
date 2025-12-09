@@ -311,17 +311,22 @@ public class MessageClassifier {
      */
     private String buildIsResponsePrompt(String message, String previousBotMessage) {
         return """
-            Is the user's message a RESPONSE to the bot's message?
+            Is the user's message a RESPONSE to the bot's LAST message shown below?
             
             Answer ONE of:
-            - YES: User is responding to or continuing from bot's message
-            - NO: User starts a completely new topic, ignoring bot
-            - NEED_HISTORY: Looks like a response, but I need to see earlier messages to understand context
+            - YES: User is responding to THIS bot message (answering, confirming, correcting it)
+            - NO: User starts a completely new topic, not related to bot's message
+            - NEED_HISTORY: Looks like a response, but probably to an EARLIER message in conversation (not this one)
             
-            Examples of NEED_HISTORY:
-            - References to "that", "it", "the usual" without clarity
-            - Short answers that could relate to multiple previous topics
-            - Corrections or confirmations where the original context is unclear
+            When to answer NEED_HISTORY:
+            - User corrects something that doesn't match this bot message
+            - User references something bot didn't mention in THIS message
+            - Feels like response but doesn't logically connect to THIS message
+            
+            Example:
+            Bot: "Balance: 5000 RSD"
+            User: "not 300 but 500"
+            → NEED_HISTORY (user corrects an amount, but bot talked about balance, not 300)
             
             Bot: %s
             User: %s
