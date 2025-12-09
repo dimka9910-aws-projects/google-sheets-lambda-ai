@@ -18,7 +18,7 @@ import java.util.Map;
 
 /**
  * Находит на какое сообщение из истории был ответ пользователя.
- * Вызывается когда MessageClassifier возвращает NEED_HISTORY.
+ * Может использоваться когда нужно понять контекст более ранних сообщений.
  */
 public class MessageHistoryMatcher {
     

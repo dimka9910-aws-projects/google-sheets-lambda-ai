@@ -64,10 +64,6 @@ public class Orchestrator {
             return responseType == ResponseType.YES;
         }
         
-        public boolean needsHistory() {
-            return responseType == ResponseType.NEED_HISTORY;
-        }
-        
         public boolean needsLinkedUsers() {
             return tags.contains(Tag.THIRD_PARTY) || tags.contains(Tag.TRANSFER);
         }
@@ -103,13 +99,16 @@ public class Orchestrator {
      * 
      * @param message User's message
      * @param previousBotMessage Previous bot message (can be null)
+     * @param hasPendingResponse True if bot asked a question and expects answer,
+     *                           False if bot confirmed something (user might correct)
      * @return OrchestrationResult with all routing decisions
      */
-    public OrchestrationResult process(String message, String previousBotMessage) {
+    public OrchestrationResult process(String message, String previousBotMessage, boolean hasPendingResponse) {
         long startTime = System.currentTimeMillis();
         
         logger.info("=== ORCHESTRATOR ===");
         logger.info("Input: \"{}\"", truncate(message, 60));
+        logger.info("Pending: {}", hasPendingResponse);
         if (previousBotMessage != null) {
             logger.info("Prev: \"{}\"", truncate(previousBotMessage, 40));
         }
@@ -137,11 +136,13 @@ public class Orchestrator {
             }
             
             // PARALLEL: classifier (gpt-4o-mini) + matcher (gpt-4o)
+            final boolean pending = hasPendingResponse;
+            
             CompletableFuture<TagsResult> classifierFuture = CompletableFuture.supplyAsync(
                     () -> classifierAgent.classify(message, previousBotMessage), executor);
             
             CompletableFuture<MatchResult> matcherFuture = CompletableFuture.supplyAsync(
-                    () -> responseMatcherAgent.match(message, previousBotMessage), executor);
+                    () -> responseMatcherAgent.match(message, previousBotMessage, pending), executor);
             
             // Wait for both
             TagsResult tagsResult = classifierFuture.join();
@@ -186,10 +187,17 @@ public class Orchestrator {
     }
     
     /**
+     * Process with previous message but no pending flag (defaults to false).
+     */
+    public OrchestrationResult process(String message, String previousBotMessage) {
+        return process(message, previousBotMessage, false);
+    }
+    
+    /**
      * Process without previous context.
      */
     public OrchestrationResult process(String message) {
-        return process(message, null);
+        return process(message, null, false);
     }
     
     // ═══════════════════════════════════════════════════════════════════════════

@@ -20,10 +20,9 @@ import java.util.Map;
  * Uses gpt-4o (smart model) - better at understanding dialog context.
  * Small prompt = cheap even with gpt-4o.
  * 
- * Output:
- * - YES: Definitely a response to previous bot message
- * - NO: New topic, not related to bot's message
- * - NEED_HISTORY: Looks like response but need more conversation history
+ * Logic depends on hasPendingResponse flag:
+ * - hasPendingResponse=true  → bot asked a question, expecting direct answer
+ * - hasPendingResponse=false → bot just confirmed something, user might correct/change
  */
 public class ResponseMatcherAgent {
     private static final Logger logger = LoggerFactory.getLogger(ResponseMatcherAgent.class);
@@ -45,9 +44,8 @@ public class ResponseMatcherAgent {
      * Response type - is user's message a response to bot's message?
      */
     public enum ResponseType {
-        YES,           // Definitely a response to previous bot message
-        NO,            // New topic, not related to bot's message
-        NEED_HISTORY   // Looks like response but need more conversation history to understand context
+        YES,  // User responds to previous bot message
+        NO    // New topic, not related to bot's message
     }
     
     /**
@@ -59,10 +57,6 @@ public class ResponseMatcherAgent {
     ) {
         public boolean isResponse() {
             return responseType == ResponseType.YES;
-        }
-        
-        public boolean needsHistory() {
-            return responseType == ResponseType.NEED_HISTORY;
         }
     }
     
@@ -95,9 +89,11 @@ public class ResponseMatcherAgent {
      * 
      * @param message User's message
      * @param previousBotMessage Previous bot message (required)
+     * @param hasPendingResponse True if bot asked a question and expects direct answer,
+     *                           False if bot just confirmed and user might correct
      * @return MatchResult with response type
      */
-    public MatchResult match(String message, String previousBotMessage) {
+    public MatchResult match(String message, String previousBotMessage, boolean hasPendingResponse) {
         long start = System.currentTimeMillis();
         
         // No previous message → definitely NO
@@ -106,7 +102,7 @@ public class ResponseMatcherAgent {
         }
         
         try {
-            String prompt = buildPrompt(message, previousBotMessage);
+            String prompt = buildPrompt(message, previousBotMessage, hasPendingResponse);
             JsonNode response = callOpenAI(prompt);
             
             String content = response.path("choices").get(0).path("message").path("content").asText().trim();
@@ -115,51 +111,95 @@ public class ResponseMatcherAgent {
             
             String answer = root.path("answer").asText("NO").toUpperCase();
             
-            ResponseType result = switch (answer) {
-                case "YES" -> ResponseType.YES;
-                case "NEED_HISTORY" -> ResponseType.NEED_HISTORY;
-                default -> ResponseType.NO;
-            };
+            ResponseType result = "YES".equals(answer) ? ResponseType.YES : ResponseType.NO;
             
             long latency = System.currentTimeMillis() - start;
-            logger.info("Response matched: {} ({}ms)", result, latency);
+            logger.info("Response matched: {} (pending={}, {}ms)", result, hasPendingResponse, latency);
             
             return new MatchResult(result, latency);
             
         } catch (Exception e) {
             logger.error("Response matching error: {}", e.getMessage());
-            // Fallback: if bot asked question, assume it's a response
-            ResponseType fallback = previousBotMessage.contains("?") 
+            // Fallback: if pending response expected and bot asked question → assume YES
+            ResponseType fallback = hasPendingResponse && previousBotMessage.contains("?") 
                     ? ResponseType.YES 
                     : ResponseType.NO;
             return new MatchResult(fallback, System.currentTimeMillis() - start);
         }
     }
     
+    /**
+     * Simplified version without pending flag (defaults to false).
+     */
+    public MatchResult match(String message, String previousBotMessage) {
+        return match(message, previousBotMessage, false);
+    }
+    
     // ═══════════════════════════════════════════════════════════════════════════
-    // PROMPT
+    // PROMPTS
     // ═══════════════════════════════════════════════════════════════════════════
     
-    private String buildPrompt(String message, String previousBotMessage) {
+    private String buildPrompt(String message, String previousBotMessage, boolean hasPendingResponse) {
+        if (hasPendingResponse) {
+            return buildPendingResponsePrompt(message, previousBotMessage);
+        } else {
+            return buildCorrectionPrompt(message, previousBotMessage);
+        }
+    }
+    
+    /**
+     * Prompt for when bot asked a question (hasPendingResponse=true).
+     * User should provide a direct answer to the question.
+     */
+    private String buildPendingResponsePrompt(String message, String previousBotMessage) {
         return """
-            Is the user's message a RESPONSE to the bot's LAST message?
+            The bot asked a question and is waiting for an answer.
+            Is the user's message a DIRECT ANSWER to this question?
             
-            Possible answers:
-            - YES: User responds to THIS bot message (answering, confirming, correcting it)
-            - NO: New topic, not related to bot's message
-            - NEED_HISTORY: Looks like response but to an EARLIER message (not this one)
+            YES means:
+            - User answers the bot's question (provides requested info)
+            - User confirms or denies what bot asked
+            - User gives the value bot asked for (amount, account, currency, yes/no, etc.)
+            - Even vague answers like "много", "не помню", "примерно 500" count as YES
             
-            When NEED_HISTORY:
-            - User corrects something not mentioned in THIS bot message
-            - User references earlier actions: "as I said", "you already recorded", "remember what you did"
-            - User asks to recall something clearly not in THIS message
-            - User says "that one", "the previous one", "like before" about something not shown here
+            NO means:
+            - User starts a completely NEW topic, ignoring the question
+            - User asks their own question unrelated to bot's question
+            - User gives a command that has nothing to do with what was asked
             
-            Bot: %s
-            User: %s
+            Bot asked: %s
+            User replied: %s
             
-            JSON response (no explanation):
-            {"answer": "YES"} or {"answer": "NO"} or {"answer": "NEED_HISTORY"}
+            JSON (no explanation): {"answer": "YES"} or {"answer": "NO"}
+            """.formatted(previousBotMessage, message);
+    }
+    
+    /**
+     * Prompt for when bot just confirmed something (hasPendingResponse=false).
+     * User might want to correct, disagree, or modify.
+     */
+    private String buildCorrectionPrompt(String message, String previousBotMessage) {
+        return """
+            The bot just confirmed or recorded something.
+            Is the user's message a CORRECTION or MODIFICATION of what bot did?
+            
+            YES means:
+            - User disagrees with what bot recorded ("не то", "неправильно", "нет")
+            - User wants to change/fix something ("исправь", "поменяй", "не X а Y")
+            - User says it was wrong amount/account/category
+            - User wants to undo or cancel ("отмени", "удали")
+            - User references the previous action to modify it
+            
+            NO means:
+            - User starts a NEW transaction (even if similar to previous)
+            - User says something unrelated to what bot did
+            - User accepts and moves on to something new
+            - "кофе 200" after "✅ Записал: чай 100" = NEW transaction, not correction
+            
+            Bot said: %s
+            User said: %s
+            
+            JSON (no explanation): {"answer": "YES"} or {"answer": "NO"}
             """.formatted(previousBotMessage, message);
     }
     
@@ -204,4 +244,3 @@ public class ResponseMatcherAgent {
         return objectMapper.readTree(response.body());
     }
 }
-
