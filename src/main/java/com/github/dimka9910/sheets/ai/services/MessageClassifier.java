@@ -190,16 +190,22 @@ public class MessageClassifier {
             **FINANCIAL** - message involves money transactions
             - Recording expense, income, or transfer
             - Mentions amount, currency, account, purchase
+            - The name of some product or service
             
             **SETTINGS** - message involves configuration
             - Setting defaults (account, currency, fund)
             - Adding/changing custom instructions or aliases
             
-            **QUESTION** - message asks about the system
-            - How to use the bot, what are my accounts/funds
+            **QUESTION** - message asks about the system or its capabilities
+            - How to use the bot
+            - What can you do? What are your capabilities?
+            - Help requests
+            - Questions about user's data: accounts, funds, settings
             
-            **OFF_TOPIC** - message unrelated to finance
-            - Greetings, jokes, weather, general chat
+            **OFF_TOPIC** - message completely unrelated to finance or the bot
+            - Jokes, weather, general knowledge questions
+            - Requests that a finance bot cannot fulfill
+            - NOTE: "What can you do?" is QUESTION, not OFF_TOPIC!
             
             **Financial sub-tags (add together with FINANCIAL):**
             
