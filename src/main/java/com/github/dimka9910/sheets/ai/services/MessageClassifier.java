@@ -281,19 +281,19 @@ public class MessageClassifier {
             String prompt = buildIsResponsePrompt(message, previousBotMessage);
             JsonNode response = callOpenAI(MODEL_SMART, MAX_TOKENS_IS_RESPONSE, prompt);
             
-            String content = response.path("choices").get(0).path("message").path("content").asText().toUpperCase().trim();
+            String content = response.path("choices").get(0).path("message").path("content").asText().trim();
+            String json = extractJson(content);
+            JsonNode root = objectMapper.readTree(json);
             
-            // Parse response
-            ResponseType result;
-            if (content.contains("NEED_HISTORY") || content.contains("NEED") || content.contains("HISTORY") || content.contains("UNCLEAR")) {
-                result = ResponseType.NEED_HISTORY;
-            } else if (content.contains("YES") || content.contains("TRUE")) {
-                result = ResponseType.YES;
-            } else {
-                result = ResponseType.NO;
-            }
+            String answer = root.path("answer").asText("NO").toUpperCase();
             
-            logger.debug("gpt-4o isResponse: '{}' → {}", content, result);
+            ResponseType result = switch (answer) {
+                case "YES" -> ResponseType.YES;
+                case "NEED_HISTORY" -> ResponseType.NEED_HISTORY;
+                default -> ResponseType.NO;
+            };
+            
+            logger.debug("gpt-4o isResponse: {} → {}", json, result);
             return result;
             
         } catch (Exception e) {
@@ -307,31 +307,26 @@ public class MessageClassifier {
     
     /**
      * Simple prompt for isResponse (gpt-4o).
-     * Three possible answers: YES, NO, NEED_HISTORY
+     * Returns JSON with strict format.
      */
     private String buildIsResponsePrompt(String message, String previousBotMessage) {
         return """
-            Is the user's message a RESPONSE to the bot's LAST message shown below?
+            Is the user's message a RESPONSE to the bot's LAST message?
             
-            Answer ONE of:
-            - YES: User is responding to THIS bot message (answering, confirming, correcting it)
-            - NO: User starts a completely new topic, not related to bot's message
-            - NEED_HISTORY: Looks like a response, but probably to an EARLIER message in conversation (not this one)
+            Possible answers:
+            - YES: User responds to THIS bot message (answering, confirming, correcting it)
+            - NO: New topic, not related to bot's message
+            - NEED_HISTORY: Looks like response but to an EARLIER message (not this one)
             
-            When to answer NEED_HISTORY:
-            - User corrects something that doesn't match this bot message
-            - User references something bot didn't mention in THIS message
-            - Feels like response but doesn't logically connect to THIS message
-            
-            Example:
-            Bot: "Balance: 5000 RSD"
-            User: "not 300 but 500"
-            → NEED_HISTORY (user corrects an amount, but bot talked about balance, not 300)
+            NEED_HISTORY example:
+            Bot: "Balance: 5000" → User: "not 300 but 500"
+            (User corrects 300, but bot mentioned 5000 - needs earlier context)
             
             Bot: %s
             User: %s
             
-            Answer only: YES, NO, or NEED_HISTORY
+            JSON response (no explanation):
+            {"answer": "YES"} or {"answer": "NO"} or {"answer": "NEED_HISTORY"}
             """.formatted(previousBotMessage, message);
     }
     
