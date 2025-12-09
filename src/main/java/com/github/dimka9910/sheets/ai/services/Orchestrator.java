@@ -1,6 +1,7 @@
 package com.github.dimka9910.sheets.ai.services;
 
-import com.github.dimka9910.sheets.ai.services.MessageClassifier.*;
+import com.github.dimka9910.sheets.ai.services.llm.MessageClassifier;
+import com.github.dimka9910.sheets.ai.services.llm.MessageClassifier.*;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -29,7 +30,7 @@ public class Orchestrator {
      */
     public record OrchestrationResult(
         String originalMessage,
-        boolean isResponse,
+        ResponseType responseType,
         Set<Tag> tags,
         ModelChoice model,
         String rawJson,         // Raw JSON from classifier
@@ -37,7 +38,7 @@ public class Orchestrator {
         int tokensUsed
     ) {
         public boolean needsPreviousContext() {
-            return isResponse;
+            return responseType != ResponseType.NO;
         }
         
         public boolean needsLinkedUsers() {
@@ -70,16 +71,16 @@ public class Orchestrator {
         // Classify
         ClassificationResult result = classifier.classify(message, previousBotMessage);
         
-        // Choose model
-        ModelChoice model = result.needsSmartModel() ? ModelChoice.SMART : ModelChoice.FAST;
+        // Choose model: COMPLEX tag → SMART model
+        ModelChoice model = result.tags().contains(Tag.COMPLEX) ? ModelChoice.SMART : ModelChoice.FAST;
         
-        logger.info("Result: isResponse={}, tags={}, model={}", 
-                result.isResponse(), result.tags(), model);
+        logger.info("Result: responseType={}, tags={}, model={}", 
+                result.responseType(), result.tags(), model);
         logger.info("({}ms, {} tokens)", result.latencyMs(), result.tokensUsed());
         
         return new OrchestrationResult(
             message,
-            result.isResponse(),
+            result.responseType(),
             result.tags(),
             model,
             result.rawJson(),

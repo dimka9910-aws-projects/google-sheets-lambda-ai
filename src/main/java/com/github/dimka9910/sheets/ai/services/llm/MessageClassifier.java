@@ -1,4 +1,4 @@
-package com.github.dimka9910.sheets.ai.services;
+package com.github.dimka9910.sheets.ai.services.llm;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -104,10 +104,11 @@ public class MessageClassifier {
      */
     public ClassificationResult classify(String message, String previousBotMessage) {
         long startTime = System.currentTimeMillis();
+        String prevContent = previousBotMessage;
         
         try {
             // No previous message → just classify tags, responseType = NO
-            if (previousBotMessage == null || previousBotMessage.isBlank()) {
+            if (prevContent == null || prevContent.isBlank()) {
                 TagsResult tagsResult = classifyTags(message, null);
                 long latency = System.currentTimeMillis() - startTime;
                 return new ClassificationResult(
@@ -121,10 +122,10 @@ public class MessageClassifier {
             
             // PARALLEL: tags (gpt-4o-mini) + responseType (gpt-4o)
             CompletableFuture<TagsResult> tagsFuture = CompletableFuture.supplyAsync(
-                    () -> classifyTags(message, previousBotMessage), executor);
+                    () -> classifyTags(message, prevContent), executor);
             
             CompletableFuture<ResponseType> responseFuture = CompletableFuture.supplyAsync(
-                    () -> classifyResponseType(message, previousBotMessage), executor);
+                    () -> classifyResponseType(message, prevContent), executor);
             
             TagsResult tagsResult = tagsFuture.join();
             ResponseType responseType = responseFuture.join();

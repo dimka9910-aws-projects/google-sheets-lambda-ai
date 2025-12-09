@@ -2,7 +2,7 @@ package com.github.dimka9910.sheets.ai;
 
 import com.github.dimka9910.sheets.ai.dto.ParsedCommand;
 import com.github.dimka9910.sheets.ai.dto.UserContext;
-import com.github.dimka9910.sheets.ai.services.AICommandParser;
+import com.github.dimka9910.sheets.ai.services.llm.AICommandParser;
 
 import java.util.List;
 

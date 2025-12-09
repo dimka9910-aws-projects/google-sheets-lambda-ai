@@ -1,6 +1,6 @@
 package com.github.dimka9910.sheets.ai.services;
 
-import com.github.dimka9910.sheets.ai.services.MessageClassifier.Tag;
+import com.github.dimka9910.sheets.ai.services.llm.MessageClassifier.Tag;
 import com.github.dimka9910.sheets.ai.services.Orchestrator.ModelChoice;
 import org.junit.jupiter.api.*;
 import org.junit.jupiter.api.condition.EnabledIfEnvironmentVariable;

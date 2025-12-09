@@ -1,4 +1,4 @@
-package com.github.dimka9910.sheets.ai.services;
+package com.github.dimka9910.sheets.ai.services.llm;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;

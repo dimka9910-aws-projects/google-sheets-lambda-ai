@@ -1,6 +1,7 @@
 package com.github.dimka9910.sheets.ai.services;
 
 import com.github.dimka9910.sheets.ai.dto.*;
+import com.github.dimka9910.sheets.ai.services.llm.AICommandParser;
 import lombok.extern.slf4j.Slf4j;
 
 import java.util.ArrayList;

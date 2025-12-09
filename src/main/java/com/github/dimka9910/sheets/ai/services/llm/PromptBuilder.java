@@ -1,4 +1,4 @@
-package com.github.dimka9910.sheets.ai.services;
+package com.github.dimka9910.sheets.ai.services.llm;
 
 import com.github.dimka9910.sheets.ai.dto.ConversationMessage;
 import com.github.dimka9910.sheets.ai.dto.ParsedCommand;
