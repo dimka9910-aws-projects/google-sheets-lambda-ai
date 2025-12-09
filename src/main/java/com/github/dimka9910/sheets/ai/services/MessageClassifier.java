@@ -169,19 +169,24 @@ public class MessageClassifier {
             ## Output Two Things
             
             ### 1. isResponse (true/false)
-            Does the user message DIRECTLY ANSWER or ADDRESS what the bot asked?
+            Does the user message ANSWER what the bot asked?
             
-            TRUE only when user's message is a DIRECT answer to bot's question:
-            - Bot asked "which currency?" → user says "RSD" or "dollars" = TRUE
-            - Bot asked "confirm?" → user says "yes" or "no" = TRUE
-            - Bot asked "which account?" → user says "card" or "cash" = TRUE
+            Think: Does the user's message FILL IN the information the bot requested?
             
-            FALSE when user starts NEW topic or action (even if bot asked something):
-            - Bot asked "which currency?" → user says new financial transaction or purchase record = FALSE
-            - Message is a complete standalone request
-            - Message would make sense even without bot's question
+            TRUE when user provides what bot asked for:
+            - Bot asked for missing info → user provides that info
+            - User's message directly addresses bot's question
+            - Without bot's question, user's message would be incomplete/unclear
             
-            KEY: If user message contains amount + product = probably NEW transaction, not a response!
+            FALSE when user ignores bot's question and starts something new:
+            - User sends a completely new request unrelated to bot's question
+            - Message makes perfect sense as a standalone new request
+            
+            Example thinking:
+            - Bot: "which account, what amount?" → User: "raif 200" 
+              → User provides account (raif) and amount (200) = ANSWERS the question = TRUE
+            - Bot: "which currency?" → User: "bought coffee 300"
+              → User ignores currency question, starts new expense = FALSE
             
             ### 2. tags (array - can have multiple)
             
