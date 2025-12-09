@@ -318,9 +318,11 @@ public class MessageClassifier {
             - NO: New topic, not related to bot's message
             - NEED_HISTORY: Looks like response but to an EARLIER message (not this one)
             
-            NEED_HISTORY example:
-            Bot: "Balance: 5000" → User: "not 300 but 500"
-            (User corrects 300, but bot mentioned 5000 - needs earlier context)
+            When NEED_HISTORY:
+            - User corrects something not mentioned in THIS bot message
+            - User references earlier actions: "as I said", "you already recorded", "remember what you did"
+            - User asks to recall something clearly not in THIS message
+            - User says "that one", "the previous one", "like before" about something not shown here
             
             Bot: %s
             User: %s
