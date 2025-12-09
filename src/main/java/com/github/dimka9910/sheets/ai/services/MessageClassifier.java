@@ -169,21 +169,20 @@ public class MessageClassifier {
             ## Output Two Things
             
             ### 1. isResponse (true/false)
-            Is this message semantically connected to the previous bot message?
+            Does the user message DIRECTLY ANSWER or ADDRESS what the bot asked?
             
-            CRITICAL: If "Previous Bot Message" is "None" or empty → isResponse MUST be false!
+            TRUE only when user's message is a DIRECT answer to bot's question:
+            - Bot asked "which currency?" → user says "RSD" or "dollars" = TRUE
+            - Bot asked "confirm?" → user says "yes" or "no" = TRUE
+            - Bot asked "which account?" → user says "card" or "cash" = TRUE
             
-            TRUE when (ONLY if there IS a previous bot message):
-            - Message answers a question the bot asked
-            - Message confirms, denies, or modifies something bot proposed
-            - Message provides information that bot requested
-            - Message would be unclear without knowing what bot said before
+            FALSE when user starts NEW topic or action (even if bot asked something):
+            - Bot asked "which currency?" → user says "coffee 200" = FALSE (new transaction!)
+            - Bot asked anything → user says product+amount = FALSE (new expense!)
+            - Message is a complete standalone request
+            - Message would make sense even without bot's question
             
-            FALSE when:
-            - NO previous bot message exists (isResponse MUST be false!)
-            - Message is a new standalone request
-            - Message makes complete sense without previous context
-            - Message starts a new topic
+            KEY: If user message contains amount + product = probably NEW transaction, not a response!
             
             ### 2. tags (array - can have multiple)
             
