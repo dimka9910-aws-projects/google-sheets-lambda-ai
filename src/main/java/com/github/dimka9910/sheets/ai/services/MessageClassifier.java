@@ -192,6 +192,7 @@ public class MessageClassifier {
             - Mentions amount, currency, account, purchase
             - IMPORTANT: Single word that is a product/service name (coffee, taxi, lunch, etc.) = FINANCIAL
             - User might just say product name meaning "I bought X" - this is FINANCIAL, not OFF_TOPIC!
+            - if it looks like a product/service name, but it seems like user forgot to provide amount, it's FINANCIAL, not OFF_TOPIC!
             
             **SETTINGS** - message involves configuration
             - Setting defaults (account, currency, fund)
