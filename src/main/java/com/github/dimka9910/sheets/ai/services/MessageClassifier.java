@@ -11,6 +11,9 @@ import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.time.Duration;
 import java.util.*;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 
 /**
  * Message Classifier - determines what context to load for Main Agent.
@@ -27,13 +30,20 @@ public class MessageClassifier {
     private static final Logger logger = LoggerFactory.getLogger(MessageClassifier.class);
     
     private static final String OPENAI_API_URL = "https://api.openai.com/v1/chat/completions";
-    private static final String MODEL = "gpt-4o-mini";
-    private static final int MAX_TOKENS = 500;
+    
+    // Fast model for tags classification
+    private static final String MODEL_FAST = "gpt-4o-mini";
+    // Smart model for isResponse (parallel) - better at understanding dialog context
+    private static final String MODEL_SMART = "gpt-4o";
+    
+    private static final int MAX_TOKENS_TAGS = 500;
+    private static final int MAX_TOKENS_IS_RESPONSE = 50;  // Very simple task
     private static final Duration TIMEOUT = Duration.ofSeconds(30);
     
     private final String apiKey;
     private final HttpClient httpClient;
     private final ObjectMapper objectMapper;
+    private final ExecutorService executor;
     
     // Context tags - what sections to load for Main Agent
     public enum Tag {
@@ -106,6 +116,7 @@ public class MessageClassifier {
                 .connectTimeout(TIMEOUT)
                 .build();
         this.objectMapper = new ObjectMapper();
+        this.executor = Executors.newFixedThreadPool(2); // For parallel calls
     }
     
     public MessageClassifier(String apiKey) {
@@ -114,28 +125,86 @@ public class MessageClassifier {
                 .connectTimeout(TIMEOUT)
                 .build();
         this.objectMapper = new ObjectMapper();
+        this.executor = Executors.newFixedThreadPool(2);
     }
     
     /**
      * Classify message with previous bot message context.
+     * 
+     * PARALLEL EXECUTION:
+     * - gpt-4o-mini → tags classification (fast, cheap)
+     * - gpt-4o → isResponse detection (smart, better at dialog understanding)
      */
     public ClassificationResult classify(String message, String previousBotMessage) {
         long startTime = System.currentTimeMillis();
         
+        // If no previous message, no need for parallel isResponse call
+        if (previousBotMessage == null || previousBotMessage.isBlank()) {
+            return classifyTagsOnly(message, startTime);
+        }
+        
         try {
-            String prompt = buildPrompt(message, previousBotMessage);
-            JsonNode response = callOpenAI(prompt);
+            // PARALLEL: Launch both requests simultaneously
+            CompletableFuture<TagsResult> tagsFuture = CompletableFuture.supplyAsync(
+                    () -> classifyTags(message, previousBotMessage), executor);
+            
+            CompletableFuture<Boolean> isResponseFuture = CompletableFuture.supplyAsync(
+                    () -> classifyIsResponse(message, previousBotMessage), executor);
+            
+            // Wait for both to complete
+            TagsResult tagsResult = tagsFuture.join();
+            Boolean isResponse = isResponseFuture.join();
+            
+            long latency = System.currentTimeMillis() - startTime;
+            
+            logger.info("Parallel classification: tags={}ms ({}), isResponse={}ms (gpt-4o={})", 
+                    tagsResult.latencyMs, MODEL_FAST, latency, isResponse);
+            
+            return new ClassificationResult(
+                    message,
+                    isResponse,  // From gpt-4o (smart)
+                    tagsResult.tags,  // From gpt-4o-mini (fast)
+                    tagsResult.confidence,
+                    tagsResult.rawJson + " | isResponse(gpt-4o)=" + isResponse,
+                    latency,
+                    tagsResult.tokens
+            );
+            
+        } catch (Exception e) {
+            logger.error("Parallel classification failed: {}", e.getMessage(), e);
+            long latency = System.currentTimeMillis() - startTime;
+            return new ClassificationResult(
+                    message,
+                    false,
+                    Set.of(Tag.FINANCIAL),
+                    Confidence.LOW,
+                    "{\"error\": \"" + e.getMessage() + "\"}",
+                    latency,
+                    0
+            );
+        }
+    }
+    
+    // Internal result for tags classification
+    private record TagsResult(Set<Tag> tags, Confidence confidence, String rawJson, long latencyMs, int tokens) {}
+    
+    /**
+     * Classify tags only (no previous context).
+     */
+    private ClassificationResult classifyTagsOnly(String message, long startTime) {
+        try {
+            String prompt = buildTagsPrompt(message, null);
+            JsonNode response = callOpenAI(MODEL_FAST, MAX_TOKENS_TAGS, prompt);
             
             int tokens = response.path("usage").path("total_tokens").asInt(0);
             String content = response.path("choices").get(0).path("message").path("content").asText();
             
             long latency = System.currentTimeMillis() - startTime;
-            return parseResponse(content, message, latency, tokens);
+            return parseTagsResponse(content, message, false, latency, tokens);
             
         } catch (Exception e) {
-            logger.error("Classification failed: {}", e.getMessage(), e);
+            logger.error("Tags classification failed: {}", e.getMessage(), e);
             long latency = System.currentTimeMillis() - startTime;
-            // Fallback: assume FINANCIAL with LOW confidence
             return new ClassificationResult(
                     message,
                     false,
@@ -149,13 +218,90 @@ public class MessageClassifier {
     }
     
     /**
+     * Classify tags using gpt-4o-mini (fast).
+     */
+    private TagsResult classifyTags(String message, String previousBotMessage) {
+        long start = System.currentTimeMillis();
+        try {
+            String prompt = buildTagsPrompt(message, previousBotMessage);
+            JsonNode response = callOpenAI(MODEL_FAST, MAX_TOKENS_TAGS, prompt);
+            
+            int tokens = response.path("usage").path("total_tokens").asInt(0);
+            String content = response.path("choices").get(0).path("message").path("content").asText();
+            String json = extractJson(content);
+            
+            JsonNode root = objectMapper.readTree(json);
+            Confidence confidence = parseConfidence(root.path("confidence").asText("MEDIUM"));
+            
+            Set<Tag> tags = new HashSet<>();
+            JsonNode tagsNode = root.path("tags");
+            if (tagsNode.isArray()) {
+                for (JsonNode tagNode : tagsNode) {
+                    Tag tag = parseTag(tagNode.asText());
+                    if (tag != null) tags.add(tag);
+                }
+            }
+            if (tags.isEmpty()) {
+                tags.add(Tag.FINANCIAL);
+                confidence = Confidence.LOW;
+            }
+            
+            return new TagsResult(tags, confidence, json, System.currentTimeMillis() - start, tokens);
+            
+        } catch (Exception e) {
+            logger.error("Tags classification error: {}", e.getMessage());
+            return new TagsResult(Set.of(Tag.FINANCIAL), Confidence.LOW, "{\"error\":\"" + e.getMessage() + "\"}", 
+                    System.currentTimeMillis() - start, 0);
+        }
+    }
+    
+    /**
+     * Classify isResponse using gpt-4o (smart).
+     * Simple task = small prompt = cheap even with gpt-4o.
+     */
+    private boolean classifyIsResponse(String message, String previousBotMessage) {
+        try {
+            String prompt = buildIsResponsePrompt(message, previousBotMessage);
+            JsonNode response = callOpenAI(MODEL_SMART, MAX_TOKENS_IS_RESPONSE, prompt);
+            
+            String content = response.path("choices").get(0).path("message").path("content").asText().toLowerCase().trim();
+            
+            // Simple parsing: look for "true" or "false"
+            boolean result = content.contains("true");
+            logger.debug("gpt-4o isResponse: '{}' → {}", content, result);
+            return result;
+            
+        } catch (Exception e) {
+            logger.error("isResponse classification error: {}", e.getMessage());
+            // Fallback: if bot asked question, assume response
+            return previousBotMessage != null && previousBotMessage.contains("?");
+        }
+    }
+    
+    /**
+     * Simple prompt for isResponse (gpt-4o).
+     */
+    private String buildIsResponsePrompt(String message, String previousBotMessage) {
+        return """
+            Is the user's message a RESPONSE to the bot's message?
+            A response continues the conversation. Even vague answers like "a lot", "maybe", "I don't know" are responses.
+            A new standalone request is NOT a response.
+            
+            Bot: %s
+            User: %s
+            
+            Answer only: true or false
+            """.formatted(previousBotMessage, message);
+    }
+    
+    /**
      * Classify without previous context (new conversation).
      */
     public ClassificationResult classify(String message) {
         return classify(message, null);
     }
     
-    private String buildPrompt(String message, String previousBotMessage) {
+    private String buildTagsPrompt(String message, String previousBotMessage) {
         StringBuilder sb = new StringBuilder();
         
         sb.append("""
@@ -166,28 +312,7 @@ public class MessageClassifier {
             Determine what context the main AI agent needs to process this message.
             DO NOT process the message itself - just classify what context to load.
             
-            ## Output Two Things
-            
-            ### 1. isResponse (true/false)
-            Is the user's message a CONTINUATION of the conversation with the bot?
-            
-            SIMPLE RULE: If bot asked a question → user's next message is likely a RESPONSE.
-            Even if the answer is vague, incomplete, or unhelpful — it's still a response!
-            
-            TRUE (conversation continues):
-            - Bot asked something → user replies (even with "I don't know", "a lot", "maybe")
-            - User tries to answer bot's question (even poorly)
-            - Short message after bot's question
-            - User confirms, denies, clarifies, or corrects something
-            
-            FALSE (new topic starts):
-            - User explicitly starts a NEW unrelated request
-            - User clearly ignores bot and writes something completely different
-            - Message is a full standalone command that doesn't relate to bot's question
-            
-            When in doubt → TRUE (it's safer to treat as response)
-            
-            ### 2. tags (array - can have multiple)
+            ## Output: tags (array - can have multiple)
             
             **Primary categories:**
             
@@ -247,7 +372,6 @@ public class MessageClassifier {
             
             ```json
             {
-              "isResponse": false,
               "tags": ["FINANCIAL"],
               "confidence": "HIGH"
             }
@@ -269,13 +393,12 @@ public class MessageClassifier {
         return sb.toString();
     }
     
-    private ClassificationResult parseResponse(String content, String originalMessage, long latency, int tokens) {
+    private ClassificationResult parseTagsResponse(String content, String originalMessage, boolean isResponse, long latency, int tokens) {
         String json = extractJson(content);
         
         try {
             JsonNode root = objectMapper.readTree(json);
             
-            boolean isResponse = root.path("isResponse").asBoolean(false);
             String confidenceStr = root.path("confidence").asText("MEDIUM");
             Confidence confidence = parseConfidence(confidenceStr);
             
@@ -303,7 +426,7 @@ public class MessageClassifier {
             logger.error("Failed to parse response: {}", content, e);
             return new ClassificationResult(
                     originalMessage,
-                    false,
+                    isResponse,
                     Set.of(Tag.FINANCIAL),
                     Confidence.LOW,
                     json,
@@ -339,10 +462,10 @@ public class MessageClassifier {
         }
     }
     
-    private JsonNode callOpenAI(String prompt) throws Exception {
+    private JsonNode callOpenAI(String model, int maxTokens, String prompt) throws Exception {
         Map<String, Object> requestBody = new HashMap<>();
-        requestBody.put("model", MODEL);
-        requestBody.put("max_tokens", MAX_TOKENS);
+        requestBody.put("model", model);
+        requestBody.put("max_tokens", maxTokens);
         requestBody.put("temperature", 0.1);
         requestBody.put("messages", List.of(
                 Map.of("role", "user", "content", prompt)
