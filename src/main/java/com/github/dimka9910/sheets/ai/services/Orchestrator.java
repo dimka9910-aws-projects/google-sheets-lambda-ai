@@ -28,13 +28,26 @@ public class Orchestrator {
      * Result of orchestration.
      */
     public record OrchestrationResult(
-        ResponseType responseType,
+        String originalMessage,
+        boolean isResponse,
         Set<Tag> tags,
         ModelChoice model,
-        String rawJson,
+        String rawJson,         // Raw JSON from classifier
         long latencyMs,
         int tokensUsed
-    ) {}
+    ) {
+        public boolean needsPreviousContext() {
+            return isResponse;
+        }
+        
+        public boolean needsLinkedUsers() {
+            return tags.contains(Tag.THIRD_PARTY);
+        }
+        
+        public boolean isComplex() {
+            return tags.contains(Tag.COMPLEX);
+        }
+    }
     
     public Orchestrator() {
         this.classifier = new MessageClassifier();
@@ -57,15 +70,16 @@ public class Orchestrator {
         // Classify
         ClassificationResult result = classifier.classify(message, previousBotMessage);
         
-        // Choose model: COMPLEX tag → SMART model
-        ModelChoice model = result.tags().contains(Tag.COMPLEX) ? ModelChoice.SMART : ModelChoice.FAST;
+        // Choose model
+        ModelChoice model = result.needsSmartModel() ? ModelChoice.SMART : ModelChoice.FAST;
         
-        logger.info("Result: responseType={}, tags={}, model={}", 
-                result.responseType(), result.tags(), model);
+        logger.info("Result: isResponse={}, tags={}, model={}", 
+                result.isResponse(), result.tags(), model);
         logger.info("({}ms, {} tokens)", result.latencyMs(), result.tokensUsed());
         
         return new OrchestrationResult(
-            result.responseType(),
+            message,
+            result.isResponse(),
             result.tags(),
             model,
             result.rawJson(),

@@ -1,6 +1,5 @@
 package com.github.dimka9910.sheets.ai.services;
 
-import com.github.dimka9910.sheets.ai.services.MessageClassifier.ResponseType;
 import com.github.dimka9910.sheets.ai.services.MessageClassifier.Tag;
 import com.github.dimka9910.sheets.ai.services.Orchestrator.ModelChoice;
 import org.junit.jupiter.api.*;
@@ -49,11 +48,11 @@ class OrchestratorTest {
         }
         
         @Test
-        @DisplayName("Response → check responseType")
+        @DisplayName("Response → check isResponse")
         void responseFlag() {
             var result = orchestrator.process("да", "Записать кофе 300?");
             
-            assertEquals(ResponseType.YES, result.responseType());
+            assertTrue(result.isResponse());
             System.out.println("Response: " + result.rawJson());
         }
     }
@@ -92,7 +91,8 @@ class OrchestratorTest {
             var result = orchestrator.process("кофе 300");
             
             assertNotNull(result.rawJson());
-            assertTrue(result.rawJson().contains("tags") || result.rawJson().contains("responseType"));
+            assertTrue(result.rawJson().contains("isResponse"));
+            assertTrue(result.rawJson().contains("tags"));
             System.out.println("Raw: " + result.rawJson());
         }
     }
