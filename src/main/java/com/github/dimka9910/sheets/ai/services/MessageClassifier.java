@@ -169,24 +169,23 @@ public class MessageClassifier {
             ## Output Two Things
             
             ### 1. isResponse (true/false)
-            Does the user message ANSWER what the bot asked?
+            Is the user's message a CONTINUATION of the conversation with the bot?
             
-            Think: Does the user's message FILL IN the information the bot requested?
+            SIMPLE RULE: If bot asked a question → user's next message is likely a RESPONSE.
+            Even if the answer is vague, incomplete, or unhelpful — it's still a response!
             
-            TRUE when user provides what bot asked for:
-            - Bot asked for missing info → user provides that info
-            - User's message directly addresses bot's question
-            - Without bot's question, user's message would be incomplete/unclear
+            TRUE (conversation continues):
+            - Bot asked something → user replies (even with "I don't know", "a lot", "maybe")
+            - User tries to answer bot's question (even poorly)
+            - Short message after bot's question
+            - User confirms, denies, clarifies, or corrects something
             
-            FALSE when user ignores bot's question and starts something new:
-            - User sends a completely new request unrelated to bot's question
-            - Message makes perfect sense as a standalone new request
+            FALSE (new topic starts):
+            - User explicitly starts a NEW unrelated request
+            - User clearly ignores bot and writes something completely different
+            - Message is a full standalone command that doesn't relate to bot's question
             
-            Example thinking:
-            - Bot: "which account, what amount?" → User: "raif 200" 
-              → User provides account (raif) and amount (200) = ANSWERS the question = TRUE
-            - Bot: "which currency?" → User: "bought coffee 300"
-              → User ignores currency question, starts new expense = FALSE
+            When in doubt → TRUE (it's safer to treat as response)
             
             ### 2. tags (array - can have multiple)
             
