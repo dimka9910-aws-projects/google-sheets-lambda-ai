@@ -3,11 +3,14 @@ package com.github.dimka9910.sheets.ai.services;
 import com.github.dimka9910.sheets.ai.dto.*;
 import com.github.dimka9910.sheets.ai.services.Orchestrator.OrchestrationResult;
 import com.github.dimka9910.sheets.ai.services.llm.AICommandParser;
+import com.github.dimka9910.sheets.ai.services.llm.ThirdPartyMatcherAgent.LinkedUser;
 import com.github.dimka9910.sheets.ai.telemetry.RequestTelemetry;
 import lombok.extern.slf4j.Slf4j;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
+import java.util.Map;
 
 /**
  * Основной сервис обработки команд из чата.
@@ -103,9 +106,12 @@ public class ChatCommandService {
         log.info("Response detection: hasPendingResponse={}, previousBotMessage={}", 
                 hasPendingResponse, previousBotMessage != null ? previousBotMessage.substring(0, Math.min(50, previousBotMessage.length())) : "null");
         
+        // Build linked users list for ThirdPartyMatcher
+        List<LinkedUser> linkedUsers = buildLinkedUsersList(userContext);
+        
         // Step 1: Orchestrate - classify message, determine routing
         OrchestrationResult orchestration = orchestrator.process(
-                message, previousBotMessage, hasPendingResponse, null, telemetry);
+                message, previousBotMessage, hasPendingResponse, linkedUsers, telemetry);
         
         log.info("Orchestration: tags={}, isResponse={}, model={}", 
                 orchestration.tags(), orchestration.isResponse(), orchestration.model());
@@ -265,8 +271,16 @@ public class ChatCommandService {
                   .append(" ").append(cmd.getAmount())
                   .append(" ").append(cmd.getCurrency())
                   .append(" → ").append(cmd.getAccountName())
-                  .append(" / ").append(cmd.getFundName())
-                  .append("\n");
+                  .append(" / ").append(cmd.getFundName());
+                // Add comment if present
+                if (cmd.getComment() != null && !cmd.getComment().isBlank()) {
+                    sb.append(" | \"").append(cmd.getComment()).append("\"");
+                }
+                // Add secondAccount for TRANSFER
+                if (cmd.getSecondAccount() != null && !cmd.getSecondAccount().isBlank()) {
+                    sb.append(" → ").append(cmd.getSecondAccount());
+                }
+                sb.append("\n");
             }
         }
         
@@ -703,5 +717,57 @@ public class ChatCommandService {
         }
         // Иначе считаем что это просто userId
         return linkedUserEntry.trim();
+    }
+    
+    /**
+     * Builds list of LinkedUser for ThirdPartyMatcherAgent.
+     * Uses loaded linkedUserContexts to get names and builds aliases.
+     */
+    private List<LinkedUser> buildLinkedUsersList(UserContext userContext) {
+        List<String> linkedUserIds = userContext.getLinkedUsers();
+        if (linkedUserIds == null || linkedUserIds.isEmpty()) {
+            return Collections.emptyList();
+        }
+        
+        Map<String, UserContext> linkedContexts = userContext.getLinkedUserContexts();
+        List<LinkedUser> result = new ArrayList<>();
+        
+        for (String entry : linkedUserIds) {
+            String userId = extractUserId(entry);
+            if (userId == null) continue;
+            
+            // Try to get name from loaded context
+            String name = null;
+            List<String> aliases = new ArrayList<>();
+            
+            if (linkedContexts != null && linkedContexts.containsKey(userId)) {
+                UserContext linked = linkedContexts.get(userId);
+                name = linked.getUserName();
+                if (name == null) {
+                    name = linked.getDisplayName();
+                }
+            }
+            
+            // Extract name from entry format "NAME (userId)" if not found
+            if (name == null) {
+                int parenIdx = entry.lastIndexOf('(');
+                if (parenIdx > 0) {
+                    name = entry.substring(0, parenIdx).trim();
+                } else {
+                    name = userId;  // fallback to userId
+                }
+            }
+            
+            // Add common aliases for partner names
+            String nameLower = name.toLowerCase();
+            if (nameLower.contains("kiki") || nameLower.contains("ksi") || nameLower.contains("ксю")) {
+                aliases.addAll(List.of("girlfriend", "девушка", "жена", "wife", "она", "her"));
+            }
+            
+            result.add(new LinkedUser(userId, name, aliases));
+            log.debug("Built LinkedUser: {} ({}) aliases={}", name, userId, aliases);
+        }
+        
+        return result;
     }
 }
