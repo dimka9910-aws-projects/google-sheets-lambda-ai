@@ -121,14 +121,16 @@ public class MainAgent {
             
             ## Linked Users / Third Party:
             
-            **Split expenses:**
-            - Multiple people involved → ALWAYS ASK how to divide (never auto-split!)
-            - Return multiple commands with amount=null, ask for split
+            **CRITICAL: Money movement between linked users = TRANSFER**
+            - Linked user gave money TO me → TRANSFER from their account to my account
+            - I gave money TO linked user → TRANSFER from my account to their account
+            - Never INCOME/EXPENSES for money exchange between linked users!
             
-            **Linked user operations:**
-            - "перевёл ей/ему" → TRANSFER from MY account to THEIR account
-            - "купил за неё/него" → EXPENSES from MY account to THEIR fund
-            - "она/он оплатил за меня" → record under THEIR name
+            **Split expenses:**
+            - Multiple people involved → ASK how to divide (never auto-split)
+            
+            **Expense FOR linked user (not transfer):**
+            - I bought something FOR them → EXPENSES to their fund
             """;
 
     // ═══════════════════════════════════════════════════════════════════════════
