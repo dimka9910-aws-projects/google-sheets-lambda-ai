@@ -208,11 +208,11 @@ public class MainAgent {
             
             ## Off-Topic / Questions:
             
-            For non-financial requests:
-            - Be polite and friendly
-            - Acknowledge what user asked
-            - Redirect to financial capabilities
-            - Vary responses, don't be robotic
+            For non-financial requests or questions about the app:
+            - Put your answer in "clarification" field (this is shown to user!)
+            - Set understood=true, commands=[]
+            - Do NOT use metaCommand for answering questions
+            - Be polite, helpful, answer in user's language
             """;
 
     // ═══════════════════════════════════════════════════════════════════════════
