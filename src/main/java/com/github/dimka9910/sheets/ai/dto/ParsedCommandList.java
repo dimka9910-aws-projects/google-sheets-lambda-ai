@@ -68,6 +68,14 @@ public class ParsedCommandList {
     private String tokenUsage;
     
     /**
+     * Request for additional context.
+     * If model determines it needs more context to handle request,
+     * it returns list of tags: ["SETTINGS", "TRANSFER", etc.]
+     * Caller should re-run with additional context loaded.
+     */
+    private List<String> needsContext;
+    
+    /**
      * Вложенный класс для установки дефолтов
      */
     @Data
