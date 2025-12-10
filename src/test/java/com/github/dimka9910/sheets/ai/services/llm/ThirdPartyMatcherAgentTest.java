@@ -1,6 +1,6 @@
 package com.github.dimka9910.sheets.ai.services.llm;
 
-import com.github.dimka9910.sheets.ai.services.llm.ThirdPartyMatcherAgent.LinkedUser;
+import com.github.dimka9910.sheets.ai.dto.LinkedUserEntry;
 import com.github.dimka9910.sheets.ai.services.llm.ThirdPartyMatcherAgent.MatchType;
 import org.junit.jupiter.api.*;
 import org.junit.jupiter.api.condition.EnabledIfEnvironmentVariable;
@@ -17,14 +17,16 @@ import static org.junit.jupiter.api.Assertions.*;
 class ThirdPartyMatcherAgentTest {
     
     private ThirdPartyMatcherAgent agent;
-    private List<LinkedUser> linkedUsers;
+    private List<LinkedUserEntry> linkedUsers;
     
     @BeforeEach
     void setUp() {
         agent = new ThirdPartyMatcherAgent();
         linkedUsers = List.of(
-                new LinkedUser("526913915", "KIKI", List.of("girlfriend", "девушка", "она", "her", "ксюша")),
-                new LinkedUser("377662506", "DIMA", List.of("boyfriend", "парень", "он", "him", "дима"))
+                LinkedUserEntry.builder().userId("526913915").name("KIKI")
+                        .aliases(List.of("girlfriend", "девушка", "она", "her", "ксюша")).build(),
+                LinkedUserEntry.builder().userId("377662506").name("DIMA")
+                        .aliases(List.of("boyfriend", "парень", "он", "him", "дима")).build()
         );
     }
     
