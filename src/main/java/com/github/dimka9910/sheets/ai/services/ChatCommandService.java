@@ -28,7 +28,6 @@ public class ChatCommandService {
     private final SQSPublisher sqsPublisher;
     private final UserContextService userContextService;
     private final ConversationService conversationService;
-    private final OnboardingService onboardingService;
 
     public ChatCommandService() {
         this.orchestrator = new Orchestrator();
@@ -36,7 +35,6 @@ public class ChatCommandService {
         this.sqsPublisher = new SQSPublisher();
         this.userContextService = new UserContextService();
         this.conversationService = new ConversationService();
-        this.onboardingService = new OnboardingService(this.userContextService);
     }
 
     public ChatCommandService(UserContextService userContextService) {
@@ -45,7 +43,6 @@ public class ChatCommandService {
         this.sqsPublisher = new SQSPublisher();
         this.userContextService = userContextService;
         this.conversationService = new ConversationService();
-        this.onboardingService = new OnboardingService(userContextService);
     }
 
     public ChatCommandService(AICommandParser aiCommandParser, SQSPublisher sqsPublisher, 
@@ -55,7 +52,6 @@ public class ChatCommandService {
         this.sqsPublisher = sqsPublisher;
         this.userContextService = userContextService;
         this.conversationService = new ConversationService();
-        this.onboardingService = new OnboardingService(userContextService);
     }
 
     /**
@@ -83,12 +79,21 @@ public class ChatCommandService {
             }
         }
 
-        // Проверяем: нужен ли онбординг (новый пользователь без настроек)
-        if (onboardingService.needsOnboarding(userContext)) {
-            log.info("User {} needs onboarding", userId);
-            ChatResponse onboardingResponse = onboardingService.handleOnboarding(request, message, userContext);
-            sqsPublisher.sendResponse(onboardingResponse);
-            return onboardingResponse;
+        // Проверяем: есть ли минимальные настройки (хотя бы 1 счёт И 1 фонд)
+        boolean hasAccounts = userContext.getAccounts() != null && !userContext.getAccounts().isEmpty();
+        boolean hasFunds = userContext.getFunds() != null && !userContext.getFunds().isEmpty();
+        
+        if (!hasAccounts || !hasFunds) {
+            log.info("User {} missing basic setup: accounts={}, funds={}", userId, hasAccounts, hasFunds);
+            String setupMessage = buildSetupRequiredMessage(hasAccounts, hasFunds);
+            ChatResponse setupResponse = ChatResponse.builder()
+                    .chatId(request.getChatId())
+                    .success(true)
+                    .message(setupMessage)
+                    .operationsCount(0)
+                    .build();
+            sqsPublisher.sendResponse(setupResponse);
+            return setupResponse;
         }
 
         // Добавляем сообщение пользователя в историю
@@ -676,6 +681,27 @@ public class ChatCommandService {
                 .clarification(newCmd.getClarification())
                 .errorMessage(newCmd.getErrorMessage())
                 .build();
+    }
+    
+    /**
+     * Builds a message asking user to set up accounts/funds before using the bot.
+     */
+    private String buildSetupRequiredMessage(boolean hasAccounts, boolean hasFunds) {
+        StringBuilder sb = new StringBuilder();
+        sb.append("Before I can help you track expenses, please set up:\n\n");
+        
+        if (!hasAccounts) {
+            sb.append("📋 **Accounts** - where your money is stored\n");
+            sb.append("   Use: /add_account CARD or /add_account CASH\n\n");
+        }
+        
+        if (!hasFunds) {
+            sb.append("📂 **Funds/Categories** - how you categorize expenses\n");
+            sb.append("   Use: /add_fund FOOD or /add_fund TRANSPORT\n\n");
+        }
+        
+        sb.append("After setup, you can start tracking: \"coffee 200\" ☕");
+        return sb.toString();
     }
     
     /**
