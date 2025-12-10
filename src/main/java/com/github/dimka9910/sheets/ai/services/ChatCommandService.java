@@ -415,7 +415,7 @@ public class ChatCommandService {
                 return ChatResponse.builder()
                         .chatId(chatId)
                         .success(true)
-                        .message(aiMessage != null ? aiMessage : "✓ Account " + value + " added")
+                        .message(aiMessage)
                         .build();
             }
             
@@ -427,7 +427,7 @@ public class ChatCommandService {
                 return ChatResponse.builder()
                         .chatId(chatId)
                         .success(true)
-                        .message(aiMessage != null ? aiMessage : "✓ Fund " + value + " added")
+                        .message(aiMessage)
                         .build();
             }
             
@@ -447,7 +447,7 @@ public class ChatCommandService {
                 return ChatResponse.builder()
                         .chatId(chatId)
                         .success(true)
-                        .message(aiMessage != null ? aiMessage : "✓ Instruction saved")
+                        .message(aiMessage)
                         .build();
             }
             
@@ -471,7 +471,7 @@ public class ChatCommandService {
                 return ChatResponse.builder()
                         .chatId(chatId)
                         .success(true)
-                        .message(aiMessage != null ? aiMessage : "✓ Instruction removed")
+                        .message(aiMessage)
                         .build();
             }
             
@@ -482,7 +482,7 @@ public class ChatCommandService {
                 return ChatResponse.builder()
                         .chatId(chatId)
                         .success(true)
-                        .message(aiMessage != null ? aiMessage : "✓ Default currency set to " + value)
+                        .message(aiMessage)
                         .build();
             }
             
@@ -493,7 +493,7 @@ public class ChatCommandService {
                 return ChatResponse.builder()
                         .chatId(chatId)
                         .success(true)
-                        .message(aiMessage != null ? aiMessage : "✓ Default account set to " + value)
+                        .message(aiMessage)
                         .build();
             }
             
@@ -501,11 +501,10 @@ public class ChatCommandService {
                 if (value != null && !value.isBlank()) {
                     userContext.setDefaultFund(value.toUpperCase());
                 }
-                String msg = aiMessage != null ? aiMessage : "✓ Default fund set to " + value;
                 return ChatResponse.builder()
                         .chatId(chatId)
                         .success(true)
-                        .message(msg)
+                        .message(aiMessage)
                         .build();
             }
             
@@ -514,7 +513,7 @@ public class ChatCommandService {
                 return ChatResponse.builder()
                         .chatId(chatId)
                         .success(true)
-                        .message(aiMessage != null ? aiMessage : "✓ All instructions cleared")
+                        .message(aiMessage)
                         .build();
             }
             
@@ -526,7 +525,7 @@ public class ChatCommandService {
                 return ChatResponse.builder()
                         .chatId(chatId)
                         .success(true)
-                        .message(aiMessage != null ? aiMessage : "I can help you track expenses, income, and transfers. Just tell me what you spent!")
+                        .message(aiMessage)
                         .build();
             }
             
@@ -535,7 +534,7 @@ public class ChatCommandService {
                 return ChatResponse.builder()
                         .chatId(chatId)
                         .success(true)
-                        .message(aiMessage != null ? aiMessage : "✓ Cancelled")
+                        .message(aiMessage)
                         .build();
             }
             
