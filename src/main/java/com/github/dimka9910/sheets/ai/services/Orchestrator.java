@@ -6,8 +6,8 @@ import com.github.dimka9910.sheets.ai.services.llm.MessageClassifierAgent.TagsRe
 import com.github.dimka9910.sheets.ai.services.llm.ResponseMatcherAgent;
 import com.github.dimka9910.sheets.ai.services.llm.ResponseMatcherAgent.MatchResult;
 import com.github.dimka9910.sheets.ai.services.llm.ResponseMatcherAgent.ResponseType;
+import com.github.dimka9910.sheets.ai.dto.LinkedUserEntry;
 import com.github.dimka9910.sheets.ai.services.llm.ThirdPartyMatcherAgent;
-import com.github.dimka9910.sheets.ai.services.llm.ThirdPartyMatcherAgent.LinkedUser;
 import com.github.dimka9910.sheets.ai.services.llm.ThirdPartyMatcherAgent.MatchType;
 import com.github.dimka9910.sheets.ai.telemetry.RequestTelemetry;
 import org.slf4j.Logger;
@@ -125,7 +125,7 @@ public class Orchestrator {
      * PRIMARY METHOD - use this for full telemetry support.
      */
     public OrchestrationResult process(String message, String previousBotMessage, 
-                                       boolean hasPendingResponse, List<LinkedUser> linkedUsers,
+                                       boolean hasPendingResponse, List<LinkedUserEntry> linkedUsers,
                                        RequestTelemetry telemetry) {
         long startTime = System.currentTimeMillis();
         
@@ -234,7 +234,7 @@ public class Orchestrator {
      * Process without telemetry (backward compatible).
      */
     public OrchestrationResult process(String message, String previousBotMessage, 
-                                       boolean hasPendingResponse, List<LinkedUser> linkedUsers) {
+                                       boolean hasPendingResponse, List<LinkedUserEntry> linkedUsers) {
         return process(message, previousBotMessage, hasPendingResponse, linkedUsers, null);
     }
     
@@ -255,7 +255,7 @@ public class Orchestrator {
      * - If LINKED_USER → keep tag + return matched user
      */
     private ThirdPartyResult processThirdParty(String message, Set<Tag> tags, 
-                                               List<LinkedUser> linkedUsers, RequestTelemetry telemetry) {
+                                               List<LinkedUserEntry> linkedUsers, RequestTelemetry telemetry) {
         // No THIRD_PARTY tag → return as-is
         if (!tags.contains(Tag.THIRD_PARTY)) {
             return new ThirdPartyResult(tags, null, 0);

@@ -3,12 +3,10 @@ package com.github.dimka9910.sheets.ai.services;
 import com.github.dimka9910.sheets.ai.dto.*;
 import com.github.dimka9910.sheets.ai.services.Orchestrator.OrchestrationResult;
 import com.github.dimka9910.sheets.ai.services.llm.AICommandParser;
-import com.github.dimka9910.sheets.ai.services.llm.ThirdPartyMatcherAgent.LinkedUser;
 import com.github.dimka9910.sheets.ai.telemetry.RequestTelemetry;
 import lombok.extern.slf4j.Slf4j;
 
 import java.util.ArrayList;
-import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 
@@ -106,12 +104,10 @@ public class ChatCommandService {
         log.info("Response detection: hasPendingResponse={}, previousBotMessage={}", 
                 hasPendingResponse, previousBotMessage != null ? previousBotMessage.substring(0, Math.min(50, previousBotMessage.length())) : "null");
         
-        // Build linked users list for ThirdPartyMatcher
-        List<LinkedUser> linkedUsers = buildLinkedUsersList(userContext);
-        
         // Step 1: Orchestrate - classify message, determine routing
+        // linkedUsers now stored as List<LinkedUserEntry> directly in UserContext
         OrchestrationResult orchestration = orchestrator.process(
-                message, previousBotMessage, hasPendingResponse, linkedUsers, telemetry);
+                message, previousBotMessage, hasPendingResponse, userContext.getLinkedUsers(), telemetry);
         
         log.info("Orchestration: tags={}, isResponse={}, model={}", 
                 orchestration.tags(), orchestration.isResponse(), orchestration.model());
@@ -679,14 +675,13 @@ public class ChatCommandService {
      * Это нужно для того, чтобы AI видел счета/фонды/defaults linked users.
      */
     private void loadLinkedUserContexts(UserContext userContext) {
-        List<String> linkedUsers = userContext.getLinkedUsers();
+        List<LinkedUserEntry> linkedUsers = userContext.getLinkedUsers();
         if (linkedUsers == null || linkedUsers.isEmpty()) {
             return;
         }
         
-        for (String linkedUserEntry : linkedUsers) {
-            // linkedUserEntry формат: "NAME (userId)" или просто "userId"
-            String linkedUserId = extractUserId(linkedUserEntry);
+        for (LinkedUserEntry linkedUser : linkedUsers) {
+            String linkedUserId = linkedUser.getUserId();
             if (linkedUserId != null && !linkedUserId.equals(userContext.getUserId())) {
                 try {
                     UserContext linkedContext = userContextService.getContext(linkedUserId);
@@ -700,74 +695,5 @@ public class ChatCommandService {
                 }
             }
         }
-    }
-    
-    /**
-     * Извлекает userId из строки формата "NAME (userId)" или просто "userId"
-     */
-    private String extractUserId(String linkedUserEntry) {
-        if (linkedUserEntry == null || linkedUserEntry.isBlank()) {
-            return null;
-        }
-        // Если формат "NAME (userId)" — извлекаем userId из скобок
-        int start = linkedUserEntry.lastIndexOf('(');
-        int end = linkedUserEntry.lastIndexOf(')');
-        if (start != -1 && end != -1 && end > start) {
-            return linkedUserEntry.substring(start + 1, end).trim();
-        }
-        // Иначе считаем что это просто userId
-        return linkedUserEntry.trim();
-    }
-    
-    /**
-     * Builds list of LinkedUser for ThirdPartyMatcherAgent.
-     * Uses loaded linkedUserContexts to get names and builds aliases.
-     */
-    private List<LinkedUser> buildLinkedUsersList(UserContext userContext) {
-        List<String> linkedUserIds = userContext.getLinkedUsers();
-        if (linkedUserIds == null || linkedUserIds.isEmpty()) {
-            return Collections.emptyList();
-        }
-        
-        Map<String, UserContext> linkedContexts = userContext.getLinkedUserContexts();
-        List<LinkedUser> result = new ArrayList<>();
-        
-        for (String entry : linkedUserIds) {
-            String userId = extractUserId(entry);
-            if (userId == null) continue;
-            
-            // Try to get name from loaded context
-            String name = null;
-            List<String> aliases = new ArrayList<>();
-            
-            if (linkedContexts != null && linkedContexts.containsKey(userId)) {
-                UserContext linked = linkedContexts.get(userId);
-                name = linked.getUserName();
-                if (name == null) {
-                    name = linked.getDisplayName();
-                }
-            }
-            
-            // Extract name from entry format "NAME (userId)" if not found
-            if (name == null) {
-                int parenIdx = entry.lastIndexOf('(');
-                if (parenIdx > 0) {
-                    name = entry.substring(0, parenIdx).trim();
-                } else {
-                    name = userId;  // fallback to userId
-                }
-            }
-            
-            // Add common aliases for partner names
-            String nameLower = name.toLowerCase();
-            if (nameLower.contains("kiki") || nameLower.contains("ksi") || nameLower.contains("ксю")) {
-                aliases.addAll(List.of("girlfriend", "девушка", "жена", "wife", "она", "her"));
-            }
-            
-            result.add(new LinkedUser(userId, name, aliases));
-            log.debug("Built LinkedUser: {} ({}) aliases={}", name, userId, aliases);
-        }
-        
-        return result;
     }
 }

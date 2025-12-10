@@ -193,9 +193,12 @@ public class UserContextService {
             sb.append("Фонды: ").append(String.join(", ", funds)).append("\n");
         }
         
-        List<String> linkedUsers = context.getLinkedUsers();
+        var linkedUsers = context.getLinkedUsers();
         if (linkedUsers != null && !linkedUsers.isEmpty()) {
-            sb.append("Связанные пользователи: ").append(String.join(", ", linkedUsers)).append("\n");
+            String linkedNames = linkedUsers.stream()
+                    .map(u -> u.getName() + " (" + u.getUserId() + ")")
+                    .collect(java.util.stream.Collectors.joining(", "));
+            sb.append("Связанные пользователи: ").append(linkedNames).append("\n");
         }
         
         List<String> instructions = context.getCustomInstructions();

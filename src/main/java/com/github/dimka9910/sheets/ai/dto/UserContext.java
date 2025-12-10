@@ -45,7 +45,7 @@ public class UserContext {
     
     // Связанные пользователи (для совместных финансов)
     @Builder.Default
-    private List<String> linkedUsers = new ArrayList<>();
+    private List<LinkedUserEntry> linkedUsers = new ArrayList<>();
     
     // Имя пользователя (для отображения)
     private String userName;

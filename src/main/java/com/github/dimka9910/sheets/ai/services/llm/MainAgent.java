@@ -1,6 +1,7 @@
 package com.github.dimka9910.sheets.ai.services.llm;
 
 import com.github.dimka9910.sheets.ai.dto.ConversationMessage;
+import com.github.dimka9910.sheets.ai.dto.LinkedUserEntry;
 import com.github.dimka9910.sheets.ai.dto.ParsedCommand;
 import com.github.dimka9910.sheets.ai.dto.UserContext;
 import com.github.dimka9910.sheets.ai.services.Orchestrator.MatchedLinkedUser;
@@ -409,9 +410,12 @@ public class MainAgent {
                 }
             } else {
                 // List all linked users
-                List<String> linkedUsers = context.getLinkedUsers();
+                List<LinkedUserEntry> linkedUsers = context.getLinkedUsers();
                 if (linkedUsers != null && !linkedUsers.isEmpty()) {
-                    ctx.append("\n## Linked users: ").append(String.join(", ", linkedUsers)).append("\n");
+                    String names = linkedUsers.stream()
+                            .map(LinkedUserEntry::getName)
+                            .collect(Collectors.joining(", "));
+                    ctx.append("\n## Linked users: ").append(names).append("\n");
                 }
             }
         }

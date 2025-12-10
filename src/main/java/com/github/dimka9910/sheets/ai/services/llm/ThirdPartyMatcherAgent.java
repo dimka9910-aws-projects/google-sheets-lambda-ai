@@ -2,6 +2,7 @@ package com.github.dimka9910.sheets.ai.services.llm;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.github.dimka9910.sheets.ai.dto.LinkedUserEntry;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -67,14 +68,7 @@ public class ThirdPartyMatcherAgent {
         }
     }
     
-    /**
-     * Linked user info for matching.
-     */
-    public record LinkedUser(
-            String userId,
-            String name,           // Display name (KIKI, DIMA)
-            List<String> aliases   // Possible references: girlfriend, девушка, her, она, etc.
-    ) {}
+    // Uses LinkedUserEntry from dto package
     
     // ═══════════════════════════════════════════════════════════════════════════
     // CONSTRUCTORS
@@ -107,7 +101,7 @@ public class ThirdPartyMatcherAgent {
      * @param linkedUsers List of linked users with their aliases
      * @return MatchResult with match type and matched user (if any)
      */
-    public MatchResult match(String message, List<LinkedUser> linkedUsers) {
+    public MatchResult match(String message, List<LinkedUserEntry> linkedUsers) {
         long start = System.currentTimeMillis();
         
         // No linked users → always COMMENT
@@ -131,10 +125,10 @@ public class ThirdPartyMatcherAgent {
             
             if ("LINKED_USER".equals(matchType) && matchedUser != null && !matchedUser.isBlank()) {
                 // Find the matched linked user
-                LinkedUser matched = findLinkedUser(matchedUser, linkedUsers);
+                LinkedUserEntry matched = findLinkedUser(matchedUser, linkedUsers);
                 if (matched != null) {
-                    logger.info("Third party matched: {} → {} ({}ms)", message, matched.name(), latency);
-                    return new MatchResult(MatchType.LINKED_USER, matched.userId(), matched.name(), reasoning, latency);
+                    logger.info("Third party matched: {} → {} ({}ms)", message, matched.getName(), latency);
+                    return new MatchResult(MatchType.LINKED_USER, matched.getUserId(), matched.getName(), reasoning, latency);
                 }
             }
             
@@ -152,7 +146,7 @@ public class ThirdPartyMatcherAgent {
     // PROMPT
     // ═══════════════════════════════════════════════════════════════════════════
     
-    private String buildPrompt(String message, List<LinkedUser> linkedUsers) {
+    private String buildPrompt(String message, List<LinkedUserEntry> linkedUsers) {
         StringBuilder sb = new StringBuilder();
         
         sb.append("""
@@ -162,10 +156,10 @@ public class ThirdPartyMatcherAgent {
             ## LINKED USERS (these are known people for shared finances):
             """);
         
-        for (LinkedUser user : linkedUsers) {
-            sb.append("- **").append(user.name()).append("**");
-            if (user.aliases() != null && !user.aliases().isEmpty()) {
-                sb.append(" (also known as: ").append(String.join(", ", user.aliases())).append(")");
+        for (LinkedUserEntry user : linkedUsers) {
+            sb.append("- **").append(user.getName()).append("**");
+            if (user.getAliases() != null && !user.getAliases().isEmpty()) {
+                sb.append(" (also known as: ").append(String.join(", ", user.getAliases())).append(")");
             }
             sb.append("\n");
         }
@@ -202,17 +196,17 @@ public class ThirdPartyMatcherAgent {
     // UTILITIES
     // ═══════════════════════════════════════════════════════════════════════════
     
-    private LinkedUser findLinkedUser(String name, List<LinkedUser> linkedUsers) {
+    private LinkedUserEntry findLinkedUser(String name, List<LinkedUserEntry> linkedUsers) {
         String nameLower = name.toLowerCase().trim();
-        for (LinkedUser user : linkedUsers) {
-            if (user.name().toLowerCase().equals(nameLower)) {
+        for (LinkedUserEntry user : linkedUsers) {
+            if (user.getName() != null && user.getName().toLowerCase().equals(nameLower)) {
                 return user;
             }
-            if (user.userId().toLowerCase().equals(nameLower)) {
+            if (user.getUserId() != null && user.getUserId().toLowerCase().equals(nameLower)) {
                 return user;
             }
-            if (user.aliases() != null) {
-                for (String alias : user.aliases()) {
+            if (user.getAliases() != null) {
+                for (String alias : user.getAliases()) {
                     if (alias.toLowerCase().equals(nameLower)) {
                         return user;
                     }

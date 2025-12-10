@@ -4,6 +4,7 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.github.dimka9910.sheets.ai.dto.ChatRequest;
 import com.github.dimka9910.sheets.ai.dto.ChatResponse;
+import com.github.dimka9910.sheets.ai.dto.LinkedUserEntry;
 import com.github.dimka9910.sheets.ai.dto.OnboardingState;
 import com.github.dimka9910.sheets.ai.dto.UserContext;
 import com.github.dimka9910.sheets.ai.config.AppConfig;
@@ -13,6 +14,7 @@ import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
+import java.util.ArrayList;
 import java.util.List;
 
 /**
@@ -473,7 +475,13 @@ public class OnboardingService {
             }
             case ASK_LINKED -> {
                 if (result.getExtractedPartner() != null) {
-                    context.setLinkedUsers(List.of(result.getExtractedPartner()));
+                    // TODO: OnboardingService is legacy - proper linking should be done via MainAgent
+                    // This just stores name without userId, which won't work properly
+                    LinkedUserEntry entry = LinkedUserEntry.builder()
+                            .name(result.getExtractedPartner())
+                            .aliases(new ArrayList<>())
+                            .build();
+                    context.setLinkedUsers(List.of(entry));
                 }
             }
             case COMPLETED, NOT_STARTED -> {
