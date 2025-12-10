@@ -33,6 +33,25 @@ public class ConversationService {
     }
 
     /**
+     * Gets the last bot message from history (for response detection).
+     */
+    public String getLastBotMessage(UserContext context) {
+        List<ConversationMessage> history = context.getConversationHistory();
+        if (history == null || history.isEmpty()) {
+            return null;
+        }
+        
+        // Find last assistant message
+        for (int i = history.size() - 1; i >= 0; i--) {
+            ConversationMessage msg = history.get(i);
+            if ("assistant".equals(msg.getRole())) {
+                return msg.getContent();
+            }
+        }
+        return null;
+    }
+
+    /**
      * Строит контекст истории для промпта
      */
     public String buildHistoryContext(UserContext context) {

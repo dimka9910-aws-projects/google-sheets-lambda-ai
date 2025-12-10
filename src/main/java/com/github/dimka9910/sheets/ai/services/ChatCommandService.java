@@ -1,7 +1,9 @@
 package com.github.dimka9910.sheets.ai.services;
 
 import com.github.dimka9910.sheets.ai.dto.*;
+import com.github.dimka9910.sheets.ai.services.Orchestrator.OrchestrationResult;
 import com.github.dimka9910.sheets.ai.services.llm.AICommandParser;
+import com.github.dimka9910.sheets.ai.telemetry.RequestTelemetry;
 import lombok.extern.slf4j.Slf4j;
 
 import java.util.ArrayList;
@@ -9,15 +11,18 @@ import java.util.List;
 
 /**
  * Основной сервис обработки команд из чата.
- * Координирует AI парсинг, управление контекстом и отправку в очереди.
+ * Координирует Orchestrator, AI парсинг, управление контекстом и отправку в очереди.
  * 
- * ВАЖНО: НЕ используем regex для понимания команд пользователя!
- * Все команды (включая мета-команды) понимает AI через промпт.
- * Это позволяет работать на ЛЮБОМ языке.
+ * Flow:
+ * 1. Orchestrator: classify message → tags, isResponse, linkedUser
+ * 2. AICommandParser: parse with dynamic context based on tags
+ * 3. Process commands (execute or ask clarification)
+ * 4. Send response
  */
 @Slf4j
 public class ChatCommandService {
 
+    private final Orchestrator orchestrator;
     private final AICommandParser aiCommandParser;
     private final SQSPublisher sqsPublisher;
     private final UserContextService userContextService;
@@ -25,6 +30,7 @@ public class ChatCommandService {
     private final OnboardingService onboardingService;
 
     public ChatCommandService() {
+        this.orchestrator = new Orchestrator();
         this.aiCommandParser = new AICommandParser();
         this.sqsPublisher = new SQSPublisher();
         this.userContextService = new UserContextService();
@@ -33,6 +39,7 @@ public class ChatCommandService {
     }
 
     public ChatCommandService(UserContextService userContextService) {
+        this.orchestrator = new Orchestrator();
         this.aiCommandParser = new AICommandParser();
         this.sqsPublisher = new SQSPublisher();
         this.userContextService = userContextService;
@@ -42,6 +49,7 @@ public class ChatCommandService {
 
     public ChatCommandService(AICommandParser aiCommandParser, SQSPublisher sqsPublisher, 
                               UserContextService userContextService) {
+        this.orchestrator = new Orchestrator();
         this.aiCommandParser = aiCommandParser;
         this.sqsPublisher = sqsPublisher;
         this.userContextService = userContextService;
@@ -83,11 +91,26 @@ public class ChatCommandService {
         }
 
         // Добавляем сообщение пользователя в историю
-        // AI сам определяет через историю диалога - это новая команда или продолжение
         conversationService.addToHistory(userContext, ConversationMessage.userMessage(message));
 
-        // Парсим команду через AI (финансовая или мета-команда — AI сам определит)
-        ParsedCommandList parsedList = aiCommandParser.parseMultiple(message, userContext);
+        // Create telemetry for debug
+        RequestTelemetry telemetry = new RequestTelemetry(userId, message);
+        
+        // Get previous bot message for response detection
+        String previousBotMessage = conversationService.getLastBotMessage(userContext);
+        boolean hasPendingResponse = userContext.isAwaitingClarification();
+        
+        // Step 1: Orchestrate - classify message, determine routing
+        OrchestrationResult orchestration = orchestrator.process(
+                message, previousBotMessage, hasPendingResponse, null, telemetry);
+        
+        log.info("Orchestration: tags={}, isResponse={}, model={}", 
+                orchestration.tags(), orchestration.isResponse(), orchestration.model());
+
+        // Step 2: Parse command with dynamic context based on orchestration
+        ParsedCommandList parsedList = aiCommandParser.parse(
+                message, userContext, orchestration.tags(), 
+                orchestration.isResponse(), orchestration.matchedLinkedUser(), telemetry);
         log.info("Parsed commands: {} (count: {}), metaCommand: {}", 
                 parsedList, parsedList.size(), parsedList.getMetaCommand());
         
@@ -188,9 +211,9 @@ public class ChatCommandService {
         // Сохраняем контекст (с историей)
         userContextService.saveContext(userContext);
 
-        // Debug mode — добавляем подробную информацию
+        // Debug mode — добавляем телеметрию и подробную информацию
         if (Boolean.TRUE.equals(userContext.getDebugMode())) {
-            String debugInfo = buildDebugInfo(parsedList, userContext);
+            String debugInfo = buildDebugInfo(parsedList, userContext, orchestration, telemetry);
             response.setMessage(response.getMessage() + "\n\n" + debugInfo);
         }
 
@@ -199,38 +222,39 @@ public class ChatCommandService {
     }
     
     /**
-     * Формирует debug информацию для ответа
+     * Формирует debug информацию с телеметрией агентов
      */
-    private String buildDebugInfo(ParsedCommandList parsedList, UserContext userContext) {
+    private String buildDebugInfo(ParsedCommandList parsedList, UserContext userContext,
+                                  OrchestrationResult orchestration, RequestTelemetry telemetry) {
         StringBuilder sb = new StringBuilder();
-        sb.append("🔧 DEBUG:\n");
-        sb.append("━━━━━━━━━━━━━━━━━━━━\n");
         
-        // Token usage (если есть)
-        if (parsedList.getTokenUsage() != null) {
-            sb.append(parsedList.getTokenUsage()).append("\n");
+        // Full telemetry from all agents
+        sb.append(telemetry.formatForTelegram());
+        
+        sb.append("\n\n🎯 ORCHESTRATION:\n");
+        sb.append("  tags: ").append(orchestration.tags()).append("\n");
+        sb.append("  isResponse: ").append(orchestration.isResponse()).append("\n");
+        sb.append("  model: ").append(orchestration.model()).append("\n");
+        if (orchestration.matchedLinkedUser() != null) {
+            sb.append("  linkedUser: ").append(orchestration.matchedLinkedUser().name()).append("\n");
         }
         
-        // AI Response summary
-        sb.append("understood: ").append(parsedList.isUnderstood()).append("\n");
-        sb.append("commands: ").append(parsedList.size()).append("\n");
+        sb.append("\n📝 RESULT:\n");
+        sb.append("  understood: ").append(parsedList.isUnderstood()).append("\n");
+        sb.append("  commands: ").append(parsedList.size()).append("\n");
         
         if (parsedList.getMetaCommand() != null && parsedList.getMetaCommand().isPresent()) {
-            sb.append("metaCommand: ").append(parsedList.getMetaCommand().getType())
+            sb.append("  metaCommand: ").append(parsedList.getMetaCommand().getType())
               .append(" = ").append(parsedList.getMetaCommand().getValue()).append("\n");
         }
         
-        if (parsedList.getClarification() != null) {
-            sb.append("clarification: ").append(parsedList.getClarification()).append("\n");
-        }
-        
         if (parsedList.isCorrection()) {
-            sb.append("correction: true\n");
+            sb.append("  correction: true\n");
         }
         
         // Commands details
         if (parsedList.getCommands() != null && !parsedList.getCommands().isEmpty()) {
-            sb.append("\nOperations:\n");
+            sb.append("\n📋 Operations:\n");
             for (int i = 0; i < parsedList.getCommands().size(); i++) {
                 ParsedCommand cmd = parsedList.getCommands().get(i);
                 sb.append("  ").append(i + 1).append(". ")
@@ -244,7 +268,7 @@ public class ChatCommandService {
         }
         
         // Context state
-        sb.append("\nContext:\n");
+        sb.append("\n💾 Context:\n");
         sb.append("  pendingCommands: ").append(userContext.getPendingCommands() != null ? userContext.getPendingCommands().size() : 0).append("\n");
         sb.append("  awaitingClarification: ").append(userContext.isAwaitingClarification()).append("\n");
         sb.append("  historySize: ").append(
