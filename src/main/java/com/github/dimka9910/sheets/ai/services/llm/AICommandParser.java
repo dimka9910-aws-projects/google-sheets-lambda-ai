@@ -114,17 +114,15 @@ public class AICommandParser {
             
             long latency = System.currentTimeMillis() - startTime;
             
-            // Record telemetry
+            // Record telemetry (reasoning tokens shown in result, not as separate agent)
             if (telemetry != null) {
                 String resultSummary = result.isUnderstood() 
                         ? "OK: " + result.size() + " cmd(s)" 
                         : "CLARIFY: " + truncate(result.getClarification(), 50);
-                telemetry.recordAgent("MainAgent", MODEL, resultSummary, latency, totalTokens);
-                
                 if (reasoningTokens > 0) {
-                    telemetry.recordAgent("MainAgent.reasoning", null, 
-                            reasoningTokens + " tokens", 0, reasoningTokens);
+                    resultSummary += " (reason: " + reasoningTokens + ")";
                 }
+                telemetry.recordAgent("MainAgent", MODEL, resultSummary, latency, totalTokens);
             }
             
             return result;
