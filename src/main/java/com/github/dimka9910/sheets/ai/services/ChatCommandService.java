@@ -100,6 +100,9 @@ public class ChatCommandService {
         String previousBotMessage = conversationService.getLastBotMessage(userContext);
         boolean hasPendingResponse = userContext.isAwaitingClarification();
         
+        log.info("Response detection: hasPendingResponse={}, previousBotMessage={}", 
+                hasPendingResponse, previousBotMessage != null ? previousBotMessage.substring(0, Math.min(50, previousBotMessage.length())) : "null");
+        
         // Step 1: Orchestrate - classify message, determine routing
         OrchestrationResult orchestration = orchestrator.process(
                 message, previousBotMessage, hasPendingResponse, null, telemetry);
