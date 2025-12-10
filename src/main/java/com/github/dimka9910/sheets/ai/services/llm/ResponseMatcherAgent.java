@@ -154,7 +154,7 @@ public class ResponseMatcherAgent {
     private String buildPendingResponsePrompt(String message, String previousBotMessage) {
         return """
             The bot asked a question and is waiting for an answer.
-            Is the user's message a DIRECT ANSWER to this question?
+            Is the user's message a RESPONSE or REACTION to this question?
             
             YES means:
             - User answers the bot's question (provides requested info)
@@ -163,6 +163,8 @@ public class ResponseMatcherAgent {
             - Even vague/incomplete answers that seem related to bot's question count as YES
             - User asks additional question related to bot's question
             - User gives a complex answer, part of which is related to bot's question
+            - User wants to CANCEL or ABANDON the question (forget it, nevermind, cancel, skip)
+            - User expresses frustration or wants to move on (whatever, ok forget it)
             
             NO means:
             - User starts a completely NEW topic, ignoring the question
