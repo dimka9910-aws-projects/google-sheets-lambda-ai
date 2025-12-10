@@ -171,9 +171,14 @@ public class MainAgent {
             - Set correction=true
             - Fill corrected fields, keep rest from lastOperation
             
-            **Answering clarification:**
-            - Fill missing fields in pending commands
-            - Keep already filled fields unchanged
+            **Answering clarification (IMPORTANT!):**
+            - Look at pending commands in context - each has index [0], [1], etc.
+            - Match user's answer to the SPECIFIC pending command it relates to
+            - "200 на кофе" → fills amount for pending command with comment="кофе"
+            - If user answers only ONE pending command, keep others with amount=null
+            - If multiple pending commands need clarification, ASK for remaining ones!
+            - NEVER apply same answer to ALL pending commands unless user explicitly says so
+            - Return ALL pending commands: filled ones AND unfilled ones (with amount=null)
             
             **Important:** History is for corrections only. New expense = fresh start with defaults.
             """;
@@ -439,15 +444,24 @@ public class MainAgent {
             // Pending commands for clarification answers
             List<ParsedCommand> pendingCmds = context.getPendingCommands();
             if (pendingCmds != null && !pendingCmds.isEmpty()) {
-                ctx.append("\n## Pending (fill missing):\n");
+                ctx.append("\n## Pending commands (fill missing fields):\n");
                 for (int i = 0; i < pendingCmds.size(); i++) {
                     ParsedCommand p = pendingCmds.get(i);
                     ctx.append("[").append(i).append("] ")
                        .append(p.getOperationType())
-                       .append(", amount=").append(p.getAmount() != null ? p.getAmount() : "?")
-                       .append(", comment=").append(p.getComment())
-                       .append("\n");
+                       .append(", amount=").append(p.getAmount() != null ? p.getAmount() : "?");
+                    if (p.getComment() != null) {
+                        ctx.append(", comment=\"").append(p.getComment()).append("\"");
+                    }
+                    if (p.getSecondAccount() != null) {
+                        ctx.append(", to=").append(p.getSecondAccount());
+                    }
+                    if ("TRANSFER".equals(p.getOperationType().name()) && p.getSecondAccount() == null) {
+                        ctx.append(", to=?");  // Missing destination
+                    }
+                    ctx.append("\n");
                 }
+                ctx.append("⚠️ Fill EACH command separately. User's answer may apply to only ONE command!\n");
             }
             
             // Conversation history
