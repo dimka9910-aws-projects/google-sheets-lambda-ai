@@ -48,9 +48,10 @@ public class ParsedCommandList {
     /**
      * Предложенная инструкция для сохранения (Learning).
      * AI предлагает если заметил паттерн, который стоит запомнить.
-     * Например: "шаурма = еда (FOOD category)"
+     * Can be String (legacy) or Object {type, value}.
      */
-    private String suggestedInstruction;
+    @com.fasterxml.jackson.databind.annotation.JsonDeserialize(using = SuggestedInstructionDeserializer.class)
+    private SuggestedInstruction suggestedInstruction;
     
     /**
      * Флаг коррекции — пользователь исправляет последнюю операцию.
@@ -96,6 +97,53 @@ public class ParsedCommandList {
         
         public boolean hasAny() {
             return account != null || currency != null || fund != null;
+        }
+    }
+    
+    /**
+     * Предложенная инструкция для Learning.
+     */
+    @Data
+    @NoArgsConstructor
+    @AllArgsConstructor
+    public static class SuggestedInstruction {
+        private String type;   // SET_DEFAULT_CURRENCY, ADD_INSTRUCTION, etc.
+        private String value;  // EUR, "coffee = 300", etc.
+        
+        public SuggestedInstruction(String value) {
+            this.type = "RAW";
+            this.value = value;
+        }
+    }
+    
+    /**
+     * Deserializer for SuggestedInstruction - handles both String and Object formats.
+     */
+    public static class SuggestedInstructionDeserializer extends com.fasterxml.jackson.databind.JsonDeserializer<SuggestedInstruction> {
+        @Override
+        public SuggestedInstruction deserialize(com.fasterxml.jackson.core.JsonParser p, 
+                                                 com.fasterxml.jackson.databind.DeserializationContext ctxt) 
+                throws java.io.IOException {
+            com.fasterxml.jackson.databind.JsonNode node = p.getCodec().readTree(p);
+            
+            if (node == null || node.isNull()) {
+                return null;
+            }
+            
+            // Handle String format (legacy): "шаурма = еда"
+            if (node.isTextual()) {
+                return new SuggestedInstruction(node.asText());
+            }
+            
+            // Handle Object format: {"type": "SET_DEFAULT_CURRENCY", "value": "EUR"}
+            if (node.isObject()) {
+                String type = node.has("type") ? node.get("type").asText() : "RAW";
+                String value = node.has("value") && !node.get("value").isNull() 
+                        ? node.get("value").asText() : null;
+                return new SuggestedInstruction(type, value);
+            }
+            
+            return null;
         }
     }
     
