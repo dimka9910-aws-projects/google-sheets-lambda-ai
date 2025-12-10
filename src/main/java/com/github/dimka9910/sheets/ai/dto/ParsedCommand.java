@@ -26,6 +26,7 @@ public class ParsedCommand {
     
     // Для переводов
     private String secondPerson;
+    @com.fasterxml.jackson.annotation.JsonAlias("to")
     private String secondAccount;
     private String secondCurrency;
     
