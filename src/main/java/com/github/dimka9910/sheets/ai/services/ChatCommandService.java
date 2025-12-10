@@ -415,7 +415,7 @@ public class ChatCommandService {
                 return ChatResponse.builder()
                         .chatId(chatId)
                         .success(true)
-                        .message(aiMessage)
+                        .message(aiMessage != null ? aiMessage : "✓ Account " + value + " added")
                         .build();
             }
             
@@ -427,7 +427,7 @@ public class ChatCommandService {
                 return ChatResponse.builder()
                         .chatId(chatId)
                         .success(true)
-                        .message(aiMessage)
+                        .message(aiMessage != null ? aiMessage : "✓ Fund " + value + " added")
                         .build();
             }
             
@@ -447,7 +447,7 @@ public class ChatCommandService {
                 return ChatResponse.builder()
                         .chatId(chatId)
                         .success(true)
-                        .message(aiMessage)
+                        .message(aiMessage != null ? aiMessage : "✓ Instruction saved")
                         .build();
             }
             
@@ -471,7 +471,7 @@ public class ChatCommandService {
                 return ChatResponse.builder()
                         .chatId(chatId)
                         .success(true)
-                        .message(aiMessage)
+                        .message(aiMessage != null ? aiMessage : "✓ Instruction removed")
                         .build();
             }
             
@@ -482,7 +482,7 @@ public class ChatCommandService {
                 return ChatResponse.builder()
                         .chatId(chatId)
                         .success(true)
-                        .message(aiMessage)
+                        .message(aiMessage != null ? aiMessage : "✓ Default currency set to " + value)
                         .build();
             }
             
@@ -493,7 +493,7 @@ public class ChatCommandService {
                 return ChatResponse.builder()
                         .chatId(chatId)
                         .success(true)
-                        .message(aiMessage)
+                        .message(aiMessage != null ? aiMessage : "✓ Default account set to " + value)
                         .build();
             }
             
@@ -501,10 +501,11 @@ public class ChatCommandService {
                 if (value != null && !value.isBlank()) {
                     userContext.setDefaultFund(value.toUpperCase());
                 }
+                String msg = aiMessage != null ? aiMessage : "✓ Default fund set to " + value;
                 return ChatResponse.builder()
                         .chatId(chatId)
                         .success(true)
-                        .message(aiMessage)
+                        .message(msg)
                         .build();
             }
             
@@ -513,7 +514,7 @@ public class ChatCommandService {
                 return ChatResponse.builder()
                         .chatId(chatId)
                         .success(true)
-                        .message(aiMessage)
+                        .message(aiMessage != null ? aiMessage : "✓ All instructions cleared")
                         .build();
             }
             
@@ -522,11 +523,19 @@ public class ChatCommandService {
             }
             
             case "HELP" -> {
-                // AI сам генерирует помощь на языке пользователя
                 return ChatResponse.builder()
                         .chatId(chatId)
                         .success(true)
-                        .message(aiMessage)
+                        .message(aiMessage != null ? aiMessage : "I can help you track expenses, income, and transfers. Just tell me what you spent!")
+                        .build();
+            }
+            
+            case "CANCEL_PENDING" -> {
+                userContext.clearPendingCommands();
+                return ChatResponse.builder()
+                        .chatId(chatId)
+                        .success(true)
+                        .message(aiMessage != null ? aiMessage : "✓ Cancelled")
                         .build();
             }
             
