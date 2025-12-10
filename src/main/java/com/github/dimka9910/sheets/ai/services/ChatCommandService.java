@@ -530,7 +530,7 @@ public class ChatCommandService {
             }
             
             case "CANCEL_PENDING" -> {
-                userContext.clearPendingCommands();
+                userContext.setPendingCommands(new ArrayList<>());
                 return ChatResponse.builder()
                         .chatId(chatId)
                         .success(true)
