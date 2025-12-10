@@ -1,10 +1,18 @@
 package com.github.dimka9910.sheets.ai.dto;
 
+import com.fasterxml.jackson.annotation.JsonCreator;
+import com.fasterxml.jackson.annotation.JsonValue;
+import com.fasterxml.jackson.core.JsonParser;
+import com.fasterxml.jackson.databind.DeserializationContext;
+import com.fasterxml.jackson.databind.JsonDeserializer;
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.annotation.JsonDeserialize;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
+import java.io.IOException;
 import java.util.List;
 
 /**
@@ -94,10 +102,15 @@ public class ParsedCommandList {
     /**
      * Мета-команда — управление настройками, не финансовая операция.
      * AI распознаёт на любом языке: "покажи настройки" / "show settings" / "显示设置"
+     * 
+     * Supports both formats from AI:
+     * - Object: {"type": "UNDO", "value": null}
+     * - String: "UNDO" (shorthand)
      */
     @Data
     @NoArgsConstructor
     @AllArgsConstructor
+    @JsonDeserialize(using = MetaCommand.MetaCommandDeserializer.class)
     public static class MetaCommand {
         /**
          * Тип команды:
@@ -110,6 +123,7 @@ public class ParsedCommandList {
          * - CLEAR_INSTRUCTIONS: очистить инструкции
          * - UNDO: отменить последнюю операцию
          * - HELP: помощь/примеры
+         * - CANCEL_PENDING: отменить pending команды (забей, отмени)
          */
         private String type;
         
@@ -120,6 +134,29 @@ public class ParsedCommandList {
         
         public boolean isPresent() {
             return type != null && !type.isEmpty();
+        }
+        
+        /**
+         * Custom deserializer: handles both string and object formats.
+         */
+        public static class MetaCommandDeserializer extends JsonDeserializer<MetaCommand> {
+            @Override
+            public MetaCommand deserialize(JsonParser p, DeserializationContext ctxt) throws IOException {
+                JsonNode node = p.getCodec().readTree(p);
+                
+                if (node.isTextual()) {
+                    // String format: "UNDO" → MetaCommand(type="UNDO", value=null)
+                    return new MetaCommand(node.asText(), null);
+                } else if (node.isObject()) {
+                    // Object format: {"type": "UNDO", "value": null}
+                    String type = node.has("type") ? node.get("type").asText(null) : null;
+                    String value = node.has("value") && !node.get("value").isNull() 
+                            ? node.get("value").asText() : null;
+                    return new MetaCommand(type, value);
+                }
+                
+                return null;
+            }
         }
     }
     
