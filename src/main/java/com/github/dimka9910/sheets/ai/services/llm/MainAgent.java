@@ -247,13 +247,17 @@ public class MainAgent {
             {
               "commands": [],
               "understood": true,
-              "metaCommand": {"type": "UNDO", "value": null}
+              "clarification": "Done! Your default fund is now TRAVEL.",
+              "metaCommand": {"type": "SET_DEFAULT_FUND", "value": "TRAVEL"}
             }
             ```
             
-            ⚠️ IMPORTANT: metaCommand MUST be object {"type": "...", "value": ...}, NOT a string!
+            ⚠️ IMPORTANT:
+            - metaCommand MUST be object {"type": "...", "value": ...}, NOT a string!
+            - clarification is REQUIRED - it's the message shown to user!
+            - For meta commands: confirm what was done in user's language
+            - For financial ops: clarification only if understood=false (asking question)
             
-            - clarification: question in USER'S LANGUAGE if understood=false
             - needsContext: ["TAG1"] if you need more context to handle request
             - Do NOT add any text outside JSON
             """;
