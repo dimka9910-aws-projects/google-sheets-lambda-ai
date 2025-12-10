@@ -152,8 +152,10 @@ public class MainAgent {
             | Undo last | UNDO | null |
             | Help | HELP | null |
             | Remove instruction | REMOVE_INSTRUCTION | index (0-based) |
+            | Cancel/nevermind ("забей", "отмени", "неважно") | CANCEL_PENDING | null |
             
             When metaCommand detected → understood=true, commands=[]
+            ⚠️ metaCommand format: {"type": "TYPE", "value": "value or null"}
             """;
 
     // ═══════════════════════════════════════════════════════════════════════════
@@ -212,6 +214,7 @@ public class MainAgent {
             
             ## Response Format (JSON only):
             
+            For financial operations:
             ```json
             {
               "commands": [{
@@ -230,6 +233,17 @@ public class MainAgent {
               "needsContext": null
             }
             ```
+            
+            For meta commands (settings, undo, help):
+            ```json
+            {
+              "commands": [],
+              "understood": true,
+              "metaCommand": {"type": "UNDO", "value": null}
+            }
+            ```
+            
+            ⚠️ IMPORTANT: metaCommand MUST be object {"type": "...", "value": ...}, NOT a string!
             
             - clarification: question in USER'S LANGUAGE if understood=false
             - needsContext: ["TAG1"] if you need more context to handle request
