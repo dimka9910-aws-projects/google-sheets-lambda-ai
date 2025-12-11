@@ -1,5 +1,6 @@
 package com.github.dimka9910.sheets.ai.dto;
 
+import com.github.dimka9910.sheets.ai.dto.actions.PendingClarificationAction;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
@@ -67,9 +68,14 @@ public class UserEntity {
     @Builder.Default
     private List<ConversationMessage> conversationHistory = new ArrayList<>();
     
-    // Pending commands (awaiting clarification)
+    // Pending commands (awaiting clarification) - DEPRECATED, use pendingActions
     @Builder.Default
+    @Deprecated
     private List<ParsedCommand> pendingCommands = new ArrayList<>();
+    
+    // Pending clarifications from MainAgent (new format)
+    @Builder.Default
+    private List<PendingClarificationAction> pendingActions = new ArrayList<>();
     
     // Preferred language (ISO code: en, ru, sr)
     private String preferredLanguage;
@@ -186,6 +192,24 @@ public class UserEntity {
     public boolean isAwaitingClarification() {
         ConversationMessage last = getLastAssistantMessage();
         return last != null && Boolean.TRUE.equals(last.getWasClarification());
+    }
+    
+    // ═══════════════════════════════════════════════════════════════════════════
+    // PENDING ACTIONS
+    // ═══════════════════════════════════════════════════════════════════════════
+    
+    public void setPendingActions(List<PendingClarificationAction> actions) {
+        this.pendingActions = actions != null ? new ArrayList<>(actions) : new ArrayList<>();
+    }
+    
+    public void clearPendingActions() {
+        if (pendingActions != null) {
+            pendingActions.clear();
+        }
+    }
+    
+    public boolean hasPendingActions() {
+        return pendingActions != null && !pendingActions.isEmpty();
     }
     
     // ═══════════════════════════════════════════════════════════════════════════

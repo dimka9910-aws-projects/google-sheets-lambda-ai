@@ -1,6 +1,7 @@
 package com.github.dimka9910.sheets.ai.services;
 
 import com.github.dimka9910.sheets.ai.dto.*;
+import com.github.dimka9910.sheets.ai.dto.actions.MainAgentResponse;
 import com.github.dimka9910.sheets.ai.services.agents.MainAgent;
 import com.github.dimka9910.sheets.ai.services.agents.MessageClassifierAgent;
 import com.github.dimka9910.sheets.ai.services.agents.MessageClassifierAgent.Tag;
@@ -82,12 +83,13 @@ public class Orchestrator {
                     message, userContext, classification.tags(), 
                     classification.isResponse(), classification.matchedLinkedUser());
             var agentResponse = mainAgent.process(agentRequest);
+            MainAgentResponse result = agentResponse.result();
             
             // Record MainAgent telemetry
             if (telemetry != null) {
-                String summary = agentResponse.result().isUnderstood() 
-                        ? "OK: " + agentResponse.result().size() + " cmd(s)" 
-                        : "CLARIFY: " + truncate(agentResponse.result().getClarification(), 50);
+                String summary = result.hasPendingClarifications() 
+                        ? "PENDING: " + result.getPendingClarifications().size()
+                        : "OK: " + result.getActions().size() + " action(s)";
                 if (agentResponse.reasoningTokens() > 0) {
                     summary += " (reason: " + agentResponse.reasoningTokens() + ")";
                 }
@@ -95,11 +97,11 @@ public class Orchestrator {
                         agentResponse.latencyMs(), agentResponse.tokensUsed());
             }
             
-            log.info("Parsed: understood={}, commands={}", 
-                    agentResponse.result().isUnderstood(), agentResponse.result().size());
+            log.info("Parsed: {} actions, pending={}", 
+                    result.getActions().size(), result.hasPendingClarifications());
             
             // Step 3: Handle result
-            return resultHandler.handle(request, agentResponse.result(), userContext);
+            return resultHandler.handle(request, result, userContext);
             
         } catch (Exception e) {
             log.error("Orchestration failed: {}", e.getMessage(), e);

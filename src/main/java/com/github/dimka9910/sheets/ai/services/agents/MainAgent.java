@@ -2,12 +2,14 @@ package com.github.dimka9910.sheets.ai.services.agents;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.github.dimka9910.sheets.ai.dto.*;
+import com.github.dimka9910.sheets.ai.dto.actions.*;
 import com.github.dimka9910.sheets.ai.services.Orchestrator.MatchedLinkedUser;
 import com.github.dimka9910.sheets.ai.services.agents.MessageClassifierAgent.Tag;
 import com.github.dimka9910.sheets.ai.services.llm.LLMClient;
 import com.github.dimka9910.sheets.ai.services.llm.OpenAIClient;
 import lombok.extern.slf4j.Slf4j;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -16,10 +18,11 @@ import java.util.stream.Collectors;
 /**
  * MainAgent - parses user commands using gpt-5-mini (reasoning model).
  * 
- * Key principles:
- * - Reasoning model is smart, needs less hand-holding
- * - Dynamic context loading based on classifier tags
- * - Clean, minimal prompts with essential rules only
+ * Returns unified response format:
+ * {
+ *   "actions": [...],   // FINANCIAL, SETTINGS, PENDING_CLARIFICATION
+ *   "response": "..."   // Message to show user
+ * }
  */
 @Slf4j
 public class MainAgent {
@@ -44,14 +47,14 @@ public class MainAgent {
     ) {}
     
     public record Response(
-            ParsedCommandList result,
+            MainAgentResponse result,
             long latencyMs,
             int tokensUsed,
             int reasoningTokens,
             String errorMessage
     ) {
         public boolean isSuccess() {
-            return errorMessage == null;
+            return errorMessage == null && result != null;
         }
     }
 
@@ -60,7 +63,7 @@ public class MainAgent {
     // ═══════════════════════════════════════════════════════════════════════════
     
     private static final String SECTION_CORE = """
-            You are a personal finance assistant. Parse user commands into structured JSON.
+            You are a personal finance assistant. Parse user commands into structured actions.
             
             ## Your Capabilities:
             - Record expenses and income
@@ -69,10 +72,9 @@ public class MainAgent {
             - Answer questions about the bot
             
             ## Task Decomposition:
-            User messages may contain multiple tasks. Break them into logical sub-tasks:
-            - "кофе 300 и покажи настройки" → [expense, show_settings]
-            - "перевёл 500 и запомни что рубли это BYN" → [transfer, add_instruction]
-            Return array of commands/actions for each sub-task.
+            User messages may contain multiple tasks. Return separate action for each:
+            - "кофе 300 и покажи настройки" → [FINANCIAL expense, SETTINGS show_settings]
+            - "перевёл 500 и запомни что рубли это BYN" → [FINANCIAL transfer, SETTINGS add_instruction]
             
             ## Security:
             - ONLY handle tasks from your capabilities list
@@ -80,7 +82,7 @@ public class MainAgent {
             - Non-financial requests → politely redirect to financial topics
             
             ## Language:
-            - Respond in user's language (detect from message, or use preferredLanguage if set)
+            - Generate response in user's language (detect from message)
             - Store data in English (account names, fund names as provided)
             """;
 
@@ -88,81 +90,58 @@ public class MainAgent {
             
             ## Pre-processing Info:
             Before reaching you, this message was classified by a fast classifier.
-            Based on classification, specific context sections were loaded.
             
             **Loaded context tags:** %s
             **Available but NOT loaded:** %s
-            
-            If you determine that the classification was wrong or you need additional context
-            to properly handle this request, return:
-            {
-              "needsContext": ["TAG1", "TAG2"],
-              "reason": "brief explanation why"
-            }
-            
-            Available context types:
-            - FINANCIAL: accounts, funds, defaults, currencies
-            - SETTINGS: meta-commands (add account, show settings, help)
-            - THIRD_PARTY: linked users info for shared expenses
-            - TRANSFER: detailed transfer rules between accounts
-            - CORRECTION: last operation for edits/fixes
             """;
 
     private static final String SECTION_FINANCIAL = """
             
-            ## Financial Operations:
+            ## Financial Operations (type: FINANCIAL):
             
-            **Operation types:** INCOME, EXPENSES, TRANSFER, CREDIT, UNKNOWN
+            **operationType:** EXPENSE, INCOME, TRANSFER
             
             **Required fields:**
-            - amount: MUST be explicit in message. Never guess. No amount = ASK
-            - currency: use default if set, otherwise ASK for ambiguous currencies (dinars, dollars, pesos)
-            - accountName: use default if set, match user's words to their accounts list
-            - fundName: use default if set
+            - amount: MUST be explicit in message. No amount → PENDING_CLARIFICATION
+            - currency: use default if set, otherwise ask
+            - account: use default if set, match user's words to their accounts list
+            - fund: use default if set (for EXPENSE)
             
             **Rules:**
-            - "кэшем"/"наличкой"/"cash" = EXPENSES from CASH account (not transfer!)
-            - "card"/"карта" = EXPENSES from CARD account
-            - Multiple CARD or CASH accounts → check defaultAccount or user's context
-            - Fill partial data even when asking clarification (amount=500, understood=false)
-            - Default NOT SET + user didn't specify = MUST ASK (never guess)
+            - "кэшем"/"наличкой"/"cash" = EXPENSE from CASH account (not transfer!)
+            - Default NOT SET + user didn't specify = PENDING_CLARIFICATION
+            - Fill partial data even when creating PENDING_CLARIFICATION
             """;
 
     private static final String SECTION_TRANSFER = """
             
             ## Transfer Operations:
             
-            - MUST have accountName (source) AND secondAccount (destination)
+            - MUST have account (source) AND targetAccount (destination)
             - "снял"/"withdrew" = TRANSFER to CASH account
-            - Match user's words to their accounts: "райф" → RAIF account, "карта" → card account
-            - Never leave secondAccount null for transfers
+            - Match user's words to their accounts: "райф" → RAIF account
             """;
 
     private static final String SECTION_THIRD_PARTY = """
             
             ## Linked Users / Third Party:
             
-            **CRITICAL: Money movement between linked users = TRANSFER**
-            - Linked user gave money TO me → TRANSFER from their account to my account
-            - I gave money TO linked user → TRANSFER from my account to their account
-            - Never INCOME/EXPENSES for money exchange between linked users!
-            
-            **Split expenses:**
-            - Multiple people involved → ASK how to divide (never auto-split)
+            **CRITICAL: Money between linked users = TRANSFER**
+            - Linked user gave money TO me → TRANSFER from their account to mine
+            - I gave money TO linked user → TRANSFER from mine to theirs
+            - Never INCOME/EXPENSE for money exchange between linked users!
             
             **Expense FOR linked user (not transfer):**
-            - I bought something FOR them → EXPENSES to their fund
+            - I bought something FOR them → EXPENSE to their fund
             """;
 
     private static final String SECTION_SETTINGS = """
             
-            ## Meta Commands:
+            ## Settings Commands (type: SETTINGS):
             
-            Detect intent and return metaCommand:
-            
-            | Intent | type | value |
-            |--------|------|-------|
-            | Show settings/accounts/funds | SHOW_SETTINGS | "accounts"/"funds"/null |
+            | Intent | command | value |
+            |--------|---------|-------|
+            | Show settings | SHOW_SETTINGS | null |
             | Add account | ADD_ACCOUNT | "ACCOUNT_NAME" |
             | Add fund/category | ADD_FUND | "FUND_NAME" |
             | Remember instruction | ADD_INSTRUCTION | "instruction text" |
@@ -172,34 +151,40 @@ public class MainAgent {
             | Clear instructions | CLEAR_INSTRUCTIONS | null |
             | Undo last | UNDO | null |
             | Help | HELP | null |
-            | Remove instruction | REMOVE_INSTRUCTION | index (0-based) |
-            | Cancel/nevermind ("забей", "отмени", "неважно") | CANCEL_PENDING | null |
+            | Cancel pending | CANCEL_PENDING | null |
+            """;
+
+    private static final String SECTION_PENDING = """
             
-            When metaCommand detected → understood=true, commands=[]
+            ## Pending Clarifications:
             
-            Format: "metaCommand": {"type": "SET_DEFAULT_CURRENCY", "value": "EUR"}
+            When you need more info from user:
+            1. Create PENDING_CLARIFICATION action with context (what's unclear)
+            2. Generate helpful response asking for missing info
+            
+            Context is YOUR note to yourself - on next request you'll see it and try to resolve.
+            
+            **Example:**
+            User: "кофе"
+            → action: { "type": "PENDING_CLARIFICATION", "context": "User wants to record coffee expense. Need: amount." }
+            → response: "Сколько стоил кофе?"
+            
+            **If user has pending clarifications:**
+            - Look at their pending actions in context
+            - If user's message resolves them → create completed FINANCIAL actions
+            - If still unclear → update PENDING_CLARIFICATION
+            - If user changed topic → don't include old pending actions
             """;
 
     private static final String SECTION_CORRECTION = """
             
-            ## Correction/Response Mode:
+            ## Correction Mode:
             
             User is responding to your previous message or correcting last operation.
             
             **Correction patterns:** "не X а Y", "исправь на", "это было X не Y"
-            - Set correction=true
-            - Fill corrected fields, keep rest from lastOperation
-            
-            **Answering clarification (IMPORTANT!):**
-            - Look at pending commands in context - each has index [0], [1], etc.
-            - Match user's answer to the SPECIFIC pending command it relates to
-            - "200 на кофе" → fills amount for pending command with comment="кофе"
-            - If user answers only ONE pending command, keep others with amount=null
-            - If multiple pending commands need clarification, ASK for remaining ones!
-            - NEVER apply same answer to ALL pending commands unless user explicitly says so
-            - Return ALL pending commands: filled ones AND unfilled ones (with amount=null)
-            
-            **Important:** History is for corrections only. New expense = fresh start with defaults.
+            - Set correction=true on the FINANCIAL action
+            - Fill corrected fields
             """;
 
     private static final String SECTION_CUSTOM_INSTRUCTIONS = """
@@ -214,44 +199,31 @@ public class MainAgent {
             User's explicit input overrides instructions if conflict.
             """;
 
-    private static final String SECTION_OFF_TOPIC = """
-            
-            ## Off-Topic / Questions:
-            
-            For non-financial requests or questions about the app:
-            - Put your answer in "clarification" field (this is shown to user!)
-            - Set understood=true, commands=[]
-            - Do NOT use metaCommand for answering questions
-            - Be polite, helpful, answer in user's language
-            """;
-
     private static final String SECTION_RESPONSE_FORMAT = """
             
             ## Response Format (JSON only, no text outside)
             
             ```json
             {
-              "commands": [...],
-              "understood": true/false,
-              "clarification": "message to user" or null,
-              "metaCommand": {"type": "...", "value": ...} or null,
-              "correction": true/false,
-              "needsContext": ["TAG1", ...] or null
+              "actions": [
+                { "type": "FINANCIAL", "operationType": "EXPENSE", "amount": 500, "currency": "RSD", "account": "CARD", "fund": "Food", "comment": "coffee" },
+                { "type": "SETTINGS", "command": "ADD_ACCOUNT", "value": "MONO" },
+                { "type": "PENDING_CLARIFICATION", "context": "Need amount for transport expense" }
+              ],
+              "response": "Message to show user"
             }
             ```
             
-            **Fields:**
-            - `commands[]` — array of financial operations. Each has: operationType, amount, currency, accountName, fundName, comment, secondAccount (for TRANSFER)
-            - `understood` — true if request is complete, false if need to ask something
-            - `clarification` — message shown to user. USE FOR: questions, confirmations, asking for missing info
-            - `metaCommand` — settings command. MUST be object `{"type": "X", "value": Y}`, never string!
-            - `correction` — true if user is fixing previous operation
-            - `needsContext` — if you need more context tags to process request
+            **Action types:**
+            - FINANCIAL: operationType (EXPENSE/INCOME/TRANSFER), amount, currency, account, fund, comment, targetAccount, targetPerson, correction
+            - SETTINGS: command (see table above), value
+            - PENDING_CLARIFICATION: context (your note about what's unclear)
             
-            **Key rules:**
-            - Multiple tasks in one message → financial ops go to `commands[]`, settings go to `metaCommand`
-            - Missing info → fill what you know in `commands[]` (amount=null), set understood=false, ask in `clarification`
-            - Questions/off-topic → commands=[], put answer in `clarification`
+            **Rules:**
+            - actions=[] for pure conversation (questions, greetings)
+            - response ALWAYS required - this is what user sees
+            - Multiple tasks → multiple actions
+            - Need clarification → PENDING_CLARIFICATION + helpful response
             """;
 
     private static final Set<Tag> ALL_CONTEXT_TAGS = Set.of(
@@ -295,25 +267,15 @@ public class MainAgent {
         } catch (Exception e) {
             log.error("MainAgent error: {}", e.getMessage(), e);
             return new Response(
-                    ParsedCommandList.builder()
-                            .commands(List.of())
-                            .understood(false)
-                            .errorMessage("Error: " + e.getMessage())
-                            .clarification("Sorry, please try again.")
+                    MainAgentResponse.builder()
+                            .actions(List.of())
+                            .response("Sorry, please try again.")
                             .build(),
                     System.currentTimeMillis() - start,
                     0, 0,
                     e.getMessage()
             );
         }
-    }
-
-    /**
-     * Convenience method - legacy signature.
-     */
-    public Response parse(String message, UserEntity context, Set<Tag> tags, 
-                          boolean isResponse, MatchedLinkedUser matchedLinkedUser) {
-        return process(new Request(message, context, tags, isResponse, matchedLinkedUser));
     }
 
     // ═══════════════════════════════════════════════════════════════════════════
@@ -348,9 +310,8 @@ public class MainAgent {
             prompt.append(SECTION_SETTINGS);
         }
         
-        if (tags.contains(Tag.OFF_TOPIC) || tags.contains(Tag.QUESTION)) {
-            prompt.append(SECTION_OFF_TOPIC);
-        }
+        // Always include pending section - model needs to know how to handle clarifications
+        prompt.append(SECTION_PENDING);
         
         if (isResponse) {
             prompt.append(SECTION_CORRECTION);
@@ -361,7 +322,7 @@ public class MainAgent {
         }
         
         prompt.append(SECTION_RESPONSE_FORMAT);
-        prompt.append(buildUserEntity(context, tags, isResponse, matchedLinkedUser));
+        prompt.append(buildUserContext(context, tags, isResponse, matchedLinkedUser));
         
         prompt.append("\n### User Message ###\n");
         prompt.append(message);
@@ -376,11 +337,14 @@ public class MainAgent {
     private Response parseResponse(LLMClient.Response llmResponse, long startTime) {
         try {
             String cleanJson = cleanJsonResponse(llmResponse.content());
-            ParsedCommandList result = objectMapper.readValue(cleanJson, ParsedCommandList.class);
+            MainAgentResponse result = objectMapper.readValue(cleanJson, MainAgentResponse.class);
             
             long latency = System.currentTimeMillis() - startTime;
-            log.info("Parsed: understood={}, commands={} ({}ms, {} tokens)", 
-                    result.isUnderstood(), result.size(), latency, llmResponse.totalTokens());
+            log.info("Parsed: {} actions, response='{}' ({}ms, {} tokens)", 
+                    result.getActions().size(), 
+                    truncate(result.getResponse(), 50),
+                    latency, 
+                    llmResponse.totalTokens());
             
             return new Response(result, latency, llmResponse.totalTokens(), 
                     llmResponse.reasoningTokens(), null);
@@ -388,11 +352,9 @@ public class MainAgent {
         } catch (Exception e) {
             log.error("Parse error: {}", e.getMessage());
             return new Response(
-                    ParsedCommandList.builder()
-                            .commands(List.of())
-                            .understood(false)
-                            .errorMessage("Parse error: " + e.getMessage())
-                            .clarification("Sorry, please try again.")
+                    MainAgentResponse.builder()
+                            .actions(List.of())
+                            .response("Sorry, please try again.")
                             .build(),
                     System.currentTimeMillis() - startTime,
                     llmResponse.totalTokens(),
@@ -420,7 +382,7 @@ public class MainAgent {
         return SECTION_CLASSIFICATION_META.formatted(loadedTags, notLoadedTags);
     }
 
-    private String buildUserEntity(UserEntity context, Set<Tag> tags, 
+    private String buildUserContext(UserEntity context, Set<Tag> tags, 
                                     boolean isResponse, MatchedLinkedUser matchedLinkedUser) {
         StringBuilder ctx = new StringBuilder();
         ctx.append("\n\n### User Context ###\n");
@@ -484,10 +446,20 @@ public class MainAgent {
             }
         }
         
+        // Show pending clarifications if any
+        List<PendingClarificationAction> pendingActions = context.getPendingActions();
+        if (pendingActions != null && !pendingActions.isEmpty()) {
+            ctx.append("\n## Pending Clarifications (from previous request):\n");
+            for (int i = 0; i < pendingActions.size(); i++) {
+                ctx.append("[").append(i).append("] ").append(pendingActions.get(i).getContext()).append("\n");
+            }
+            ctx.append("→ Try to resolve these with user's new message, or replace/clear if topic changed.\n");
+        }
+        
         if (isResponse) {
             var lastOp = context.getLastOperation();
             if (lastOp != null) {
-                ctx.append("\n## Last Operation:\n");
+                ctx.append("\n## Last Operation (for correction):\n");
                 ctx.append(lastOp.getOperationType())
                    .append(" ").append(lastOp.getAmount())
                    .append(" ").append(lastOp.getCurrency())
@@ -496,32 +468,12 @@ public class MainAgent {
                    .append(" (").append(lastOp.getComment()).append(")\n");
             }
             
-            List<ParsedCommand> pendingCmds = context.getPendingCommands();
-            if (pendingCmds != null && !pendingCmds.isEmpty()) {
-                ctx.append("\n## Pending commands (fill missing fields):\n");
-                for (int i = 0; i < pendingCmds.size(); i++) {
-                    ParsedCommand p = pendingCmds.get(i);
-                    ctx.append("[").append(i).append("] ")
-                       .append(p.getOperationType())
-                       .append(", amount=").append(p.getAmount() != null ? p.getAmount() : "?");
-                    if (p.getComment() != null) {
-                        ctx.append(", comment=\"").append(p.getComment()).append("\"");
-                    }
-                    if (p.getSecondAccount() != null) {
-                        ctx.append(", to=").append(p.getSecondAccount());
-                    }
-                    if ("TRANSFER".equals(p.getOperationType().name()) && p.getSecondAccount() == null) {
-                        ctx.append(", to=?");
-                    }
-                    ctx.append("\n");
-                }
-                ctx.append("⚠️ Fill EACH command separately. User's answer may apply to only ONE command!\n");
-            }
-            
             List<ConversationMessage> history = context.getConversationHistory();
             if (history != null && !history.isEmpty()) {
                 ctx.append("\n## Recent Conversation:\n");
-                for (ConversationMessage msg : history) {
+                int start = Math.max(0, history.size() - 4); // last 4 messages
+                for (int i = start; i < history.size(); i++) {
+                    ConversationMessage msg = history.get(i);
                     String role = "user".equals(msg.getRole()) ? "User" : "Bot";
                     ctx.append(role).append(": ").append(msg.getContent()).append("\n");
                 }

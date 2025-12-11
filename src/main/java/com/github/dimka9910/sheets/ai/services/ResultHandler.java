@@ -1,19 +1,20 @@
 package com.github.dimka9910.sheets.ai.services;
 
 import com.github.dimka9910.sheets.ai.dto.*;
+import com.github.dimka9910.sheets.ai.dto.actions.*;
 import lombok.extern.slf4j.Slf4j;
 
 import java.util.ArrayList;
 import java.util.List;
 
 /**
- * Handles ParsedCommandList results from MainAgent.
+ * Handles MainAgentResponse results.
  * 
  * Responsibilities:
- * - Execute meta commands (settings, undo, etc.)
- * - Send financial operations to Google Sheets
- * - Manage conversation history and pending commands
- * - Build ChatResponse
+ * - Execute settings actions (add account, undo, etc.)
+ * - Send financial actions to Google Sheets
+ * - Manage pending clarifications in UserEntity
+ * - Build ChatResponse with model's response message
  */
 @Slf4j
 public class ResultHandler {
@@ -27,113 +28,107 @@ public class ResultHandler {
     }
 
     /**
-     * Process ParsedCommandList and return ChatResponse.
+     * Process MainAgentResponse and return ChatResponse.
      */
-    public ChatResponse handle(ChatRequest request, ParsedCommandList parsedList, UserEntity userContext) {
+    public ChatResponse handle(ChatRequest request, MainAgentResponse agentResponse, UserEntity userContext) {
         String chatId = request.getResponseChatId();
         String message = request.getMessage();
         
         // Add user message to history
         userContext.addToHistory(ConversationMessage.userMessage(message));
         
-        // Merge with pending commands if any
-        mergePendingCommands(parsedList, userContext);
+        // Process all actions
+        List<FinancialAction> financialActions = agentResponse.getFinancialActions();
+        List<SettingsAction> settingsActions = agentResponse.getSettingsActions();
+        List<PendingClarificationAction> pendingActions = agentResponse.getPendingClarifications();
         
-        // Handle meta command if present
-        if (parsedList.getMetaCommand() != null && parsedList.getMetaCommand().isPresent()) {
-            ChatResponse metaResponse = handleMetaCommand(request, parsedList, userContext);
-            if (metaResponse != null) {
-                userContextService.saveContext(userContext);
-                return metaResponse;
+        log.info("Processing: {} financial, {} settings, {} pending", 
+                financialActions.size(), settingsActions.size(), pendingActions.size());
+        
+        // Handle settings actions
+        for (SettingsAction action : settingsActions) {
+            handleSettingsAction(action, userContext, request);
+        }
+        
+        // Handle pending clarifications
+        if (!pendingActions.isEmpty()) {
+            userContext.setPendingActions(pendingActions);
+            log.info("Saved {} pending clarifications", pendingActions.size());
+        } else {
+            userContext.clearPendingActions();
+        }
+        
+        // Handle financial actions
+        boolean allSuccess = true;
+        int operationsCount = 0;
+        
+        for (FinancialAction action : financialActions) {
+            boolean success = handleFinancialAction(action, userContext);
+            if (success) {
+                operationsCount++;
+            } else {
+                allSuccess = false;
             }
         }
-
-        // Build response
-        ChatResponse response = buildResponse(request, parsedList, userContext);
         
-        // Track if this was a clarification question
-        boolean wasClarification = !parsedList.isUnderstood() && parsedList.getClarification() != null;
+        // Determine success: 
+        // - Has financial actions and all succeeded, OR
+        // - No financial actions but has settings/pending (conversation)
+        boolean hasFinancialWork = !financialActions.isEmpty();
+        boolean isSuccess = hasFinancialWork ? allSuccess && operationsCount > 0 : true;
         
-        // Add assistant response to history
-        ParsedCommand firstCmd = parsedList.getFirst();
-        userContext.addToHistory(
-                ConversationMessage.assistantMessage(response.getMessage(), firstCmd, wasClarification));
-
-        // Manage pending commands
-        if (wasClarification && parsedList.size() > 0) {
-            userContext.setPendingCommands(new ArrayList<>(parsedList.getCommands()));
-            log.info("Saved {} pending commands for clarification", parsedList.size());
-        }
-
-        // If successful — send to sheets
-        if (response.isSuccess()) {
-            userContext.getPendingCommands().clear();
-            
-            // Correction: cancel old operation first
-            if (parsedList.isCorrection()) {
-                ParsedCommand lastOp = userContext.popLastOperation();
-                if (lastOp != null) {
-                    log.info("Correction: canceling old operation: {}", lastOp);
-                    sendCancelOperation(userContext, lastOp);
-                }
-            }
-            
-            // Send new commands
-            for (ParsedCommand cmd : parsedList.getCommands()) {
-                sendToSheetsLambda(userContext, cmd);
-                userContext.addOperation(cmd);
-            }
-            
-            // Apply setAsDefault if requested
-            applySetAsDefault(parsedList, userContext);
-            
-            // Clear history after successful operation
+        // Clear pending and history after successful financial operations
+        if (hasFinancialWork && isSuccess) {
+            userContext.clearPendingActions();
             userContext.clearHistory();
         }
-
+        
+        // Add assistant response to history
+        boolean wasClarification = !pendingActions.isEmpty();
+        userContext.addToHistory(ConversationMessage.builder()
+                .role("assistant")
+                .content(agentResponse.getResponse())
+                .wasClarification(wasClarification)
+                .build());
+        
         userContextService.saveContext(userContext);
-        return response;
+        
+        return ChatResponse.builder()
+                .chatId(chatId)
+                .success(isSuccess)
+                .message(agentResponse.getResponse())
+                .operationsCount(operationsCount)
+                .build();
     }
 
     // ═══════════════════════════════════════════════════════════════════════════
-    // META COMMANDS
+    // SETTINGS ACTIONS
     // ═══════════════════════════════════════════════════════════════════════════
 
-    private ChatResponse handleMetaCommand(ChatRequest request, ParsedCommandList parsedList, UserEntity userContext) {
-        ParsedCommandList.MetaCommand meta = parsedList.getMetaCommand();
-        String chatId = request.getResponseChatId();
-        String userName = request.getUserName();
-        String type = meta.getType();
-        String value = meta.getValue();
-        String aiMessage = parsedList.getClarification();
+    private void handleSettingsAction(SettingsAction action, UserEntity userContext, ChatRequest request) {
+        SettingsAction.Command command = action.getCommand();
+        String value = action.getValue();
         
-        log.info("Meta command: type={}, value={}", type, value);
+        log.info("Settings action: {} = {}", command, value);
         
-        return switch (type.toUpperCase()) {
-            case "SHOW_SETTINGS" -> {
-                String summary = userContextService.getContextSummary(userName);
-                yield ChatResponse.builder()
-                        .chatId(chatId)
-                        .success(true)
-                        .message(aiMessage != null ? aiMessage + "\n\n" + summary : summary)
-                        .build();
+        switch (command) {
+            case SHOW_SETTINGS -> {
+                // Response is already generated by model
             }
             
-            case "ADD_ACCOUNT" -> {
+            case ADD_ACCOUNT -> {
                 if (value != null && !value.isBlank()) {
                     userContext.addAccount(value.toUpperCase().replaceAll("\\s+", "_"));
                 }
-                yield simpleResponse(chatId, aiMessage);
             }
             
-            case "ADD_FUND" -> {
+            case ADD_FUND -> {
                 if (value != null && !value.isBlank()) {
                     userContext.addFund(value.toUpperCase().replaceAll("\\s+", "_"));
                 }
-                yield simpleResponse(chatId, aiMessage);
             }
             
-            case "ADD_INSTRUCTION" -> {
+            case ADD_INSTRUCTION -> {
                 if (value != null && !value.isBlank()) {
                     List<String> existing = userContext.getCustomInstructions();
                     if (existing == null || !existing.contains(value)) {
@@ -141,73 +136,47 @@ public class ResultHandler {
                         log.info("Added instruction: {}", value);
                     }
                 }
-                yield simpleResponse(chatId, aiMessage);
             }
             
-            case "REMOVE_INSTRUCTION" -> {
-                if (value != null && !value.isBlank()) {
-                    try {
-                        int index = Integer.parseInt(value.trim());
-                        List<String> instructions = userContext.getCustomInstructions();
-                        if (instructions != null && index >= 0 && index < instructions.size()) {
-                            userContext.removeInstruction(index);
-                        }
-                    } catch (NumberFormatException ignored) {}
-                }
-                yield simpleResponse(chatId, aiMessage);
-            }
-            
-            case "SET_DEFAULT_CURRENCY" -> {
+            case SET_DEFAULT_CURRENCY -> {
                 if (value != null && !value.isBlank()) {
                     userContext.setDefaultCurrency(value.toUpperCase());
                 }
-                yield simpleResponse(chatId, aiMessage);
             }
             
-            case "SET_DEFAULT_ACCOUNT" -> {
+            case SET_DEFAULT_ACCOUNT -> {
                 if (value != null && !value.isBlank()) {
                     userContext.setDefaultAccount(value.toUpperCase());
                 }
-                yield simpleResponse(chatId, aiMessage);
             }
             
-            case "SET_DEFAULT_FUND" -> {
+            case SET_DEFAULT_FUND -> {
                 if (value != null && !value.isBlank()) {
                     userContext.setDefaultFund(value.toUpperCase());
                 }
-                yield simpleResponse(chatId, aiMessage);
             }
             
-            case "CLEAR_INSTRUCTIONS" -> {
-                userContext.clearInstructions();
-                yield simpleResponse(chatId, aiMessage);
+            case CLEAR_INSTRUCTIONS -> userContext.clearInstructions();
+            
+            case UNDO -> handleUndo(userContext);
+            
+            case CANCEL_PENDING -> {
+                userContext.clearPendingActions();
+                userContext.setPendingCommands(new ArrayList<>()); // Clear legacy too
             }
             
-            case "UNDO" -> handleUndo(request, userContext, aiMessage);
-            
-            case "HELP" -> simpleResponse(chatId, aiMessage);
-            
-            case "CANCEL_PENDING" -> {
-                userContext.setPendingCommands(new ArrayList<>());
-                yield simpleResponse(chatId, aiMessage);
+            case HELP -> {
+                // Response is already generated by model
             }
             
-            default -> {
-                log.warn("Unknown meta command: {}", type);
-                yield null;
-            }
-        };
+            default -> log.warn("Unknown settings command: {}", command);
+        }
     }
 
-    private ChatResponse handleUndo(ChatRequest request, UserEntity userContext, String aiMessage) {
-        String chatId = request.getResponseChatId();
-        
+    private void handleUndo(UserEntity userContext) {
         if (!userContext.hasOperationsToUndo()) {
-            return ChatResponse.builder()
-                    .chatId(chatId)
-                    .success(false)
-                    .message(aiMessage != null ? aiMessage : "No operations to undo")
-                    .build();
+            log.warn("No operations to undo");
+            return;
         }
         
         ParsedCommand lastOp = userContext.popLastOperation();
@@ -216,126 +185,72 @@ public class ResultHandler {
         SheetsRecordDTO undoRecord = SheetsRecordDTO.fromParsedCommand(lastOp, userContext.getUserName());
         undoRecord.setUndo(true);
         sqsPublisher.sendToSheetsLambda(undoRecord);
-        
-        userContextService.saveContext(userContext);
-        
-        return ChatResponse.builder()
-                .chatId(chatId)
-                .success(true)
-                .message(aiMessage != null ? aiMessage : "Undone")
-                .parsedCommand(lastOp)
-                .build();
-    }
-
-    private ChatResponse simpleResponse(String chatId, String message) {
-        return ChatResponse.builder()
-                .chatId(chatId)
-                .success(true)
-                .message(message)
-                .build();
     }
 
     // ═══════════════════════════════════════════════════════════════════════════
-    // RESPONSE BUILDING
+    // FINANCIAL ACTIONS
     // ═══════════════════════════════════════════════════════════════════════════
 
-    private ChatResponse buildResponse(ChatRequest request, ParsedCommandList parsedList, UserEntity userContext) {
-        List<ParsedCommand> commands = parsedList.getCommands();
-        
-        boolean allValid = parsedList.isUnderstood() 
-                && commands != null 
-                && !commands.isEmpty()
-                && commands.stream().allMatch(cmd -> 
-                        cmd.getOperationType() != null && cmd.getOperationType() != OperationTypeEnum.UNKNOWN);
-        
-        String message = parsedList.getClarification();
-        if (message == null || message.isBlank()) {
-            message = parsedList.getErrorMessage();
-        }
-        if (message == null || message.isBlank()) {
-            log.warn("No clarification from AI");
-            message = allValid ? "✓" : "?";
+    private boolean handleFinancialAction(FinancialAction action, UserEntity userContext) {
+        // Validate required fields
+        if (action.getAmount() == null || action.getAmount() <= 0) {
+            log.warn("Financial action missing amount: {}", action);
+            return false;
         }
         
-        return ChatResponse.builder()
-                .chatId(request.getResponseChatId())
-                .success(allValid)
-                .message(message)
-                .parsedCommands(commands)
-                .parsedCommand(parsedList.getFirst())
-                .operationsCount(allValid ? commands.size() : 0)
-                .build();
-    }
-
-    // ═══════════════════════════════════════════════════════════════════════════
-    // HELPERS
-    // ═══════════════════════════════════════════════════════════════════════════
-
-    private void mergePendingCommands(ParsedCommandList parsedList, UserEntity userContext) {
-        List<ParsedCommand> pendingCmds = userContext.getPendingCommands();
-        if (pendingCmds == null || pendingCmds.isEmpty() || parsedList.size() == 0) {
-            return;
+        if (action.getOperationType() == null) {
+            log.warn("Financial action missing operationType: {}", action);
+            return false;
         }
         
-        List<ParsedCommand> newCmds = parsedList.getCommands();
-        for (int i = 0; i < pendingCmds.size(); i++) {
-            ParsedCommand pending = pendingCmds.get(i);
-            if (i < newCmds.size()) {
-                newCmds.set(i, mergePendingWithNew(pending, newCmds.get(i)));
-            } else if (!newCmds.isEmpty() && newCmds.get(0).getAmount() != null) {
-                newCmds.add(mergePendingWithNew(pending, newCmds.get(0)));
+        // Handle correction
+        if (action.isCorrection()) {
+            ParsedCommand lastOp = userContext.popLastOperation();
+            if (lastOp != null) {
+                log.info("Correction: canceling old operation");
+                SheetsRecordDTO cancelRecord = SheetsRecordDTO.fromParsedCommand(lastOp, userContext.getUserName());
+                cancelRecord.setUndo(true);
+                sqsPublisher.sendToSheetsLambda(cancelRecord);
             }
         }
-        parsedList.setCommands(newCmds);
-    }
-
-    private ParsedCommand mergePendingWithNew(ParsedCommand pending, ParsedCommand newCmd) {
-        return ParsedCommand.builder()
-                .operationType(newCmd.getOperationType() != null ? newCmd.getOperationType() : pending.getOperationType())
-                .amount(newCmd.getAmount() != null && newCmd.getAmount() > 0 ? newCmd.getAmount() : pending.getAmount())
-                .currency(newCmd.getCurrency() != null ? newCmd.getCurrency() : pending.getCurrency())
-                .accountName(newCmd.getAccountName() != null ? newCmd.getAccountName() : pending.getAccountName())
-                .fundName(newCmd.getFundName() != null ? newCmd.getFundName() : pending.getFundName())
-                .comment(newCmd.getComment() != null ? newCmd.getComment() : pending.getComment())
-                .secondAccount(newCmd.getSecondAccount() != null ? newCmd.getSecondAccount() : pending.getSecondAccount())
-                .secondPerson(newCmd.getSecondPerson() != null ? newCmd.getSecondPerson() : pending.getSecondPerson())
-                .secondCurrency(newCmd.getSecondCurrency() != null ? newCmd.getSecondCurrency() : pending.getSecondCurrency())
-                .understood(newCmd.isUnderstood())
-                .clarification(newCmd.getClarification())
-                .errorMessage(newCmd.getErrorMessage())
-                .build();
-    }
-
-    private void applySetAsDefault(ParsedCommandList parsedList, UserEntity userContext) {
-        if (parsedList.getSetAsDefault() == null || !parsedList.getSetAsDefault().hasAny()) {
-            return;
-        }
-        ParsedCommandList.SetAsDefault defaults = parsedList.getSetAsDefault();
-        if (defaults.getAccount() != null) userContext.setDefaultAccount(defaults.getAccount());
-        if (defaults.getCurrency() != null) userContext.setDefaultCurrency(defaults.getCurrency());
-        if (defaults.getFund() != null) userContext.setDefaultFund(defaults.getFund());
-        log.info("Applied defaults: {}", defaults);
-    }
-
-    private void sendToSheetsLambda(UserEntity userContext, ParsedCommand cmd) {
+        
+        // Convert to ParsedCommand for SheetsRecordDTO (backward compatibility)
+        ParsedCommand cmd = convertToLegacyCommand(action);
+        
+        // Send to Google Sheets
         SheetsRecordDTO record = SheetsRecordDTO.fromParsedCommand(cmd, userContext.getUserName());
         sqsPublisher.sendToSheetsLambda(record);
+        
+        // Save for undo
+        userContext.addOperation(cmd);
+        
+        log.info("Sent financial action: {} {} {}", 
+                action.getOperationType(), action.getAmount(), action.getCurrency());
+        
+        return true;
     }
 
-    private void sendCancelOperation(UserEntity userContext, ParsedCommand originalOp) {
-        ParsedCommand cancelOp = ParsedCommand.builder()
-                .operationType(originalOp.getOperationType())
-                .amount(-originalOp.getAmount())
-                .currency(originalOp.getCurrency())
-                .accountName(originalOp.getAccountName())
-                .fundName(originalOp.getFundName())
-                .comment("CANCEL: " + originalOp.getComment())
-                .secondPerson(originalOp.getSecondPerson())
-                .secondAccount(originalOp.getSecondAccount())
-                .secondCurrency(originalOp.getSecondCurrency())
+    /**
+     * Convert FinancialAction to legacy ParsedCommand for SheetsRecordDTO compatibility.
+     */
+    private ParsedCommand convertToLegacyCommand(FinancialAction action) {
+        OperationTypeEnum opType = switch (action.getOperationType()) {
+            case EXPENSE -> OperationTypeEnum.EXPENSES;
+            case INCOME -> OperationTypeEnum.INCOME;
+            case TRANSFER -> OperationTypeEnum.TRANSFER;
+        };
+        
+        return ParsedCommand.builder()
+                .operationType(opType)
+                .amount(action.getAmount())
+                .currency(action.getCurrency())
+                .accountName(action.getAccount())
+                .fundName(action.getFund())
+                .comment(action.getComment())
+                .secondAccount(action.getTargetAccount())
+                .secondPerson(action.getTargetPerson())
+                .secondCurrency(action.getTargetCurrency())
                 .understood(true)
                 .build();
-        
-        sendToSheetsLambda(userContext, cancelOp);
     }
 }
