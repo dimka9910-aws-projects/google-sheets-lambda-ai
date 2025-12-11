@@ -1,7 +1,8 @@
 package com.github.dimka9910.sheets.ai.services.llm;
 
 import com.github.dimka9910.sheets.ai.dto.LinkedUserEntry;
-import com.github.dimka9910.sheets.ai.services.llm.ThirdPartyMatcherAgent.MatchType;
+import com.github.dimka9910.sheets.ai.services.agents.ThirdPartyMatcherAgent;
+import com.github.dimka9910.sheets.ai.services.agents.ThirdPartyMatcherAgent.MatchType;
 import org.junit.jupiter.api.*;
 import org.junit.jupiter.api.condition.EnabledIfEnvironmentVariable;
 
@@ -23,9 +24,9 @@ class ThirdPartyMatcherAgentTest {
     void setUp() {
         agent = new ThirdPartyMatcherAgent();
         linkedUsers = List.of(
-                LinkedUserEntry.builder().userId("526913915").name("KIKI")
+                LinkedUserEntry.builder().userName("KIKI").displayName("KIKI")
                         .aliases(List.of("girlfriend", "девушка", "она", "her", "ксюша")).build(),
-                LinkedUserEntry.builder().userId("377662506").name("DIMA")
+                LinkedUserEntry.builder().userName("DIMA").displayName("DIMA")
                         .aliases(List.of("boyfriend", "парень", "он", "him", "дима")).build()
         );
     }
@@ -97,7 +98,7 @@ class ThirdPartyMatcherAgentTest {
             var result = agent.match("transferred to mom for birthday", linkedUsers);
             
             assertEquals(MatchType.COMMENT, result.matchType());
-            assertNull(result.matchedUserId());
+            assertNull(result.matchedUserName());
             System.out.println("Mom not linked: " + result.reasoning());
         }
         
@@ -188,4 +189,3 @@ class ThirdPartyMatcherAgentTest {
         }
     }
 }
-

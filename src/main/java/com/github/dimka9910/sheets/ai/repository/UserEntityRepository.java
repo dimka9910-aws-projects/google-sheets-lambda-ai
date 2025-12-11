@@ -1,7 +1,7 @@
 package com.github.dimka9910.sheets.ai.repository;
 
 import com.github.dimka9910.sheets.ai.config.AppConfig;
-import com.github.dimka9910.sheets.ai.dto.UserContext;
+import com.github.dimka9910.sheets.ai.dto.UserEntity;
 import lombok.extern.slf4j.Slf4j;
 import software.amazon.awssdk.enhanced.dynamodb.DynamoDbEnhancedClient;
 import software.amazon.awssdk.enhanced.dynamodb.DynamoDbIndex;
@@ -15,19 +15,23 @@ import software.amazon.awssdk.services.dynamodb.DynamoDbClient;
 import java.util.Optional;
 
 /**
- * Repository для работы с UserContext в DynamoDB.
+ * Repository for UserEntity in DynamoDB.
+ * 
+ * Table: finance-tracker-users-{env}
+ * PK: userName (e.g., "DIMA", "KIKI")
+ * GSI: telegramId-index (for lookup from Telegram)
  */
 @Slf4j
-public class UserContextRepository {
+public class UserEntityRepository {
 
-    private final DynamoDbTable<UserContext> table;
-    private final DynamoDbIndex<UserContext> telegramIdIndex;
+    private final DynamoDbTable<UserEntity> table;
+    private final DynamoDbIndex<UserEntity> telegramIdIndex;
 
-    public UserContextRepository() {
+    public UserEntityRepository() {
         String tableName = AppConfig.getUsersTableName();
         String region = AppConfig.getAwsRegion();
         
-        log.info("Initializing UserContextRepository with table: {}, region: {}", tableName, region);
+        log.info("Initializing UserEntityRepository: table={}, region={}", tableName, region);
         
         DynamoDbClient dynamoDbClient = DynamoDbClient.builder()
                 .region(Region.of(region))
@@ -37,37 +41,36 @@ public class UserContextRepository {
                 .dynamoDbClient(dynamoDbClient)
                 .build();
 
-        this.table = enhancedClient.table(tableName, TableSchema.fromBean(UserContext.class));
+        this.table = enhancedClient.table(tableName, TableSchema.fromBean(UserEntity.class));
         this.telegramIdIndex = table.index("telegramId-index");
     }
 
-    // Конструктор для тестирования
-    public UserContextRepository(DynamoDbEnhancedClient enhancedClient, String tableName) {
-        this.table = enhancedClient.table(tableName, TableSchema.fromBean(UserContext.class));
+    public UserEntityRepository(DynamoDbEnhancedClient enhancedClient, String tableName) {
+        this.table = enhancedClient.table(tableName, TableSchema.fromBean(UserEntity.class));
         this.telegramIdIndex = table.index("telegramId-index");
     }
 
     /**
-     * Получить контекст по userId
+     * Get by userName (primary key).
      */
-    public Optional<UserContext> getByUserId(String userId) {
-        log.debug("Getting user context for userId: {}", userId);
+    public Optional<UserEntity> getByUserName(String userName) {
+        log.debug("Getting context for userName: {}", userName);
         try {
-            UserContext context = table.getItem(Key.builder()
-                    .partitionValue(userId)
+            UserEntity context = table.getItem(Key.builder()
+                    .partitionValue(userName)
                     .build());
             return Optional.ofNullable(context);
         } catch (Exception e) {
-            log.error("Error getting user context for userId {}: {}", userId, e.getMessage(), e);
+            log.error("Error getting context for userName {}: {}", userName, e.getMessage(), e);
             return Optional.empty();
         }
     }
 
     /**
-     * Получить контекст по Telegram ID (через GSI)
+     * Get by Telegram ID (via GSI).
      */
-    public Optional<UserContext> getByTelegramId(String telegramId) {
-        log.debug("Getting user context for telegramId: {}", telegramId);
+    public Optional<UserEntity> getByTelegramId(String telegramId) {
+        log.debug("Getting context for telegramId: {}", telegramId);
         try {
             QueryConditional queryConditional = QueryConditional.keyEqualTo(
                     Key.builder().partitionValue(telegramId).build()
@@ -78,45 +81,44 @@ public class UserContextRepository {
                     .flatMap(page -> page.items().stream())
                     .findFirst();
         } catch (Exception e) {
-            log.error("Error getting user context for telegramId {}: {}", telegramId, e.getMessage(), e);
+            log.error("Error getting context for telegramId {}: {}", telegramId, e.getMessage(), e);
             return Optional.empty();
         }
     }
 
     /**
-     * Сохранить контекст (создать или обновить)
+     * Save context (create or update).
      */
-    public void save(UserContext context) {
-        log.info("Saving user context for userId: {}", context.getUserId());
+    public void save(UserEntity context) {
+        log.info("Saving context for userName: {}", context.getUserName());
         try {
             table.putItem(context);
-            log.debug("Successfully saved user context: {}", context);
+            log.debug("Saved context: {}", context.getUserName());
         } catch (Exception e) {
-            log.error("Error saving user context for userId {}: {}", context.getUserId(), e.getMessage(), e);
+            log.error("Error saving context for {}: {}", context.getUserName(), e.getMessage(), e);
             throw new RuntimeException("Failed to save user context", e);
         }
     }
 
     /**
-     * Удалить контекст
+     * Delete by userName.
      */
-    public void delete(String userId) {
-        log.info("Deleting user context for userId: {}", userId);
+    public void delete(String userName) {
+        log.info("Deleting context for userName: {}", userName);
         try {
             table.deleteItem(Key.builder()
-                    .partitionValue(userId)
+                    .partitionValue(userName)
                     .build());
         } catch (Exception e) {
-            log.error("Error deleting user context for userId {}: {}", userId, e.getMessage(), e);
+            log.error("Error deleting context for {}: {}", userName, e.getMessage(), e);
             throw new RuntimeException("Failed to delete user context", e);
         }
     }
 
     /**
-     * Проверить существует ли пользователь
+     * Check if user exists.
      */
-    public boolean exists(String userId) {
-        return getByUserId(userId).isPresent();
+    public boolean exists(String userName) {
+        return getByUserName(userName).isPresent();
     }
 }
-

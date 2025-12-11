@@ -9,7 +9,7 @@ import software.amazon.awssdk.enhanced.dynamodb.mapper.annotations.DynamoDbIgnor
 
 /**
  * Одно сообщение в истории диалога.
- * Хранится в DynamoDB как вложенный объект в UserContext.
+ * Хранится в DynamoDB как вложенный объект в UserEntity.
  */
 @Data
 @Builder

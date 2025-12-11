@@ -1,11 +1,12 @@
-package com.github.dimka9910.sheets.ai.services.llm;
+package com.github.dimka9910.sheets.ai.services.agents;
 
-import com.github.dimka9910.sheets.ai.dto.ConversationMessage;
-import com.github.dimka9910.sheets.ai.dto.LinkedUserEntry;
-import com.github.dimka9910.sheets.ai.dto.ParsedCommand;
-import com.github.dimka9910.sheets.ai.dto.UserContext;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.github.dimka9910.sheets.ai.dto.*;
 import com.github.dimka9910.sheets.ai.services.Orchestrator.MatchedLinkedUser;
-import com.github.dimka9910.sheets.ai.services.llm.MessageClassifierAgent.Tag;
+import com.github.dimka9910.sheets.ai.services.agents.MessageClassifierAgent.Tag;
+import com.github.dimka9910.sheets.ai.services.llm.LLMClient;
+import com.github.dimka9910.sheets.ai.services.llm.OpenAIClient;
+import lombok.extern.slf4j.Slf4j;
 
 import java.util.List;
 import java.util.Map;
@@ -13,19 +14,51 @@ import java.util.Set;
 import java.util.stream.Collectors;
 
 /**
- * MainAgent - builds prompts for gpt-5-mini (reasoning model).
+ * MainAgent - parses user commands using gpt-5-mini (reasoning model).
  * 
  * Key principles:
  * - Reasoning model is smart, needs less hand-holding
  * - Dynamic context loading based on classifier tags
- * - Can request additional context if needed
  * - Clean, minimal prompts with essential rules only
  */
+@Slf4j
 public class MainAgent {
 
     // ═══════════════════════════════════════════════════════════════════════════
-    // SECTION: CORE IDENTITY
+    // CONFIG
     // ═══════════════════════════════════════════════════════════════════════════
+    
+    private static final String MODEL = "gpt-5-mini";
+    private static final int MAX_COMPLETION_TOKENS = 4000;
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // REQUEST / RESPONSE
+    // ═══════════════════════════════════════════════════════════════════════════
+    
+    public record Request(
+            String message,
+            UserEntity userContext,
+            Set<Tag> tags,
+            boolean isResponse,
+            MatchedLinkedUser matchedLinkedUser
+    ) {}
+    
+    public record Response(
+            ParsedCommandList result,
+            long latencyMs,
+            int tokensUsed,
+            int reasoningTokens,
+            String errorMessage
+    ) {
+        public boolean isSuccess() {
+            return errorMessage == null;
+        }
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // PROMPT SECTIONS
+    // ═══════════════════════════════════════════════════════════════════════════
+    
     private static final String SECTION_CORE = """
             You are a personal finance assistant. Parse user commands into structured JSON.
             
@@ -51,9 +84,6 @@ public class MainAgent {
             - Store data in English (account names, fund names as provided)
             """;
 
-    // ═══════════════════════════════════════════════════════════════════════════
-    // SECTION: CLASSIFICATION META
-    // ═══════════════════════════════════════════════════════════════════════════
     private static final String SECTION_CLASSIFICATION_META = """
             
             ## Pre-processing Info:
@@ -78,9 +108,6 @@ public class MainAgent {
             - CORRECTION: last operation for edits/fixes
             """;
 
-    // ═══════════════════════════════════════════════════════════════════════════
-    // SECTION: FINANCIAL (for FINANCIAL tag)
-    // ═══════════════════════════════════════════════════════════════════════════
     private static final String SECTION_FINANCIAL = """
             
             ## Financial Operations:
@@ -101,9 +128,6 @@ public class MainAgent {
             - Default NOT SET + user didn't specify = MUST ASK (never guess)
             """;
 
-    // ═══════════════════════════════════════════════════════════════════════════
-    // SECTION: TRANSFER (for TRANSFER tag)
-    // ═══════════════════════════════════════════════════════════════════════════
     private static final String SECTION_TRANSFER = """
             
             ## Transfer Operations:
@@ -114,9 +138,6 @@ public class MainAgent {
             - Never leave secondAccount null for transfers
             """;
 
-    // ═══════════════════════════════════════════════════════════════════════════
-    // SECTION: THIRD_PARTY (for THIRD_PARTY tag)
-    // ═══════════════════════════════════════════════════════════════════════════
     private static final String SECTION_THIRD_PARTY = """
             
             ## Linked Users / Third Party:
@@ -133,9 +154,6 @@ public class MainAgent {
             - I bought something FOR them → EXPENSES to their fund
             """;
 
-    // ═══════════════════════════════════════════════════════════════════════════
-    // SECTION: SETTINGS (for SETTINGS tag)
-    // ═══════════════════════════════════════════════════════════════════════════
     private static final String SECTION_SETTINGS = """
             
             ## Meta Commands:
@@ -158,12 +176,10 @@ public class MainAgent {
             | Cancel/nevermind ("забей", "отмени", "неважно") | CANCEL_PENDING | null |
             
             When metaCommand detected → understood=true, commands=[]
-            ⚠️ metaCommand format: {"type": "TYPE", "value": "value or null"}
+            
+            Format: "metaCommand": {"type": "SET_DEFAULT_CURRENCY", "value": "EUR"}
             """;
 
-    // ═══════════════════════════════════════════════════════════════════════════
-    // SECTION: CORRECTION (when isResponse=true)
-    // ═══════════════════════════════════════════════════════════════════════════
     private static final String SECTION_CORRECTION = """
             
             ## Correction/Response Mode:
@@ -186,9 +202,6 @@ public class MainAgent {
             **Important:** History is for corrections only. New expense = fresh start with defaults.
             """;
 
-    // ═══════════════════════════════════════════════════════════════════════════
-    // SECTION: CUSTOM INSTRUCTIONS (when user has instructions)
-    // ═══════════════════════════════════════════════════════════════════════════
     private static final String SECTION_CUSTOM_INSTRUCTIONS = """
             
             ## Custom Instructions:
@@ -201,9 +214,6 @@ public class MainAgent {
             User's explicit input overrides instructions if conflict.
             """;
 
-    // ═══════════════════════════════════════════════════════════════════════════
-    // SECTION: OFF-TOPIC (for OFF_TOPIC, QUESTION tags)
-    // ═══════════════════════════════════════════════════════════════════════════
     private static final String SECTION_OFF_TOPIC = """
             
             ## Off-Topic / Questions:
@@ -215,88 +225,113 @@ public class MainAgent {
             - Be polite, helpful, answer in user's language
             """;
 
-    // ═══════════════════════════════════════════════════════════════════════════
-    // SECTION: RESPONSE FORMAT
-    // ═══════════════════════════════════════════════════════════════════════════
     private static final String SECTION_RESPONSE_FORMAT = """
             
-            ## Response Format (JSON only):
+            ## Response Format (JSON only, no text outside)
             
-            For financial operations:
             ```json
             {
-              "commands": [{
-                "operationType": "EXPENSES",
-                "amount": 300.0,
-                "currency": "RSD",
-                "accountName": "CARD_RAIF",
-                "fundName": "FAMILY_BUDGET",
-                "comment": "coffee"
-              }],
-              "understood": true,
-              "clarification": null,
-              "correction": false,
-              "metaCommand": null,
-              "suggestedInstruction": null,
-              "needsContext": null
+              "commands": [...],
+              "understood": true/false,
+              "clarification": "message to user" or null,
+              "metaCommand": {"type": "...", "value": ...} or null,
+              "correction": true/false,
+              "needsContext": ["TAG1", ...] or null
             }
             ```
             
-            For meta commands (settings, undo, help):
-            ```json
-            {
-              "commands": [],
-              "understood": true,
-              "clarification": "Done! Your default fund is now TRAVEL.",
-              "metaCommand": {"type": "SET_DEFAULT_FUND", "value": "TRAVEL"}
-            }
-            ```
+            **Fields:**
+            - `commands[]` — array of financial operations. Each has: operationType, amount, currency, accountName, fundName, comment, secondAccount (for TRANSFER)
+            - `understood` — true if request is complete, false if need to ask something
+            - `clarification` — message shown to user. USE FOR: questions, confirmations, asking for missing info
+            - `metaCommand` — settings command. MUST be object `{"type": "X", "value": Y}`, never string!
+            - `correction` — true if user is fixing previous operation
+            - `needsContext` — if you need more context tags to process request
             
-            ⚠️ IMPORTANT:
-            - metaCommand MUST be object {"type": "...", "value": ...}, NOT a string!
-            - clarification is REQUIRED - it's the message shown to user!
-            - For meta commands: confirm what was done in user's language
-            - For financial ops: clarification only if understood=false (asking question)
-            
-            - needsContext: ["TAG1"] if you need more context to handle request
-            - Do NOT add any text outside JSON
+            **Key rules:**
+            - Multiple tasks in one message → financial ops go to `commands[]`, settings go to `metaCommand`
+            - Missing info → fill what you know in `commands[]` (amount=null), set understood=false, ask in `clarification`
+            - Questions/off-topic → commands=[], put answer in `clarification`
             """;
 
-    // ═══════════════════════════════════════════════════════════════════════════
-    // ALL AVAILABLE TAGS (for showing what's not loaded)
-    // ═══════════════════════════════════════════════════════════════════════════
     private static final Set<Tag> ALL_CONTEXT_TAGS = Set.of(
             Tag.FINANCIAL, Tag.TRANSFER, Tag.THIRD_PARTY, Tag.SETTINGS
     );
 
     // ═══════════════════════════════════════════════════════════════════════════
-    // PUBLIC API
+    // DEPENDENCIES
+    // ═══════════════════════════════════════════════════════════════════════════
+    
+    private final LLMClient client;
+    private final ObjectMapper objectMapper;
+
+    public MainAgent() {
+        this.client = OpenAIClient.getInstance();
+        this.objectMapper = new ObjectMapper();
+    }
+
+    public MainAgent(LLMClient client) {
+        this.client = client;
+        this.objectMapper = new ObjectMapper();
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // PROCESS
     // ═══════════════════════════════════════════════════════════════════════════
 
+    public Response process(Request request) {
+        long start = System.currentTimeMillis();
+        
+        try {
+            String prompt = buildPrompt(request);
+            log.debug("Prompt length: {} chars", prompt.length());
+            
+            LLMClient.Response llmResponse = client.completeWithReasoning(MODEL, prompt, MAX_COMPLETION_TOKENS);
+            
+            log.info("AI response: {}", truncate(llmResponse.content(), 200));
+            
+            return parseResponse(llmResponse, start);
+            
+        } catch (Exception e) {
+            log.error("MainAgent error: {}", e.getMessage(), e);
+            return new Response(
+                    ParsedCommandList.builder()
+                            .commands(List.of())
+                            .understood(false)
+                            .errorMessage("Error: " + e.getMessage())
+                            .clarification("Sorry, please try again.")
+                            .build(),
+                    System.currentTimeMillis() - start,
+                    0, 0,
+                    e.getMessage()
+            );
+        }
+    }
+
     /**
-     * Build prompt based on classification results.
-     * 
-     * @param context User context (accounts, funds, etc.)
-     * @param message User's message
-     * @param tags Classification tags (determines which sections to load)
-     * @param isResponse Whether this is a response to bot's previous message
-     * @param matchedLinkedUser Resolved linked user (if THIRD_PARTY matched)
-     * @return Complete prompt for gpt-5-mini
+     * Convenience method - legacy signature.
      */
-    public String buildPrompt(UserContext context, 
-                              String message, 
-                              Set<Tag> tags, 
-                              boolean isResponse,
-                              MatchedLinkedUser matchedLinkedUser) {
+    public Response parse(String message, UserEntity context, Set<Tag> tags, 
+                          boolean isResponse, MatchedLinkedUser matchedLinkedUser) {
+        return process(new Request(message, context, tags, isResponse, matchedLinkedUser));
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // BUILD PROMPT
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    public String buildPrompt(Request request) {
+        return buildPrompt(request.userContext(), request.message(), request.tags(), 
+                request.isResponse(), request.matchedLinkedUser());
+    }
+
+    public String buildPrompt(UserEntity context, String message, Set<Tag> tags, 
+                              boolean isResponse, MatchedLinkedUser matchedLinkedUser) {
         StringBuilder prompt = new StringBuilder();
         
-        // ═══ Core identity (always) ═══
         prompt.append(SECTION_CORE);
-        
-        // ═══ Classification meta (always) ═══
         prompt.append(buildClassificationMeta(tags));
         
-        // ═══ Dynamic sections based on tags ═══
         if (tags.contains(Tag.FINANCIAL)) {
             prompt.append(SECTION_FINANCIAL);
         }
@@ -317,34 +352,54 @@ public class MainAgent {
             prompt.append(SECTION_OFF_TOPIC);
         }
         
-        // ═══ Correction section if responding ═══
         if (isResponse) {
             prompt.append(SECTION_CORRECTION);
         }
         
-        // ═══ Custom instructions section if any ═══
         if (context.getCustomInstructions() != null && !context.getCustomInstructions().isEmpty()) {
             prompt.append(SECTION_CUSTOM_INSTRUCTIONS);
         }
         
-        // ═══ Response format (always) ═══
         prompt.append(SECTION_RESPONSE_FORMAT);
+        prompt.append(buildUserEntity(context, tags, isResponse, matchedLinkedUser));
         
-        // ═══ User context ═══
-        prompt.append(buildUserContext(context, tags, isResponse, matchedLinkedUser));
-        
-        // ═══ User message ═══
         prompt.append("\n### User Message ###\n");
         prompt.append(message);
         
         return prompt.toString();
     }
 
-    /**
-     * Build prompt without linked user info (convenience method).
-     */
-    public String buildPrompt(UserContext context, String message, Set<Tag> tags, boolean isResponse) {
-        return buildPrompt(context, message, tags, isResponse, null);
+    // ═══════════════════════════════════════════════════════════════════════════
+    // PARSE RESPONSE
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    private Response parseResponse(LLMClient.Response llmResponse, long startTime) {
+        try {
+            String cleanJson = cleanJsonResponse(llmResponse.content());
+            ParsedCommandList result = objectMapper.readValue(cleanJson, ParsedCommandList.class);
+            
+            long latency = System.currentTimeMillis() - startTime;
+            log.info("Parsed: understood={}, commands={} ({}ms, {} tokens)", 
+                    result.isUnderstood(), result.size(), latency, llmResponse.totalTokens());
+            
+            return new Response(result, latency, llmResponse.totalTokens(), 
+                    llmResponse.reasoningTokens(), null);
+            
+        } catch (Exception e) {
+            log.error("Parse error: {}", e.getMessage());
+            return new Response(
+                    ParsedCommandList.builder()
+                            .commands(List.of())
+                            .understood(false)
+                            .errorMessage("Parse error: " + e.getMessage())
+                            .clarification("Sorry, please try again.")
+                            .build(),
+                    System.currentTimeMillis() - startTime,
+                    llmResponse.totalTokens(),
+                    llmResponse.reasoningTokens(),
+                    "Parse error: " + e.getMessage()
+            );
+        }
     }
 
     // ═══════════════════════════════════════════════════════════════════════════
@@ -352,9 +407,7 @@ public class MainAgent {
     // ═══════════════════════════════════════════════════════════════════════════
 
     private String buildClassificationMeta(Set<Tag> tags) {
-        String loadedTags = tags.stream()
-                .map(Tag::name)
-                .collect(Collectors.joining(", "));
+        String loadedTags = tags.stream().map(Tag::name).collect(Collectors.joining(", "));
         
         Set<Tag> notLoaded = ALL_CONTEXT_TAGS.stream()
                 .filter(t -> !tags.contains(t))
@@ -367,12 +420,11 @@ public class MainAgent {
         return SECTION_CLASSIFICATION_META.formatted(loadedTags, notLoadedTags);
     }
 
-    private String buildUserContext(UserContext context, Set<Tag> tags, 
+    private String buildUserEntity(UserEntity context, Set<Tag> tags, 
                                     boolean isResponse, MatchedLinkedUser matchedLinkedUser) {
         StringBuilder ctx = new StringBuilder();
         ctx.append("\n\n### User Context ###\n");
         
-        // ═══ Basic info (always) ═══
         if (context.getDisplayName() != null) {
             ctx.append("User: ").append(context.getDisplayName()).append("\n");
         }
@@ -381,7 +433,6 @@ public class MainAgent {
             ctx.append("Language: ").append(context.getPreferredLanguage()).append("\n");
         }
         
-        // ═══ Financial context ═══
         boolean needsFinancial = tags.contains(Tag.FINANCIAL) || tags.contains(Tag.TRANSFER) || tags.contains(Tag.SETTINGS);
         
         if (needsFinancial) {
@@ -401,21 +452,18 @@ public class MainAgent {
             }
         }
         
-        // ═══ Third party / linked users ═══
         if (tags.contains(Tag.THIRD_PARTY)) {
             if (matchedLinkedUser != null) {
-                ctx.append("\n## Matched Linked User: ").append(matchedLinkedUser.name()).append("\n");
+                ctx.append("\n## Matched Linked User: ").append(matchedLinkedUser.displayName()).append("\n");
                 
-                // Load their context if available
-                Map<String, UserContext> linkedContexts = context.getLinkedUserContexts();
-                if (linkedContexts != null && linkedContexts.containsKey(matchedLinkedUser.userId())) {
-                    UserContext linked = linkedContexts.get(matchedLinkedUser.userId());
+                Map<String, UserEntity> linkedContexts = context.getLinkedUserEntitys();
+                if (linkedContexts != null && linkedContexts.containsKey(matchedLinkedUser.userName())) {
+                    UserEntity linked = linkedContexts.get(matchedLinkedUser.userName());
                     ctx.append("  Accounts: ").append(linked.getAccounts() != null 
                             ? String.join(", ", linked.getAccounts()) : "not set").append("\n");
                     ctx.append("  Default fund: ").append(orNotSet(linked.getDefaultFund())).append("\n");
                 }
             } else {
-                // List all linked users
                 List<LinkedUserEntry> linkedUsers = context.getLinkedUsers();
                 if (linkedUsers != null && !linkedUsers.isEmpty()) {
                     String names = linkedUsers.stream()
@@ -426,7 +474,6 @@ public class MainAgent {
             }
         }
         
-        // ═══ Custom instructions ═══
         if (needsFinancial || tags.contains(Tag.SETTINGS)) {
             List<String> instructions = context.getCustomInstructions();
             if (instructions != null && !instructions.isEmpty()) {
@@ -437,9 +484,7 @@ public class MainAgent {
             }
         }
         
-        // ═══ Response context (last operation, pending, history) ═══
         if (isResponse) {
-            // Last operation for corrections
             var lastOp = context.getLastOperation();
             if (lastOp != null) {
                 ctx.append("\n## Last Operation:\n");
@@ -451,7 +496,6 @@ public class MainAgent {
                    .append(" (").append(lastOp.getComment()).append(")\n");
             }
             
-            // Pending commands for clarification answers
             List<ParsedCommand> pendingCmds = context.getPendingCommands();
             if (pendingCmds != null && !pendingCmds.isEmpty()) {
                 ctx.append("\n## Pending commands (fill missing fields):\n");
@@ -467,14 +511,13 @@ public class MainAgent {
                         ctx.append(", to=").append(p.getSecondAccount());
                     }
                     if ("TRANSFER".equals(p.getOperationType().name()) && p.getSecondAccount() == null) {
-                        ctx.append(", to=?");  // Missing destination
+                        ctx.append(", to=?");
                     }
                     ctx.append("\n");
                 }
                 ctx.append("⚠️ Fill EACH command separately. User's answer may apply to only ONE command!\n");
             }
             
-            // Conversation history
             List<ConversationMessage> history = context.getConversationHistory();
             if (history != null && !history.isEmpty()) {
                 ctx.append("\n## Recent Conversation:\n");
@@ -490,5 +533,23 @@ public class MainAgent {
 
     private String orNotSet(String value) {
         return value != null ? value : "⚠️ NOT SET";
+    }
+
+    private String truncate(String s, int maxLen) {
+        if (s == null) return null;
+        return s.length() <= maxLen ? s : s.substring(0, maxLen) + "...";
+    }
+
+    private String cleanJsonResponse(String response) {
+        String cleaned = response.trim();
+        if (cleaned.startsWith("```json")) {
+            cleaned = cleaned.substring(7);
+        } else if (cleaned.startsWith("```")) {
+            cleaned = cleaned.substring(3);
+        }
+        if (cleaned.endsWith("```")) {
+            cleaned = cleaned.substring(0, cleaned.length() - 3);
+        }
+        return cleaned.trim();
     }
 }

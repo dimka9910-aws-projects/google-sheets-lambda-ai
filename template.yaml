@@ -1,6 +1,6 @@
 AWSTemplateFormatVersion: '2010-09-09'
 Transform: AWS::Serverless-2016-10-31
-Description: AI-powered command parser for Google Sheets financial tracking
+Description: AI-powered command parser for Telegram finance tracker
 
 Globals:
   Function:
@@ -17,11 +17,6 @@ Parameters:
     Type: String
     Description: URL of the SQS queue for google-sheets-lambda
     Default: ""
-  TelegramBotToken:
-    Type: String
-    Description: Telegram Bot Token for sending responses directly
-    NoEcho: true
-    Default: ""
   Environment:
     Type: String
     Default: prod
@@ -33,23 +28,26 @@ Parameters:
     Description: Dry run mode - logs instead of sending to SQS
 
 Resources:
-  # ============ LAMBDA ============
+  # ═══════════════════════════════════════════════════════════════════════════
+  # LAMBDA
+  # ═══════════════════════════════════════════════════════════════════════════
   
-  # Lambda для обработки SQS от Telegram Bot (async)
+  # Main Lambda - processes Telegram messages from SQS
   TelegramSQSHandler:
     Type: AWS::Serverless::Function
     Properties:
       FunctionName: !Sub telegram-sqs-handler-${Environment}
       Handler: com.github.dimka9910.sheets.ai.SQSHandler::handleRequest
       CodeUri: .
-      Description: Processes Telegram requests from SQS asynchronously
+      Description: Processes Telegram requests from SQS, parses with AI, sends responses to Response Queue
       Environment:
         Variables:
+          ENVIRONMENT: !Ref Environment
           OPENAI_API_KEY: !Ref OpenAIApiKey
           SHEETS_QUEUE_URL: !Ref SheetsQueueUrl
           USERS_TABLE_NAME: !Ref UsersTable
           DRY_RUN: !Ref DryRun
-          TELEGRAM_BOT_TOKEN: !Ref TelegramBotToken
+          RESPONSE_QUEUE_URL: !Ref ResponsesQueue
       Policies:
         - DynamoDBCrudPolicy:
             TableName: !Ref UsersTable
@@ -57,7 +55,9 @@ Resources:
             - Effect: Allow
               Action:
                 - sqs:SendMessage
-              Resource: !Sub "arn:aws:sqs:${AWS::Region}:${AWS::AccountId}:sheets-queue-*"
+              Resource: 
+                - !Sub "arn:aws:sqs:${AWS::Region}:${AWS::AccountId}:sheets-queue-*"
+                - !GetAtt ResponsesQueue.Arn
       Events:
         TelegramRequests:
           Type: SQS
@@ -65,92 +65,9 @@ Resources:
             Queue: !GetAtt RequestsQueue.Arn
             BatchSize: 1
 
-  # Lambda для API (sync, для тестирования и других клиентов)
-  AICommandParserFunction:
-    Type: AWS::Serverless::Function
-    Properties:
-      FunctionName: !Sub google-sheets-ai-parser-${Environment}
-      Handler: com.github.dimka9910.sheets.ai.GoogleSheetsLambdaFunction::handleRequest
-      CodeUri: .
-      Description: Parses natural language commands using AI and sends to sheets-lambda
-      Environment:
-        Variables:
-          ENVIRONMENT: !Ref Environment
-          OPENAI_API_KEY: !Ref OpenAIApiKey
-          SHEETS_QUEUE_URL: !Ref SheetsQueueUrl
-          RESPONSE_QUEUE_URL: !Ref ResponseQueue
-          REQUESTS_QUEUE_URL: !Ref RequestsQueue
-          USERS_TABLE_NAME: !Ref UsersTable
-          DRY_RUN: !Ref DryRun
-          TELEGRAM_BOT_TOKEN: !Ref TelegramBotToken
-      Policies:
-        - DynamoDBCrudPolicy:
-            TableName: !Ref UsersTable
-        - SQSSendMessagePolicy:
-            QueueName: !GetAtt ResponseQueue.QueueName
-        # Policy for sheets-queue (from another stack)
-        - Statement:
-            - Effect: Allow
-              Action:
-                - sqs:SendMessage
-              Resource: !Sub "arn:aws:sqs:${AWS::Region}:${AWS::AccountId}:sheets-queue-*"
-      Events:
-        # POST /parse - парсинг команд (для тестирования и других клиентов)
-        ParseCommand:
-          Type: Api
-          Properties:
-            Path: /parse
-            Method: POST
-        # GET /users/{userId} - получить контекст
-        GetUser:
-          Type: Api
-          Properties:
-            Path: /users/{userId}
-            Method: GET
-        # PUT /users/{userId} - создать/обновить контекст
-        PutUser:
-          Type: Api
-          Properties:
-            Path: /users/{userId}
-            Method: PUT
-        # PATCH /users/{userId}/defaults - обновить дефолты
-        PatchDefaults:
-          Type: Api
-          Properties:
-            Path: /users/{userId}/defaults
-            Method: PATCH
-        # PATCH /users/{userId}/telegram - привязать Telegram
-        PatchTelegram:
-          Type: Api
-          Properties:
-            Path: /users/{userId}/telegram
-            Method: PATCH
-        # POST /users/{userId}/instructions - добавить инструкцию
-        AddInstruction:
-          Type: Api
-          Properties:
-            Path: /users/{userId}/instructions
-            Method: POST
-        # DELETE /users/{userId}/instructions/{index} - удалить инструкцию
-        DeleteInstruction:
-          Type: Api
-          Properties:
-            Path: /users/{userId}/instructions/{index}
-            Method: DELETE
-        # POST /users/{userId}/accounts - добавить счёт
-        AddAccount:
-          Type: Api
-          Properties:
-            Path: /users/{userId}/accounts
-            Method: POST
-        # POST /users/{userId}/funds - добавить фонд
-        AddFund:
-          Type: Api
-          Properties:
-            Path: /users/{userId}/funds
-            Method: POST
-
-  # ============ DYNAMODB ============
+  # ═══════════════════════════════════════════════════════════════════════════
+  # DYNAMODB
+  # ═══════════════════════════════════════════════════════════════════════════
   UsersTable:
     Type: AWS::DynamoDB::Table
     Properties:
@@ -175,26 +92,25 @@ Resources:
         - Key: Project
           Value: finance-tracker
 
-  # ============ SQS ============
-  # Очередь для входящих запросов от Telegram Bot
+  # ═══════════════════════════════════════════════════════════════════════════
+  # SQS QUEUES
+  # ═══════════════════════════════════════════════════════════════════════════
+  
+  # Queue for incoming requests from Telegram Bot
   RequestsQueue:
     Type: AWS::SQS::Queue
     Properties:
       QueueName: !Sub telegram-requests-${Environment}
-      VisibilityTimeout: 120  # Должен быть больше Lambda timeout (60 сек)
+      VisibilityTimeout: 120  # Must be > Lambda timeout (60 sec)
 
-  # Очередь для ответов (deprecated - теперь отправляем напрямую в Telegram)
-  ResponseQueue:
+  # Queue for responses to Telegram Bot
+  ResponsesQueue:
     Type: AWS::SQS::Queue
     Properties:
       QueueName: !Sub telegram-responses-${Environment}
-      VisibilityTimeout: 30
+      VisibilityTimeout: 60
 
 Outputs:
-  ApiEndpoint:
-    Description: API Gateway endpoint URL
-    Value: !Sub "https://${ServerlessRestApi}.execute-api.${AWS::Region}.amazonaws.com/Prod"
-  
   UsersTableName:
     Description: DynamoDB table for user contexts
     Value: !Ref UsersTable
@@ -210,7 +126,11 @@ Outputs:
   RequestsQueueArn:
     Description: ARN of SQS queue for incoming Telegram requests  
     Value: !GetAtt RequestsQueue.Arn
-  
-  ResponseQueueUrl:
-    Description: URL of SQS queue for Telegram responses (deprecated)
-    Value: !Ref ResponseQueue
+
+  ResponsesQueueUrl:
+    Description: URL of SQS queue for responses to Telegram
+    Value: !Ref ResponsesQueue
+    
+  ResponsesQueueArn:
+    Description: ARN of SQS queue for responses to Telegram
+    Value: !GetAtt ResponsesQueue.Arn

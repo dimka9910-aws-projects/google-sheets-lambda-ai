@@ -11,7 +11,7 @@ import java.util.List;
 
 /**
  * Linked user entry for shared finances.
- * Stored in UserContext.linkedUsers in DynamoDB.
+ * Stored in UserEntity.linkedUsers in DynamoDB.
  */
 @Data
 @Builder
@@ -21,14 +21,14 @@ import java.util.List;
 public class LinkedUserEntry {
     
     /**
-     * User ID in the system (Telegram ID or internal ID).
+     * System user name (e.g., "KIKI", "DIMA") — used to load their UserEntity.
      */
-    private String userId;
+    private String userName;
     
     /**
-     * Display name (KIKI, DIMA, etc.)
+     * Display name (can be same as userName or more friendly, e.g., "Kiki", "Дима")
      */
-    private String name;
+    private String displayName;
     
     /**
      * Alternative names/references for this person.
@@ -44,8 +44,8 @@ public class LinkedUserEntry {
         if (reference == null) return false;
         String lower = reference.toLowerCase().trim();
         
-        if (name != null && name.toLowerCase().equals(lower)) return true;
-        if (userId != null && userId.equals(lower)) return true;
+        if (userName != null && userName.toLowerCase().equals(lower)) return true;
+        if (displayName != null && displayName.toLowerCase().equals(lower)) return true;
         if (aliases != null) {
             for (String alias : aliases) {
                 if (alias.toLowerCase().equals(lower)) return true;
@@ -53,5 +53,11 @@ public class LinkedUserEntry {
         }
         return false;
     }
+    
+    /**
+     * Get display name, fallback to userName if not set.
+     */
+    public String getName() {
+        return displayName != null ? displayName : userName;
+    }
 }
-

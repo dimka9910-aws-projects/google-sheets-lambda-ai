@@ -1,7 +1,7 @@
 package com.github.dimka9910.sheets.ai.services.llm;
 
-import com.github.dimka9910.sheets.ai.services.llm.MessageClassifierAgent.Tag;
-import com.github.dimka9910.sheets.ai.services.llm.MessageClassifierAgent.TagsResult;
+import com.github.dimka9910.sheets.ai.services.agents.MessageClassifierAgent;
+import com.github.dimka9910.sheets.ai.services.agents.MessageClassifierAgent.Tag;
 import org.junit.jupiter.api.*;
 import org.junit.jupiter.api.condition.EnabledIfEnvironmentVariable;
 
