@@ -7,11 +7,11 @@ import lombok.EqualsAndHashCode;
 import lombok.NoArgsConstructor;
 
 /**
- * Settings/meta command action.
+ * Utilities action - settings, help, meta commands.
  * 
  * Example JSON:
  * {
- *   "type": "SETTINGS",
+ *   "type": "UTILS",
  *   "command": "ADD_ACCOUNT",
  *   "value": "CARD_MONO"
  * }
@@ -21,20 +21,19 @@ import lombok.NoArgsConstructor;
 @NoArgsConstructor
 @AllArgsConstructor
 @EqualsAndHashCode(callSuper = false)
-public class SettingsAction extends AgentAction {
+public class UtilsAction extends AgentAction {
     
-    public static final String TYPE = "SETTINGS";
+    public static final String TYPE = "UTILS";
     
     /**
      * Command type:
      * - SHOW_SETTINGS: display current settings
      * - ADD_ACCOUNT: add new account
      * - ADD_FUND: add new fund/category
-     * - ADD_INSTRUCTION: save custom instruction
+     * - CUSTOM_INSTRUCTION: manage custom instructions (add/update/remove)
      * - SET_DEFAULT_CURRENCY: set default currency
      * - SET_DEFAULT_ACCOUNT: set default account
      * - SET_DEFAULT_FUND: set default fund
-     * - CLEAR_INSTRUCTIONS: clear all custom instructions
      * - UNDO: undo last operation
      * - HELP: show help/examples
      * - CANCEL_PENDING: cancel pending clarifications
@@ -52,17 +51,16 @@ public class SettingsAction extends AgentAction {
     }
     
     /**
-     * Available settings commands
+     * Available utility commands
      */
     public enum Command {
         SHOW_SETTINGS,
         ADD_ACCOUNT,
         ADD_FUND,
-        ADD_INSTRUCTION,
+        CUSTOM_INSTRUCTION,
         SET_DEFAULT_CURRENCY,
         SET_DEFAULT_ACCOUNT,
         SET_DEFAULT_FUND,
-        CLEAR_INSTRUCTIONS,
         UNDO,
         HELP,
         CANCEL_PENDING

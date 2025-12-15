@@ -2,6 +2,11 @@ package com.github.dimka9910.sheets.ai.services;
 
 import com.github.dimka9910.sheets.ai.dto.*;
 import com.github.dimka9910.sheets.ai.dto.actions.*;
+import com.github.dimka9910.sheets.ai.dto.user.AccountEntry;
+import com.github.dimka9910.sheets.ai.dto.user.ConversationMessage;
+import com.github.dimka9910.sheets.ai.dto.user.FundEntry;
+import com.github.dimka9910.sheets.ai.dto.user.LinkedUserEntry;
+import com.github.dimka9910.sheets.ai.dto.user.UserEntity;
 import lombok.extern.slf4j.Slf4j;
 
 import java.util.ArrayList;
@@ -21,14 +26,19 @@ public class ResultHandler {
 
     private final SQSPublisher sqsPublisher;
     private final UserEntityService userContextService;
+    private final CustomInstructionHandler customInstructionHandler;
 
     public ResultHandler(SQSPublisher sqsPublisher, UserEntityService userContextService) {
         this.sqsPublisher = sqsPublisher;
         this.userContextService = userContextService;
+        this.customInstructionHandler = new CustomInstructionHandler(userContextService, sqsPublisher);
     }
 
     /**
      * Process MainAgentResponse and return ChatResponse.
+     * 
+     * NOTE: CUSTOM_INSTRUCTION actions are processed asynchronously.
+     * If CustomInstructionAgent needs clarification, it will send a SECOND message to user.
      */
     public ChatResponse handle(ChatRequest request, MainAgentResponse agentResponse, UserEntity userContext) {
         String chatId = request.getResponseChatId();
@@ -39,15 +49,27 @@ public class ResultHandler {
         
         // Process all actions
         List<FinancialAction> financialActions = agentResponse.getFinancialActions();
-        List<SettingsAction> settingsActions = agentResponse.getSettingsActions();
+        List<UtilsAction> utilsActions = agentResponse.getUtilsActions();
         List<PendingClarificationAction> pendingActions = agentResponse.getPendingClarifications();
         
-        log.info("Processing: {} financial, {} settings, {} pending", 
-                financialActions.size(), settingsActions.size(), pendingActions.size());
+        log.info("Processing: {} financial, {} utils, {} pending", 
+                financialActions.size(), utilsActions.size(), pendingActions.size());
         
-        // Handle settings actions
-        for (SettingsAction action : settingsActions) {
-            handleSettingsAction(action, userContext, request);
+        // Separate CUSTOM_INSTRUCTION actions for async processing
+        List<UtilsAction> customInstructionActions = new ArrayList<>();
+        List<UtilsAction> otherUtilsActions = new ArrayList<>();
+        
+        for (UtilsAction action : utilsActions) {
+            if (action.getCommand() == UtilsAction.Command.CUSTOM_INSTRUCTION) {
+                customInstructionActions.add(action);
+            } else {
+                otherUtilsActions.add(action);
+            }
+        }
+        
+        // Handle non-CUSTOM_INSTRUCTION utils actions synchronously
+        for (UtilsAction action : otherUtilsActions) {
+            handleUtilsAction(action, userContext, request);
         }
         
         // Handle pending clarifications
@@ -71,17 +93,10 @@ public class ResultHandler {
             }
         }
         
-        // Determine success: 
-        // - Has financial actions and all succeeded, OR
-        // - No financial actions but has settings/pending (conversation)
+        // Determine success
         boolean hasFinancialWork = !financialActions.isEmpty();
         boolean isSuccess = hasFinancialWork ? allSuccess && operationsCount > 0 : true;
-        
-        // Clear pending and history after successful financial operations
-        if (hasFinancialWork && isSuccess) {
-            userContext.clearPendingActions();
-            userContext.clearHistory();
-        }
+
         
         // Add assistant response to history
         boolean wasClarification = !pendingActions.isEmpty();
@@ -91,7 +106,22 @@ public class ResultHandler {
                 .wasClarification(wasClarification)
                 .build());
         
+        // Save context before processing custom instructions
         userContextService.saveContext(userContext);
+        
+        // Process CUSTOM_INSTRUCTION actions AFTER returning main response
+        // If CustomInstructionAgent needs clarification, it will send a SECOND message
+        if (!customInstructionActions.isEmpty()) {
+            // Collect all instruction values into a list
+            List<String> instructions = customInstructionActions.stream()
+                    .map(UtilsAction::getValue)
+                    .filter(v -> v != null && !v.isBlank())
+                    .toList();
+            
+            if (!instructions.isEmpty()) {
+                customInstructionHandler.processAsync(instructions, userContext, request);
+            }
+        }
         
         return ChatResponse.builder()
                 .chatId(chatId)
@@ -105,16 +135,13 @@ public class ResultHandler {
     // SETTINGS ACTIONS
     // ═══════════════════════════════════════════════════════════════════════════
 
-    private void handleSettingsAction(SettingsAction action, UserEntity userContext, ChatRequest request) {
-        SettingsAction.Command command = action.getCommand();
+    private void handleUtilsAction(UtilsAction action, UserEntity userContext, ChatRequest request) {
+        UtilsAction.Command command = action.getCommand();
         String value = action.getValue();
         
         log.info("Settings action: {} = {}", command, value);
         
         switch (command) {
-            case SHOW_SETTINGS -> {
-                // Response is already generated by model
-            }
             
             case ADD_ACCOUNT -> {
                 if (value != null && !value.isBlank()) {
@@ -128,14 +155,9 @@ public class ResultHandler {
                 }
             }
             
-            case ADD_INSTRUCTION -> {
-                if (value != null && !value.isBlank()) {
-                    List<String> existing = userContext.getCustomInstructions();
-                    if (existing == null || !existing.contains(value)) {
-                        userContext.addInstruction(value);
-                        log.info("Added instruction: {}", value);
-                    }
-                }
+            case CUSTOM_INSTRUCTION -> {
+                // Handled separately in handle() method asynchronously
+                log.debug("CUSTOM_INSTRUCTION action - will be processed asynchronously");
             }
             
             case SET_DEFAULT_CURRENCY -> {
@@ -156,8 +178,6 @@ public class ResultHandler {
                 }
             }
             
-            case CLEAR_INSTRUCTIONS -> userContext.clearInstructions();
-            
             case UNDO -> handleUndo(userContext);
             
             case CANCEL_PENDING -> {
@@ -168,6 +188,10 @@ public class ResultHandler {
             case HELP -> {
                 // Response is already generated by model
             }
+
+          case SHOW_SETTINGS -> {
+            // Response is already generated by model
+          }
             
             default -> log.warn("Unknown settings command: {}", command);
         }
@@ -201,6 +225,15 @@ public class ResultHandler {
         if (action.getOperationType() == null) {
             log.warn("Financial action missing operationType: {}", action);
             return false;
+        }
+        
+        // MODIFY and DELETE are not yet implemented in Google Sheets Lambda
+        if (action.getOperationType() == FinancialAction.OperationType.MODIFY ||
+            action.getOperationType() == FinancialAction.OperationType.DELETE) {
+            log.info("[NOT IMPLEMENTED] {} action received: {} {} {} - skipping Google Sheets", 
+                    action.getOperationType(), action.getAmount(), action.getCurrency(), action.getComment());
+            // Return true so it shows in debug, but don't send to Sheets
+            return true;
         }
         
         // Handle correction
@@ -238,6 +271,7 @@ public class ResultHandler {
             case EXPENSE -> OperationTypeEnum.EXPENSES;
             case INCOME -> OperationTypeEnum.INCOME;
             case TRANSFER -> OperationTypeEnum.TRANSFER;
+            case MODIFY, DELETE -> OperationTypeEnum.UNKNOWN; // Not yet implemented
         };
         
         return ParsedCommand.builder()

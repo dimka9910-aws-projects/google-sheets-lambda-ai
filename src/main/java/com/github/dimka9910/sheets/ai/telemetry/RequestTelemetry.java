@@ -12,8 +12,8 @@ import java.util.concurrent.CopyOnWriteArrayList;
  * Usage:
  * ```java
  * RequestTelemetry telemetry = new RequestTelemetry(userId, message);
- * telemetry.recordAgent("ClassifierAgent", tags, 150, 45);
- * telemetry.recordAgent("ResponseMatcher", "YES", 200, 30);
+ * telemetry.recordAgent("ClassifierAgent", "gpt-4o-mini", tags, 150, 45);
+ * telemetry.recordAgent("MainAgent", "gpt-5-mini", "OK: 2 action(s)", 800, 250);
  * // ... at the end
  * String report = telemetry.formatForTelegram();
  * ```

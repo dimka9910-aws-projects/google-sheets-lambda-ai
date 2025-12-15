@@ -102,7 +102,9 @@ public class FinancialAction extends AgentAction {
     public enum OperationType {
         EXPENSE,
         INCOME,
-        TRANSFER
+        TRANSFER,
+        MODIFY,   // Edit existing operation (NOT YET IMPLEMENTED in Google Sheets)
+        DELETE    // Delete operation (NOT YET IMPLEMENTED in Google Sheets)
     }
 }
 

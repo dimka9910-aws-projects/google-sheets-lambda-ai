@@ -8,7 +8,7 @@ import com.fasterxml.jackson.annotation.JsonTypeInfo;
  * 
  * Uses Jackson polymorphic deserialization based on "type" field:
  * - FINANCIAL → FinancialAction
- * - SETTINGS → SettingsAction  
+ * - UTILS → UtilsAction  
  * - PENDING_CLARIFICATION → PendingClarificationAction
  */
 @JsonTypeInfo(
@@ -18,7 +18,7 @@ import com.fasterxml.jackson.annotation.JsonTypeInfo;
 )
 @JsonSubTypes({
     @JsonSubTypes.Type(value = FinancialAction.class, name = "FINANCIAL"),
-    @JsonSubTypes.Type(value = SettingsAction.class, name = "SETTINGS"),
+    @JsonSubTypes.Type(value = UtilsAction.class, name = "UTILS"),
     @JsonSubTypes.Type(value = PendingClarificationAction.class, name = "PENDING_CLARIFICATION")
 })
 public abstract class AgentAction {

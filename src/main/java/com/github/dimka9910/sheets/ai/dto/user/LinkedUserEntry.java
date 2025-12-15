@@ -1,4 +1,4 @@
-package com.github.dimka9910.sheets.ai.dto;
+package com.github.dimka9910.sheets.ai.dto.user;
 
 import lombok.AllArgsConstructor;
 import lombok.Builder;
@@ -61,3 +61,4 @@ public class LinkedUserEntry {
         return displayName != null ? displayName : userName;
     }
 }
+

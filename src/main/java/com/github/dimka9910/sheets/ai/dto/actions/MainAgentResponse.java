@@ -103,13 +103,13 @@ public class MainAgentResponse {
     }
     
     /**
-     * Get all settings actions
+     * Get all utils actions
      */
-    public List<SettingsAction> getSettingsActions() {
+    public List<UtilsAction> getUtilsActions() {
         if (actions == null) return List.of();
         return actions.stream()
-                .filter(a -> a instanceof SettingsAction)
-                .map(a -> (SettingsAction) a)
+                .filter(a -> a instanceof UtilsAction)
+                .map(a -> (UtilsAction) a)
                 .toList();
     }
     

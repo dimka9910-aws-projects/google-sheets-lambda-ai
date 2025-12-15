@@ -1,6 +1,8 @@
 package com.github.dimka9910.sheets.ai.services;
 
 import com.github.dimka9910.sheets.ai.dto.*;
+import com.github.dimka9910.sheets.ai.dto.user.LinkedUserEntry;
+import com.github.dimka9910.sheets.ai.dto.user.UserEntity;
 import com.github.dimka9910.sheets.ai.telemetry.RequestTelemetry;
 import lombok.extern.slf4j.Slf4j;
 

@@ -2,10 +2,11 @@ package com.github.dimka9910.sheets.ai.services;
 
 import com.github.dimka9910.sheets.ai.dto.*;
 import com.github.dimka9910.sheets.ai.dto.actions.MainAgentResponse;
+import com.github.dimka9910.sheets.ai.dto.user.LinkedUserEntry;
+import com.github.dimka9910.sheets.ai.dto.user.UserEntity;
 import com.github.dimka9910.sheets.ai.services.agents.MainAgent;
 import com.github.dimka9910.sheets.ai.services.agents.MessageClassifierAgent;
 import com.github.dimka9910.sheets.ai.services.agents.MessageClassifierAgent.Tag;
-import com.github.dimka9910.sheets.ai.services.agents.ResponseMatcherAgent;
 import com.github.dimka9910.sheets.ai.services.agents.ThirdPartyMatcherAgent;
 import com.github.dimka9910.sheets.ai.services.agents.ThirdPartyMatcherAgent.MatchType;
 import com.github.dimka9910.sheets.ai.telemetry.RequestTelemetry;
@@ -14,28 +15,23 @@ import lombok.extern.slf4j.Slf4j;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
-import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
 
 /**
  * Orchestrator - coordinates ALL AI agents and result handling.
  * 
  * Full flow:
- * 1. ClassifierAgent (gpt-4o-mini) + ResponseMatcher (gpt-4o) — parallel
- * 2. ThirdPartyMatcher (gpt-4o-mini) — if needed
- * 3. MainAgent (gpt-5-mini) — parse command
+ * 1. ClassifierAgent (gpt-4o-mini) — determine context tags
+ * 2. ThirdPartyMatcher (gpt-4o-mini) — if THIRD_PARTY tag present
+ * 3. MainAgent (gpt-5-mini) — parse command with full context
  * 4. ResultHandler — execute and build response
  */
 @Slf4j
 public class Orchestrator {
     
     private final MessageClassifierAgent classifierAgent;
-    private final ResponseMatcherAgent responseMatcherAgent;
     private final ThirdPartyMatcherAgent thirdPartyMatcherAgent;
     private final MainAgent mainAgent;
     private final ResultHandler resultHandler;
-    private final ExecutorService executor;
     
     // ═══════════════════════════════════════════════════════════════════════════
     // TYPES
@@ -49,11 +45,9 @@ public class Orchestrator {
     
     public Orchestrator(SQSPublisher sqsPublisher, UserEntityService userContextService) {
         this.classifierAgent = new MessageClassifierAgent();
-        this.responseMatcherAgent = new ResponseMatcherAgent();
         this.thirdPartyMatcherAgent = new ThirdPartyMatcherAgent();
         this.mainAgent = new MainAgent();
         this.resultHandler = new ResultHandler(sqsPublisher, userContextService);
-        this.executor = Executors.newFixedThreadPool(3);
     }
     
     // ═══════════════════════════════════════════════════════════════════════════
@@ -73,15 +67,15 @@ public class Orchestrator {
         log.info("Input: \"{}\"", truncate(message, 60));
         
         try {
-            // Step 1: Classify (parallel)
+            // Step 1: Classify
             ClassificationResult classification = classify(message, previousBotMessage, hasPendingResponse, linkedUsers, telemetry);
             
-            log.info("Classification: tags={}, isResponse={}", classification.tags(), classification.isResponse());
+            log.info("Classification: tags={}", classification.tags());
             
-            // Step 2: MainAgent parse
+            // Step 2: MainAgent parse (with full context always)
             var agentRequest = new MainAgent.Request(
                     message, userContext, classification.tags(), 
-                    classification.isResponse(), classification.matchedLinkedUser());
+                    classification.matchedLinkedUser());
             var agentResponse = mainAgent.process(agentRequest);
             MainAgentResponse result = agentResponse.result();
             
@@ -122,52 +116,25 @@ public class Orchestrator {
     
     private record ClassificationResult(
         Set<Tag> tags,
-        boolean isResponse,
         MatchedLinkedUser matchedLinkedUser
     ) {}
     
     private ClassificationResult classify(String message, String previousBotMessage, 
                                           boolean hasPendingResponse, List<LinkedUserEntry> linkedUsers,
                                           RequestTelemetry telemetry) {
-        // No previous message → just classify tags
-        if (previousBotMessage == null || previousBotMessage.isBlank()) {
-            var classifierResponse = classifierAgent.classify(message, null);
-            
-            if (telemetry != null) {
-                telemetry.recordAgent("ClassifierAgent", "gpt-4o-mini", 
-                        classifierResponse.tags().toString(), 
-                        classifierResponse.latencyMs(), 
-                        classifierResponse.tokensUsed());
-            }
-            
-            ThirdPartyResult thirdParty = processThirdParty(message, classifierResponse.tags(), linkedUsers, telemetry);
-            return new ClassificationResult(thirdParty.finalTags(), false, thirdParty.matchedUser());
-        }
-        
-        // PARALLEL: classifier + matcher
-        final boolean pending = hasPendingResponse;
-        
-        CompletableFuture<MessageClassifierAgent.Response> classifierFuture = CompletableFuture.supplyAsync(
-                () -> classifierAgent.classify(message, previousBotMessage), executor);
-        
-        CompletableFuture<ResponseMatcherAgent.Response> matcherFuture = CompletableFuture.supplyAsync(
-                () -> responseMatcherAgent.match(message, previousBotMessage, pending), executor);
-        
-        var classifierResponse = classifierFuture.join();
-        var matcherResponse = matcherFuture.join();
+        // Classify message tags
+        var classifierResponse = classifierAgent.classify(message, previousBotMessage);
         
         if (telemetry != null) {
             telemetry.recordAgent("ClassifierAgent", "gpt-4o-mini", 
                     classifierResponse.tags().toString(), 
                     classifierResponse.latencyMs(), 
                     classifierResponse.tokensUsed());
-            telemetry.recordAgent("ResponseMatcher", "gpt-4o", 
-                    matcherResponse.isResponse() ? "YES" : "NO", 
-                    matcherResponse.latencyMs(), 0);
         }
         
+        // Process third party if needed
         ThirdPartyResult thirdParty = processThirdParty(message, classifierResponse.tags(), linkedUsers, telemetry);
-        return new ClassificationResult(thirdParty.finalTags(), matcherResponse.isResponse(), thirdParty.matchedUser());
+        return new ClassificationResult(thirdParty.finalTags(), thirdParty.matchedUser());
     }
     
     // ═══════════════════════════════════════════════════════════════════════════
@@ -217,9 +184,5 @@ public class Orchestrator {
     private String truncate(String s, int maxLen) {
         if (s == null) return null;
         return s.length() <= maxLen ? s : s.substring(0, maxLen) + "...";
-    }
-    
-    public void shutdown() {
-        executor.shutdown();
     }
 }

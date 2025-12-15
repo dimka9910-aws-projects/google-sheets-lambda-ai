@@ -1,6 +1,8 @@
 package com.github.dimka9910.sheets.ai.services;
 
-import com.github.dimka9910.sheets.ai.dto.UserEntity;
+import com.github.dimka9910.sheets.ai.dto.user.AccountEntry;
+import com.github.dimka9910.sheets.ai.dto.user.FundEntry;
+import com.github.dimka9910.sheets.ai.dto.user.UserEntity;
 import com.github.dimka9910.sheets.ai.repository.UserEntityRepository;
 import lombok.extern.slf4j.Slf4j;
 
@@ -157,14 +159,20 @@ public class UserEntityService {
         sb.append("💳 Default account: ").append(orNotSet(context.getDefaultAccount())).append("\n");
         sb.append("📂 Default fund: ").append(orNotSet(context.getDefaultFund())).append("\n\n");
         
-        List<String> accounts = context.getAccounts();
+        List<AccountEntry> accounts = context.getAccounts();
         if (accounts != null && !accounts.isEmpty()) {
-            sb.append("💳 Accounts: ").append(String.join(", ", accounts)).append("\n");
+            String accountsList = accounts.stream()
+                    .map(a -> a.getAccountId() + (a.getDisplayName() != null ? " (" + a.getDisplayName() + ")" : ""))
+                    .collect(java.util.stream.Collectors.joining(", "));
+            sb.append("💳 Accounts: ").append(accountsList).append("\n");
         }
         
-        List<String> funds = context.getFunds();
+        List<FundEntry> funds = context.getFunds();
         if (funds != null && !funds.isEmpty()) {
-            sb.append("📂 Funds: ").append(String.join(", ", funds)).append("\n");
+            String fundsList = funds.stream()
+                    .map(f -> f.getFundId() + (f.getDisplayName() != null ? " (" + f.getDisplayName() + ")" : ""))
+                    .collect(java.util.stream.Collectors.joining(", "));
+            sb.append("📂 Funds: ").append(fundsList).append("\n");
         }
         
         var linkedUsers = context.getLinkedUsers();

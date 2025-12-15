@@ -55,7 +55,7 @@ public class MessageClassifierAgent {
     
     public enum Tag {
         FINANCIAL,      // Money transaction (expense, income)
-        SETTINGS,       // Configuration changes
+        UTILS,          // Utilities (settings, help, meta commands)
         QUESTION,       // Questions about system
         OFF_TOPIC,      // Unrelated to finance
         TRANSFER,       // Transfer between OWN accounts
@@ -88,10 +88,11 @@ public class MessageClassifierAgent {
             - Single word that is a product/service name (coffee, taxi, lunch) = FINANCIAL
             - User says product name meaning "I bought X" - this is FINANCIAL, not OFF_TOPIC!
             
-            **SETTINGS** - message involves configuration
+            **UTILS** - utilities: settings, help, meta commands
             - Setting defaults (account, currency, fund)
             - Adding/changing custom instructions or aliases
             - "remember", "btw", "by the way", "just so you know"
+            - Help requests, show settings
             
             **QUESTION** - message asks about the system or its capabilities
             - How to use the bot, help requests
@@ -104,11 +105,15 @@ public class MessageClassifierAgent {
             **Financial sub-tags (add together with FINANCIAL):**
             
             **TRANSFER** - moving money between user's OWN accounts
-            - Key words: transfer, move, from X to Y (where X and Y are accounts)
+            - Keywords: transfer, move, перевод, from X to Y (where X and Y are accounts)
+            - Cash withdrawal: снял/withdrew cash from card/account
+            - Card top-up: пополнил/deposited cash to card/account
+            - Moving money between own accounts
             
             **THIRD_PARTY** - involves another person
             - Mentions someone else by name or relationship
             - Paying FOR someone, receiving FROM someone, splitting
+            - Sending/receiving money to/from another person (not own accounts)
             
             **Complexity indicator:**
             

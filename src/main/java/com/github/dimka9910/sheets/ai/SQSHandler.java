@@ -6,7 +6,7 @@ import com.amazonaws.services.lambda.runtime.events.SQSEvent;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.github.dimka9910.sheets.ai.dto.ChatRequest;
 import com.github.dimka9910.sheets.ai.dto.ChatResponse;
-import com.github.dimka9910.sheets.ai.dto.UserEntity;
+import com.github.dimka9910.sheets.ai.dto.user.UserEntity;
 import com.github.dimka9910.sheets.ai.services.ChatCommandService;
 import com.github.dimka9910.sheets.ai.services.SQSPublisher;
 import com.github.dimka9910.sheets.ai.services.UserEntityService;

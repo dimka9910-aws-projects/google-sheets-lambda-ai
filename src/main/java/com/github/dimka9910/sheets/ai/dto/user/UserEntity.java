@@ -1,5 +1,6 @@
-package com.github.dimka9910.sheets.ai.dto;
+package com.github.dimka9910.sheets.ai.dto.user;
 
+import com.github.dimka9910.sheets.ai.dto.ParsedCommand;
 import com.github.dimka9910.sheets.ai.dto.actions.PendingClarificationAction;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
@@ -39,13 +40,13 @@ public class UserEntity {
     // Display name (for UI, can be different from userName)
     private String displayName;
     
-    // Accounts
+    // Accounts (with IDs, display names, and aliases)
     @Builder.Default
-    private List<String> accounts = new ArrayList<>();
+    private List<AccountEntry> accounts = new ArrayList<>();
     
-    // Funds/categories
+    // Funds/categories (with IDs, display names, and aliases)
     @Builder.Default
-    private List<String> funds = new ArrayList<>();
+    private List<FundEntry> funds = new ArrayList<>();
     
     // Defaults
     private String defaultAccount;
@@ -130,22 +131,68 @@ public class UserEntity {
     // ACCOUNTS & FUNDS
     // ═══════════════════════════════════════════════════════════════════════════
     
-    public void addAccount(String account) {
+    public void addAccount(AccountEntry account) {
         if (accounts == null) {
             accounts = new ArrayList<>();
         }
-        if (!accounts.contains(account)) {
+        // Check if account with same ID already exists
+        boolean exists = accounts.stream()
+                .anyMatch(a -> a.getAccountId().equals(account.getAccountId()));
+        if (!exists) {
             accounts.add(account);
         }
     }
     
-    public void addFund(String fund) {
+    /**
+     * Add account with just ID (backward compatibility, creates entry with no displayName/aliases)
+     */
+    public void addAccount(String accountId) {
+        addAccount(AccountEntry.builder()
+                .accountId(accountId)
+                .build());
+    }
+    
+    /**
+     * Find account by ID or alias
+     */
+    public AccountEntry findAccount(String reference) {
+        if (accounts == null || reference == null) return null;
+        return accounts.stream()
+                .filter(a -> a.matches(reference))
+                .findFirst()
+                .orElse(null);
+    }
+    
+    public void addFund(FundEntry fund) {
         if (funds == null) {
             funds = new ArrayList<>();
         }
-        if (!funds.contains(fund)) {
+        // Check if fund with same ID already exists
+        boolean exists = funds.stream()
+                .anyMatch(f -> f.getFundId().equals(fund.getFundId()));
+        if (!exists) {
             funds.add(fund);
         }
+    }
+    
+    /**
+     * Add fund with just ID (backward compatibility, creates entry with no displayName/aliases)
+     */
+    public void addFund(String fundId) {
+        addFund(FundEntry.builder()
+                .fundId(fundId)
+                .build());
+    }
+    
+    /**
+     * Find fund by ID or alias
+     */
+    public FundEntry findFund(String reference) {
+        if (funds == null || reference == null) return null;
+        return funds.stream()
+                .filter(f -> f.matches(reference))
+                .findFirst()
+                .orElse(null);
     }
     
     // ═══════════════════════════════════════════════════════════════════════════
@@ -266,3 +313,4 @@ public class UserEntity {
         linkedUserEntitys.put(linkedUserName, context);
     }
 }
+

@@ -2,7 +2,7 @@ package com.github.dimka9910.sheets.ai.services.agents;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.github.dimka9910.sheets.ai.dto.LinkedUserEntry;
+import com.github.dimka9910.sheets.ai.dto.user.LinkedUserEntry;
 import com.github.dimka9910.sheets.ai.services.llm.LLMClient;
 import com.github.dimka9910.sheets.ai.services.llm.OpenAIClient;
 import lombok.extern.slf4j.Slf4j;
