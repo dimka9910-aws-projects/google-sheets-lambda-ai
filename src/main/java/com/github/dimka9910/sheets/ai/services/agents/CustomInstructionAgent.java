@@ -273,15 +273,15 @@ public class CustomInstructionAgent {
         }
         
         sb.append("\n## User's New Instructions\n\n");
-        List<String> instructions = request.instructions();
-        if (instructions.size() == 1) {
+        List<String> newInstructions = request.instructions();
+        if (newInstructions.size() == 1) {
             sb.append("```\n");
-            sb.append(instructions.get(0));
+            sb.append(newInstructions.get(0));
             sb.append("\n```\n");
         } else {
-            for (int i = 0; i < instructions.size(); i++) {
+            for (int i = 0; i < newInstructions.size(); i++) {
                 sb.append((i + 1)).append(". ```\n");
-                sb.append(instructions.get(i));
+                sb.append(newInstructions.get(i));
                 sb.append("\n```\n\n");
             }
         }
