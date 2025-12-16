@@ -174,7 +174,7 @@ public class CustomInstructionAgent {
             String prompt = buildPrompt(request);
             log.debug("CustomInstructionAgent prompt length: {} chars", prompt.length());
 
-            LLMClient.Response llmResponse = client.complete(MODEL, prompt, MAX_COMPLETION_TOKENS);
+            LLMClient.Response llmResponse = client.completeWithReasoning(MODEL, prompt, MAX_COMPLETION_TOKENS);
             log.info("CustomInstructionAgent raw response: {}", llmResponse.content());
 
             return parseResponse(llmResponse, start);
