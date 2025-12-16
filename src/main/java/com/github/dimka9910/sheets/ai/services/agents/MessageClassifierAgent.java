@@ -92,7 +92,7 @@ public class MessageClassifierAgent {
             - Setting defaults (account, currency, fund)
             - Adding/changing custom instructions or aliases
             - "remember", "btw", "by the way", "just so you know"
-            - Help requests, show settings
+            - Help requests, show settings, show user's configuration, funds, accounts, aliases, context, any related to user application data. 
             
             **QUESTION** - message asks about the system or its capabilities
             - How to use the bot, help requests
@@ -114,6 +114,7 @@ public class MessageClassifierAgent {
             - Mentions someone else by name or relationship
             - Paying FOR someone, receiving FROM someone, splitting
             - Sending/receiving money to/from another person (not own accounts)
+            - Asking for user details, settings details of some 3rd party
             
             **Complexity indicator:**
             

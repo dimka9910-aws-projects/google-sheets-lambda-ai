@@ -172,7 +172,7 @@ public class MainAgent {
             
             **Special handling:**
             - CUSTOM_INSTRUCTION: When user shares information to remember, acknowledge it in your response (e.g., "Got it, I'll remember that!", "Okay, noted!"). A separate background process will handle the actual storage and may ask clarifying questions later if needed.
-            - HELP: If you can answer from current context → just provide response (actions=[]). If question needs broader knowledge → create UTILS action with HELP command and put the question in value field.
+            - HELP: If you can answer from current context → just provide response (actions=[]). If question needs broader knowledge → create UTILS action with HELP command and put the question in value field. Acknowledge in response that you got the question but you have to think about it.
             """;
 
     private static final String SECTION_PENDING_BASE = """
@@ -471,29 +471,44 @@ public class MainAgent {
             ctx.append("Language: ").append(context.getPreferredLanguage()).append("\n");
         }
         
-        boolean needsFinancial = tags.contains(Tag.FINANCIAL) || tags.contains(Tag.TRANSFER) || tags.contains(Tag.UTILS);
+        // Always show defaults, accounts, and funds
+        ctx.append("\n## Defaults:\n");
+        ctx.append("- Currency: ").append(orNotSet(context.getDefaultCurrency())).append("\n");
+        ctx.append("- Account: ").append(orNotSet(context.getDefaultAccount())).append("\n");
+        ctx.append("- Fund: ").append(orNotSet(context.getDefaultFund())).append("\n");
         
-        if (needsFinancial) {
-            ctx.append("\n## Defaults:\n");
-            ctx.append("- Currency: ").append(orNotSet(context.getDefaultCurrency())).append("\n");
-            ctx.append("- Account: ").append(orNotSet(context.getDefaultAccount())).append("\n");
-            ctx.append("- Fund: ").append(orNotSet(context.getDefaultFund())).append("\n");
-            
-            List<AccountEntry> accounts = context.getAccounts();
-            if (accounts != null && !accounts.isEmpty()) {
-                String accountsList = accounts.stream()
-                        .map(a -> a.getAccountId() + (a.getDisplayName() != null ? " (" + a.getDisplayName() + ")" : ""))
-                        .collect(Collectors.joining(", "));
-                ctx.append("\n## Accounts: ").append(accountsList).append("\n");
-            }
-            
-            List<FundEntry> funds = context.getFunds();
-            if (funds != null && !funds.isEmpty()) {
-                String fundsList = funds.stream()
-                        .map(f -> f.getFundId() + (f.getDisplayName() != null ? " (" + f.getDisplayName() + ")" : ""))
-                        .collect(Collectors.joining(", "));
-                ctx.append("## Funds: ").append(fundsList).append("\n");
-            }
+        List<AccountEntry> accounts = context.getAccounts();
+        if (accounts != null && !accounts.isEmpty()) {
+            String accountsList = accounts.stream()
+                    .map(a -> {
+                        StringBuilder sb = new StringBuilder(a.getAccountId());
+                        if (a.getDisplayName() != null) {
+                            sb.append(" (").append(a.getDisplayName()).append(")");
+                        }
+                        if (a.getAliases() != null && !a.getAliases().isEmpty()) {
+                            sb.append(" [aliases: ").append(String.join(", ", a.getAliases())).append("]");
+                        }
+                        return sb.toString();
+                    })
+                    .collect(Collectors.joining(", "));
+            ctx.append("\n## Accounts: ").append(accountsList).append("\n");
+        }
+        
+        List<FundEntry> funds = context.getFunds();
+        if (funds != null && !funds.isEmpty()) {
+            String fundsList = funds.stream()
+                    .map(f -> {
+                        StringBuilder sb = new StringBuilder(f.getFundId());
+                        if (f.getDisplayName() != null) {
+                            sb.append(" (").append(f.getDisplayName()).append(")");
+                        }
+                        if (f.getAliases() != null && !f.getAliases().isEmpty()) {
+                            sb.append(" [aliases: ").append(String.join(", ", f.getAliases())).append("]");
+                        }
+                        return sb.toString();
+                    })
+                    .collect(Collectors.joining(", "));
+            ctx.append("## Funds: ").append(fundsList).append("\n");
         }
         
         if (tags.contains(Tag.THIRD_PARTY)) {
@@ -523,13 +538,12 @@ public class MainAgent {
             }
         }
         
-        if (needsFinancial || tags.contains(Tag.UTILS)) {
-            List<String> instructions = context.getCustomInstructions();
-            if (instructions != null && !instructions.isEmpty()) {
-                ctx.append("\n## Custom Instructions:\n");
-                for (int i = 0; i < instructions.size(); i++) {
-                    ctx.append("[").append(i).append("] ").append(instructions.get(i)).append("\n");
-                }
+        // Always show custom instructions if they exist
+        List<String> instructions = context.getCustomInstructions();
+        if (instructions != null && !instructions.isEmpty()) {
+            ctx.append("\n## Custom Instructions:\n");
+            for (int i = 0; i < instructions.size(); i++) {
+                ctx.append("[").append(i).append("] ").append(instructions.get(i)).append("\n");
             }
         }
         
