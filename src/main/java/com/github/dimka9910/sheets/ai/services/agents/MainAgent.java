@@ -160,21 +160,31 @@ public class MainAgent {
             
             | Intent               | command              | value              |
             |----------------------|----------------------|--------------------|
-            | Show settings        | SHOW_SETTINGS        | null               |
             | Add account          | ADD_ACCOUNT          | "ACCOUNT_NAME"     |
             | Add fund/category    | ADD_FUND             | "FUND_NAME"        |
             | Custom instruction   | CUSTOM_INSTRUCTION   | "instruction text" |
             | Set default currency | SET_DEFAULT_CURRENCY | "USD"              |
             | Set default account  | SET_DEFAULT_ACCOUNT  | "ACCOUNT"          |
             | Set default fund     | SET_DEFAULT_FUND     | "FUND"             |
-            
-            **SHOW_SETTINGS examples:**
-            - "settings", "my settings", "show my data", "what do I have configured"
-            - "полные данные", "настройки", "что у меня настроено", "покажи мои данные"
-            - "my accounts", "my funds", "what accounts/funds do I have"
-            - User asks about their profile, configuration, or available options
             | Help                 | HELP                 | null               |
             | Cancel pending       | CANCEL_PENDING       | null               |
+            
+            **When user asks about their data:**
+            - User has questions like "what accounts do I have?", "show my funds", "my settings"
+            - DON'T create any action
+            - Simply answer using data from "User Context" section
+            - Be helpful and clear: list their accounts, funds, defaults, custom instructions
+            - Format nicely for readability (use line breaks, bullet points if helpful)
+            
+            **For "full settings" / "all my data" requests:**
+            - Show EVERYTHING: defaults, all accounts with aliases, all funds with aliases, linked users with aliases, custom instructions
+            - Be comprehensive and detailed
+            - Format clearly so user can see complete picture of their configuration
+            
+            Examples:
+              - "what funds do I have?" → list just funds
+              - "settings" → show defaults, accounts, funds (brief)
+              - "full settings" / "all my data" → show complete detailed dump with all aliases and custom instructions
             
             **Special handling:**
             - CUSTOM_INSTRUCTION: When user shares information to remember, acknowledge it in your response (e.g., "Got it, I'll remember that!", "Okay, noted!"). A separate background process will handle the actual storage and may ask clarifying questions later if needed.

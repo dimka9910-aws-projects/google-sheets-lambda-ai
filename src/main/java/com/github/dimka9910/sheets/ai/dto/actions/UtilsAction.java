@@ -27,7 +27,6 @@ public class UtilsAction extends AgentAction {
     
     /**
      * Command type:
-     * - SHOW_SETTINGS: display current settings
      * - ADD_ACCOUNT: add new account
      * - ADD_FUND: add new fund/category
      * - CUSTOM_INSTRUCTION: manage custom instructions (add/update/remove)
@@ -54,7 +53,6 @@ public class UtilsAction extends AgentAction {
      * Available utility commands
      */
     public enum Command {
-        SHOW_SETTINGS,
         ADD_ACCOUNT,
         ADD_FUND,
         CUSTOM_INSTRUCTION,
