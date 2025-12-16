@@ -55,8 +55,7 @@ public class MessageClassifierAgent {
     
     public enum Tag {
         FINANCIAL,      // Money transaction (expense, income)
-        UTILS,          // Utilities (settings, help, meta commands)
-        QUESTION,       // Questions about system
+        UTILS,          // Utilities (settings, help, meta commands, questions)
         OFF_TOPIC,      // Unrelated to finance
         TRANSFER,       // Transfer between OWN accounts
         THIRD_PARTY,    // Involves another person
@@ -88,19 +87,18 @@ public class MessageClassifierAgent {
             - Single word that is a product/service name (coffee, taxi, lunch) = FINANCIAL
             - User says product name meaning "I bought X" - this is FINANCIAL, not OFF_TOPIC!
             
-            **UTILS** - utilities: settings, help, meta commands
+            **UTILS** - utilities: settings, help, meta commands, questions
             - Setting defaults (account, currency, fund)
             - Adding/changing custom instructions or aliases
             - "remember", "btw", "by the way", "just so you know"
-            - Help requests, show settings, show user's configuration, funds, accounts, aliases, context, any related to user application data. 
-            
-            **QUESTION** - message asks about the system or its capabilities
-            - How to use the bot, help requests
+            - Help requests, show settings, show user's configuration, funds, accounts, aliases, context, any related to user application data
+            - How to use the bot, questions about bot capabilities
             - Questions about user's data: accounts, funds, settings
+            - "What can you do?", "How does this work?", "какие у меня фонды?", "настройки", "помощь"
             
             **OFF_TOPIC** - message completely unrelated to finance or the bot
             - Jokes, weather, general knowledge questions
-            - "What can you do?" is QUESTION, not OFF_TOPIC!
+            - NOT questions about bot/user data - those are UTILS!
             
             **Financial sub-tags (add together with FINANCIAL):**
             
