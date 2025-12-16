@@ -167,6 +167,12 @@ public class MainAgent {
             | Set default currency | SET_DEFAULT_CURRENCY | "USD"              |
             | Set default account  | SET_DEFAULT_ACCOUNT  | "ACCOUNT"          |
             | Set default fund     | SET_DEFAULT_FUND     | "FUND"             |
+            
+            **SHOW_SETTINGS examples:**
+            - "settings", "my settings", "show my data", "what do I have configured"
+            - "полные данные", "настройки", "что у меня настроено", "покажи мои данные"
+            - "my accounts", "my funds", "what accounts/funds do I have"
+            - User asks about their profile, configuration, or available options
             | Help                 | HELP                 | null               |
             | Cancel pending       | CANCEL_PENDING       | null               |
             
