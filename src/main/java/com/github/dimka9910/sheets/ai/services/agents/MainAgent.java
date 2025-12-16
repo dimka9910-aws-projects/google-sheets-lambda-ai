@@ -102,29 +102,79 @@ public class MainAgent {
             
             ## Financial Operations (type: FINANCIAL):
             
-            **operationType:** EXPENSE, INCOME, TRANSFER, MODIFY, DELETE
+            **EXPENSE - Money spent:**
+            ```json
+            {
+              "type": "FINANCIAL",
+              "operationType": "EXPENSE",
+              "amount": 200,              // MANDATORY
+              "currency": "RSD",          // MANDATORY (use default or ask)
+              "account": "CARD_DIMA",     // MANDATORY (use default or ask)
+              "fund": "DIMA_MONTHLY_BUDGET", // MANDATORY (use default or ask)
+              "comment": "coffee",        // optional but recommended
+              "correction": false         // optional
+            }
+            ```
+            **CRITICAL:** fund is MANDATORY for EXPENSE. If no default and user didn't specify → PENDING_CLARIFICATION!
             
-            | Type     | Description                                    |
-            |----------|------------------------------------------------|
-            | EXPENSE  | Money spent (coffee, groceries, etc.)          |
-            | INCOME   | Money received (salary, gift form 3rd party which is NOT listed as linked user)            |
-            | TRANSFER | Move money between accounts or to/from linked user  |
-            | MODIFY   | Edit existing operation
-            | DELETE   | Remove operation
+            **INCOME - Money received:**
+            ```json
+            {
+              "type": "FINANCIAL",
+              "operationType": "INCOME",
+              "amount": 5000,             // MANDATORY
+              "currency": "RSD",          // MANDATORY (use default or ask)
+              "account": "CARD_DIMA",     // MANDATORY (use default or ask)
+              "fund": null,               // optional for INCOME
+              "comment": "salary",        // optional
+              "correction": false         // optional
+            }
+            ```
             
-            **Required fields:**
-            - amount: MUST be explicit in message or in user context or in PENDING_CLARIFICATION data. If there is no way to determine amount → PENDING_CLARIFICATION
-            - currency: use default if set, otherwise ask
-            - account: use default if set, match user's words to their accounts list. Use User's context
-            - fund: **REQUIRED for EXPENSE and INCOME**. Use default if set. If no default AND user didn't specify → MUST create PENDING_CLARIFICATION. NEVER leave fund as null for EXPENSE/INCOME!
+            **TRANSFER - Between accounts or to/from linked user:**
+            ```json
+            {
+              "type": "FINANCIAL",
+              "operationType": "TRANSFER",
+              "amount": 1000,             // MANDATORY
+              "currency": "RSD",          // MANDATORY (use default or ask)
+              "account": "CARD_DIMA",     // MANDATORY (source)
+              "targetAccount": "CASH_DIMA", // MANDATORY (destination)
+              "targetPerson": null,       // for transfers to linked users
+              "comment": "withdrew cash", // optional
+              "correction": false         // optional
+            }
+            ```
+            
+            **MODIFY - Edit existing operation:**
+            ```json
+            {
+              "type": "FINANCIAL",
+              "operationType": "MODIFY",
+              "amount": 250,              // new amount
+              "currency": "RSD",          // corrected value
+              "account": "CARD_DIMA",     // corrected value
+              "fund": "TRAVEL",           // corrected value
+              "comment": "plane tickets", // corrected comment
+              "correction": true          // MANDATORY for MODIFY
+            }
+            ```
+            
+            **DELETE - Remove operation:**
+            ```json
+            {
+              "type": "FINANCIAL",
+              "operationType": "DELETE",
+              "correction": true          // MANDATORY for DELETE
+            }
+            ```
             
             **Rules:**
             - "cash"/"with cash" = EXPENSE from CASH account (not transfer!)
-            - "card"/"by card" or name of bank which matches one of accounts = expense from CARD account
-            - if multiple card accounts available - check if one specified as default, check if any user context helps to pick one - if not sure = PENDING_CLARIFICATION
-            - Default NOT SET + user didn't specify = PENDING_CLARIFICATION
+            - "card"/"by card" = expense from CARD account
+            - "withdrew"/"took out" = TRANSFER from CARD to CASH
+            - If field is MANDATORY but missing → PENDING_CLARIFICATION
             - Fill partial data even when creating PENDING_CLARIFICATION
-            - **CRITICAL:** For EXPENSE/INCOME operations, fund field is MANDATORY. If you don't know which fund - ask user via PENDING_CLARIFICATION!
             """;
 
     private static final String SECTION_TRANSFER = """
