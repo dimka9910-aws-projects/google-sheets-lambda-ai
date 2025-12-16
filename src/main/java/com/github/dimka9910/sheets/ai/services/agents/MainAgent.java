@@ -181,28 +181,111 @@ public class MainAgent {
             
             ## Transfer Operations:
             
-            - MUST have account (source) AND targetAccount (destination)
-            - "withdrew"/"took out" = TRANSFER from CARD account to CASH account
-            - Match user's words to their accounts: "raif" → RAIF account
+            **Transfer between own accounts:**
+            ```json
+            {
+              "type": "FINANCIAL",
+              "operationType": "TRANSFER",
+              "amount": 1000,             // MANDATORY
+              "currency": "RSD",          // MANDATORY (use default or ask)
+              "account": "CARD_DIMA_VISA_RAIF", // MANDATORY (source)
+              "targetAccount": "CASH_DIMA",     // MANDATORY (destination)
+              "targetPerson": null,       // null for transfers between own accounts
+              "comment": "withdrew cash", // optional
+              "correction": false
+            }
+            ```
+            
+            **Common transfer patterns:**
+            - "withdrew 1000" / "took out 1000" = TRANSFER from CARD to CASH
+            - "topped up card 500" = TRANSFER from CASH to CARD
+            - "moved 2000 to savings" = TRANSFER between accounts
+            
+            **Rules:**
+            - MUST have both account (source) AND targetAccount (destination)
+            - Match user's words to account names: "raif" → CARD_DIMA_VISA_RAIF
+            - If missing account/targetAccount → PENDING_CLARIFICATION
             """;
 
     private static final String SECTION_THIRD_PARTY = """
             
-            ## Linked Users / Third Party:
+            ## Linked Users / Third Party Operations:
             
-            **CRITICAL: Money between linked users = TRANSFER**
-            - Linked user gave money TO me → TRANSFER from their account to mine
-            - I gave money TO linked user → TRANSFER from mine to theirs
-            - Never INCOME/EXPENSE for money exchange between linked users!
+            **CRITICAL: Money exchange between linked users = TRANSFER, NOT INCOME/EXPENSE!**
+            
+            **1. Linked user gave money TO me:**
+            ```json
+            {
+              "type": "FINANCIAL",
+              "operationType": "TRANSFER",
+              "amount": 500,              // MANDATORY
+              "currency": "RSD",          // MANDATORY (use default or ask)
+              "account": "CARD_KIKI_RAIF", // MANDATORY (their account, source)
+              "targetAccount": "CARD_DIMA_VISA_RAIF", // MANDATORY (my account, destination)
+              "targetPerson": "KIKI",     // linked user who gave money
+              "comment": "debt repayment", // optional
+              "correction": false
+            }
+            ```
+            Example: "KIKI gave me 500" / "got 500 from KIKI"
+            
+            **2. I gave money TO linked user:**
+            ```json
+            {
+              "type": "FINANCIAL",
+              "operationType": "TRANSFER",
+              "amount": 1000,             // MANDATORY
+              "currency": "RSD",          // MANDATORY
+              "account": "CARD_DIMA_VISA_RAIF", // MANDATORY (my account, source)
+              "targetAccount": "CARD_KIKI_RAIF", // MANDATORY (their account, destination)
+              "targetPerson": "KIKI",     // linked user who received money
+              "comment": "loan",          // optional
+              "correction": false
+            }
+            ```
+            Example: "sent 1000 to KIKI" / "gave KIKI 1000"
+            
+            **3. I bought something FOR linked user (EXPENSE to their fund):**
+            ```json
+            {
+              "type": "FINANCIAL",
+              "operationType": "EXPENSE",
+              "amount": 200,              // MANDATORY
+              "currency": "RSD",          // MANDATORY
+              "account": "CARD_DIMA_VISA_RAIF", // MANDATORY (my account, I paid)
+              "fund": "KIKI_MONTHLY_BUDGET",    // MANDATORY (their fund)
+              "comment": "groceries for KIKI",  // optional
+              "correction": false
+            }
+            ```
+            Example: "bought coffee for KIKI 200" / "200 on groceries for her"
+            
+            **4. Received money from 3rd party (NOT linked user) = INCOME:**
+            ```json
+            {
+              "type": "FINANCIAL",
+              "operationType": "INCOME",
+              "amount": 5000,             // MANDATORY
+              "currency": "RSD",          // MANDATORY
+              "account": "CARD_DIMA_VISA_RAIF", // MANDATORY
+              "fund": null,               // optional for INCOME
+              "comment": "gift from friend", // optional
+              "correction": false
+            }
+            ```
+            Example: "received 5000 gift from friend"
             
             **How to detect linked user:**
             - User explicitly names a linked user (by name or alias from "Linked users" list)
             - User uses relationship words that match linked user (girlfriend, boyfriend, wife, husband, partner)
             - User says "her", "him", "she", "he" and context implies linked user
-            - Pre-processing may have already identified them → check "Matched Linked User" section in context
+            - Pre-processing may have already identified them → check "Matched Linked User" section
             
-            **Expense FOR linked user (not transfer):**
-            - I bought something FOR them → EXPENSE to their fund
+            **Rules:**
+            - Money TO/FROM linked user = TRANSFER (use targetPerson field)
+            - Expense FOR linked user = EXPENSE to their fund
+            - Money from non-linked person = INCOME
+            - If linked user mentioned but unclear which one → PENDING_CLARIFICATION
             """;
 
     private static final String SECTION_UTILS = """
