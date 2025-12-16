@@ -47,6 +47,7 @@ Resources:
           SHEETS_QUEUE_URL: !Ref SheetsQueueUrl
           USERS_TABLE_NAME: !Ref UsersTable
           DRY_RUN: !Ref DryRun
+          RESPONSE_QUEUE_URL: !Ref ResponsesQueue
       Policies:
         - DynamoDBCrudPolicy:
             TableName: !Ref UsersTable
@@ -56,6 +57,7 @@ Resources:
                 - sqs:SendMessage
               Resource: 
                 - !Sub "arn:aws:sqs:${AWS::Region}:${AWS::AccountId}:sheets-queue-*"
+                - !GetAtt ResponsesQueue.Arn
       Events:
         TelegramRequests:
           Type: SQS
@@ -101,6 +103,13 @@ Resources:
       QueueName: !Sub telegram-requests-${Environment}
       VisibilityTimeout: 120  # Must be > Lambda timeout (60 sec)
 
+  # Queue for responses to Telegram Bot
+  ResponsesQueue:
+    Type: AWS::SQS::Queue
+    Properties:
+      QueueName: !Sub telegram-responses-${Environment}
+      VisibilityTimeout: 60
+
 Outputs:
   UsersTableName:
     Description: DynamoDB table for user contexts
@@ -117,3 +126,11 @@ Outputs:
   RequestsQueueArn:
     Description: ARN of SQS queue for incoming Telegram requests  
     Value: !GetAtt RequestsQueue.Arn
+
+  ResponsesQueueUrl:
+    Description: URL of SQS queue for responses to Telegram
+    Value: !Ref ResponsesQueue
+    
+  ResponsesQueueArn:
+    Description: ARN of SQS queue for responses to Telegram
+    Value: !GetAtt ResponsesQueue.Arn
