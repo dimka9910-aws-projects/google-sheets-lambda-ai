@@ -28,7 +28,7 @@ import java.util.List;
 @Slf4j
 public class CustomInstructionAgent {
 
-    private static final String MODEL = "gpt-4o";
+    private static final String MODEL = "gpt-5-mini";
     private static final int MAX_COMPLETION_TOKENS = 1500;
 
     public record Request(

@@ -35,7 +35,7 @@ public class MainAgent {
     // CONFIG
     // ═══════════════════════════════════════════════════════════════════════════
     
-    private static final String MODEL = "gpt-4o";
+    private static final String MODEL = "gpt-5-mini";
     private static final int MAX_COMPLETION_TOKENS = 4000;
 
     // ═══════════════════════════════════════════════════════════════════════════
