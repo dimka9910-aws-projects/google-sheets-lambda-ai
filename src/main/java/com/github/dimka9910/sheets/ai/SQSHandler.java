@@ -70,14 +70,7 @@ public class SQSHandler implements RequestHandler<SQSEvent, Void> {
             }
         }
         
-        ChatResponse response = chatCommandService.processCommand(chatRequest);
-        
-        // Устанавливаем chatId для ответа
-        String chatId = chatRequest.getResponseChatId();
-        response.setChatId(chatId);
-        
-        // Отправляем ответ через SQS Response Queue → Telegram Bot отправит в Telegram
-        sqsPublisher.sendResponse(response);
-        log.info("Response sent to Response Queue for chat {}", chatId);
+        // ChatCommandService internally handles sending response to SQS
+        chatCommandService.processCommand(chatRequest);
     }
 }
