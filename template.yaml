@@ -58,12 +58,20 @@ Resources:
               Resource: 
                 - !Sub "arn:aws:sqs:${AWS::Region}:${AWS::AccountId}:sheets-queue-*"
                 - !GetAtt ResponsesQueue.Arn
+            # SQS Event Source Mapping automatically grants:
+            # - sqs:ReceiveMessage
+            # - sqs:DeleteMessage  
+            # - sqs:GetQueueAttributes
+            # for RequestsQueue
       Events:
         TelegramRequests:
           Type: SQS
           Properties:
             Queue: !GetAtt RequestsQueue.Arn
             BatchSize: 1
+            MaximumBatchingWindowInSeconds: 0  # Process immediately
+            FunctionResponseTypes:
+              - ReportBatchItemFailures  # Enable partial batch failure reporting
 
   # ═══════════════════════════════════════════════════════════════════════════
   # DYNAMODB
@@ -102,6 +110,18 @@ Resources:
     Properties:
       QueueName: !Sub telegram-requests-${Environment}
       VisibilityTimeout: 120  # Must be > Lambda timeout (60 sec)
+      MessageRetentionPeriod: 86400  # 24 hours
+      ReceiveMessageWaitTimeSeconds: 0  # Short polling
+      RedrivePolicy:
+        deadLetterTargetArn: !GetAtt RequestsQueueDLQ.Arn
+        maxReceiveCount: 3  # After 3 failed attempts, move to DLQ
+
+  # Dead Letter Queue for failed requests
+  RequestsQueueDLQ:
+    Type: AWS::SQS::Queue
+    Properties:
+      QueueName: !Sub telegram-requests-${Environment}-dlq
+      MessageRetentionPeriod: 1209600  # 14 days
 
   # Queue for responses to Telegram Bot
   ResponsesQueue:
@@ -109,6 +129,8 @@ Resources:
     Properties:
       QueueName: !Sub telegram-responses-${Environment}
       VisibilityTimeout: 60
+      MessageRetentionPeriod: 86400  # 24 hours
+      ReceiveMessageWaitTimeSeconds: 0  # Short polling
 
 Outputs:
   UsersTableName:
@@ -134,3 +156,11 @@ Outputs:
   ResponsesQueueArn:
     Description: ARN of SQS queue for responses to Telegram
     Value: !GetAtt ResponsesQueue.Arn
+
+  RequestsQueueDLQUrl:
+    Description: URL of Dead Letter Queue for failed requests
+    Value: !Ref RequestsQueueDLQ
+    
+  RequestsQueueDLQArn:
+    Description: ARN of Dead Letter Queue for failed requests
+    Value: !GetAtt RequestsQueueDLQ.Arn
