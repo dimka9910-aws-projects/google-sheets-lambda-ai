@@ -8,7 +8,6 @@ import com.github.dimka9910.sheets.ai.dto.user.ConversationMessage;
 import com.github.dimka9910.sheets.ai.dto.user.FundEntry;
 import com.github.dimka9910.sheets.ai.dto.user.LinkedUserEntry;
 import com.github.dimka9910.sheets.ai.dto.user.UserEntity;
-import com.github.dimka9910.sheets.ai.services.Orchestrator.MatchedLinkedUser;
 import com.github.dimka9910.sheets.ai.services.agents.MessageClassifierAgent.Tag;
 import com.github.dimka9910.sheets.ai.services.llm.LLMClient;
 import com.github.dimka9910.sheets.ai.services.llm.OpenAIClient;
@@ -45,8 +44,7 @@ public class MainAgent {
     public record Request(
             String message,
             UserEntity userContext,
-            Set<Tag> tags,
-            MatchedLinkedUser matchedLinkedUser
+            Set<Tag> tags
     ) {}
     
     public record Response(
@@ -220,9 +218,10 @@ public class MainAgent {
               "operationType": "TRANSFER",
               "amount": 500,              // MANDATORY
               "currency": "RSD",          // MANDATORY (use default or ask)
-              "account": "CARD_KIKI_RAIF", // MANDATORY (their account, source)
-              "targetAccount": "CARD_DIMA_VISA_RAIF", // MANDATORY (my account, destination)
-              "targetPerson": "KIKI",     // linked user who gave money
+              "account": "CARD_KIKI_RAIF", // MANDATORY (their account, source - who sends)
+              "targetAccount": "CARD_DIMA_VISA_RAIF", // MANDATORY (my account, destination - who receives)
+              "userName": "KIKI",         // MANDATORY (linked user who SENDS money)
+              "targetPerson": "DIMA",     // MANDATORY (current user who RECEIVES money - use userName from context)
               "comment": "debt repayment", // optional
               "correction": false
             }
@@ -236,9 +235,10 @@ public class MainAgent {
               "operationType": "TRANSFER",
               "amount": 1000,             // MANDATORY
               "currency": "RSD",          // MANDATORY
-              "account": "CARD_DIMA_VISA_RAIF", // MANDATORY (my account, source)
-              "targetAccount": "CARD_KIKI_RAIF", // MANDATORY (their account, destination)
-              "targetPerson": "KIKI",     // linked user who received money
+              "account": "CARD_DIMA_VISA_RAIF", // MANDATORY (my account, source - who sends)
+              "targetAccount": "CARD_KIKI_RAIF", // MANDATORY (their account, destination - who receives)
+              "userName": "DIMA",         // MANDATORY (current user who SENDS money - use userName from context)
+              "targetPerson": "KIKI",     // MANDATORY (linked user who RECEIVES money)
               "comment": "loan",          // optional
               "correction": false
             }
@@ -275,17 +275,49 @@ public class MainAgent {
             ```
             Example: "received 5000 gift from friend"
             
-            **How to detect linked user:**
-            - User explicitly names a linked user (by name or alias from "Linked users" list)
-            - User uses relationship words that match linked user (girlfriend, boyfriend, wife, husband, partner)
+            **How to identify linked user:**
+            - User explicitly names a linked user (by **name** or **alias** from "Linked users" list above)
+            - User uses relationship words: girlfriend, boyfriend, wife, husband, partner
             - User says "her", "him", "she", "he" and context implies linked user
-            - Pre-processing may have already identified them → check "Matched Linked User" section
+            - Match user's words to names/aliases in "Linked users" list
+            
+            **CRITICAL VALIDATION RULES:**
+            
+            1. **userName and targetPerson fields for TRANSFER between linked users:**
+               - **userName** = person who SENDS money (MANDATORY - always fill)
+               - **targetPerson** = person who RECEIVES money (MANDATORY - always fill)
+               - "KIKI gave me 500" → userName: "KIKI", targetPerson: "DIMA" (from context)
+               - "I gave KIKI 500" → userName: "DIMA" (from context), targetPerson: "KIKI"
+               - BOTH fields must be filled for transfers with linked users!
+            
+            2. **userName and targetPerson MUST be EXACT userName from "Linked users" list OR current user:**
+               - ✅ CORRECT: "KIKI", "DIMA" (exact userName from list or context)
+               - ❌ WRONG: "Ksyusha", "girlfriend", "зая", "mom", "friend"
+               - If person mentioned but NOT in "Linked users" list → this is NOT a linked user!
+            
+            3. **If person mentioned is NOT in "Linked users" list:**
+               - Option A: Create PENDING_CLARIFICATION asking which linked user they mean
+               - Option B: If it's spending FOR someone (not linked user) → EXPENSE with comment
+               - Examples: "gift for mom", "coffee with friend" → if mom or that friend is not on the list of linked users and not mentioned in aliases - it's EXPENSE with comment, not transfer
+            
+            4. **targetAccount is MANDATORY for TRANSFER to/from linked user:**
+               - Use their account from "Linked users" list (shown with "— accounts: ...")
+               - try to choose account applying the rules of default's, aliases, otherwise if you can't determine one for sure - create PENDING_CLARIFICATION
+               - If no account available → create PENDING_CLARIFICATION
+               - NEVER send TRANSFER with null targetAccount!
+            
+            5. **NEVER create TRANSFER to/from linked user with:**
+               - Missing or null userName (must always specify who sends)
+               - Missing or null targetPerson (must always specify who receives)
+               - userName/targetPerson not matching any userName from "Linked users" list or current user
+               - null or missing targetAccount
+               - If ANY field is missing or invalid → PENDING_CLARIFICATION or EXPENSE (if appropriate)
             
             **Rules:**
-            - Money TO/FROM linked user = TRANSFER (use targetPerson field)
+            - Money TO/FROM linked user = TRANSFER, target person is the one RECEIVING money
             - Expense FOR linked user = EXPENSE to their fund
-            - Money from non-linked person = INCOME
-            - If linked user mentioned but unclear which one → PENDING_CLARIFICATION
+            - Money from non-linked person or organisation = INCOME with comment
+            - Person mentioned but unclear/not in list → PENDING_CLARIFICATION
             """;
 
     private static final String SECTION_UTILS = """
@@ -503,12 +535,10 @@ public class MainAgent {
     // ═══════════════════════════════════════════════════════════════════════════
 
     public String buildPrompt(Request request) {
-        return buildPrompt(request.userContext(), request.message(), request.tags(), 
-                request.matchedLinkedUser());
+        return buildPrompt(request.userContext(), request.message(), request.tags());
     }
 
-    public String buildPrompt(UserEntity context, String message, Set<Tag> tags, 
-                              MatchedLinkedUser matchedLinkedUser) {
+    public String buildPrompt(UserEntity context, String message, Set<Tag> tags) {
         StringBuilder prompt = new StringBuilder();
         
         prompt.append(SECTION_CORE);
@@ -548,7 +578,7 @@ public class MainAgent {
         }
         
         prompt.append(SECTION_RESPONSE_FORMAT);
-        prompt.append(buildUserContext(context, tags, matchedLinkedUser));
+        prompt.append(buildUserContext(context, tags));
         
         prompt.append("\n### User Message ###\n");
         prompt.append(message);
@@ -608,13 +638,15 @@ public class MainAgent {
         return SECTION_CLASSIFICATION_META.formatted(loadedTags, notLoadedTags);
     }
 
-    private String buildUserContext(UserEntity context, Set<Tag> tags, 
-                                    MatchedLinkedUser matchedLinkedUser) {
+    private String buildUserContext(UserEntity context, Set<Tag> tags) {
         StringBuilder ctx = new StringBuilder();
         ctx.append("\n\n### User Context ###\n");
         
+        // Always show userName (needed for TRANSFER operations)
+        ctx.append("Current user name: ").append(context.getUserName()).append("\n");
+        
         if (context.getDisplayName() != null) {
-            ctx.append("User: ").append(context.getDisplayName()).append("\n");
+            ctx.append("Display name: ").append(context.getDisplayName()).append("\n");
         }
         
         if (context.getPreferredLanguage() != null) {
@@ -661,30 +693,43 @@ public class MainAgent {
             ctx.append("## Funds: ").append(fundsList).append("\n");
         }
         
+        // Show linked users with their accounts when THIRD_PARTY tag is present
+        // Note: THIRD_PARTY tag is only set by Orchestrator if linkedUsers list is not empty
         if (tags.contains(Tag.THIRD_PARTY)) {
-            if (matchedLinkedUser != null) {
-                ctx.append("\n## Matched Linked User: ").append(matchedLinkedUser.displayName()).append("\n");
+            List<LinkedUserEntry> linkedUsers = context.getLinkedUsers();
+            ctx.append("\n## Linked users:\n");
+            Map<String, UserEntity> linkedContexts = context.getLinkedUserEntitys();
+            
+            for (LinkedUserEntry linkedUser : linkedUsers) {
+                ctx.append("- **").append(linkedUser.getName()).append("**");
+                if (linkedUser.getDisplayName() != null) {
+                    ctx.append(" (").append(linkedUser.getDisplayName()).append(")");
+                }
+                if (linkedUser.getAliases() != null && !linkedUser.getAliases().isEmpty()) {
+                    ctx.append(" [aliases: ").append(String.join(", ", linkedUser.getAliases())).append("]");
+                }
                 
-                Map<String, UserEntity> linkedContexts = context.getLinkedUserEntitys();
-                if (linkedContexts != null && linkedContexts.containsKey(matchedLinkedUser.userName())) {
-                    UserEntity linked = linkedContexts.get(matchedLinkedUser.userName());
+                // Show their accounts if available
+                if (linkedContexts != null && linkedContexts.containsKey(linkedUser.getName())) {
+                    UserEntity linked = linkedContexts.get(linkedUser.getName());
                     List<AccountEntry> linkedAccounts = linked.getAccounts();
-                    String linkedAccountsList = linkedAccounts != null && !linkedAccounts.isEmpty()
-                            ? linkedAccounts.stream()
-                                    .map(AccountEntry::getAccountId)
-                                    .collect(Collectors.joining(", "))
-                            : "not set";
-                    ctx.append("  Accounts: ").append(linkedAccountsList).append("\n");
-                    ctx.append("  Default fund: ").append(orNotSet(linked.getDefaultFund())).append("\n");
+                    if (linkedAccounts != null && !linkedAccounts.isEmpty()) {
+                        String accountsList = linkedAccounts.stream()
+                                .map(a -> {
+                                    StringBuilder sb = new StringBuilder(a.getAccountId());
+                                    if (a.getDisplayName() != null) {
+                                        sb.append(" (").append(a.getDisplayName()).append(")");
+                                    }
+                                    if (a.getAliases() != null && !a.getAliases().isEmpty()) {
+                                        sb.append(" [aliases: ").append(String.join(", ", a.getAliases())).append("]");
+                                    }
+                                    return sb.toString();
+                                })
+                                .collect(Collectors.joining(", "));
+                        ctx.append(" — accounts: ").append(accountsList);
+                    }
                 }
-            } else {
-                List<LinkedUserEntry> linkedUsers = context.getLinkedUsers();
-                if (linkedUsers != null && !linkedUsers.isEmpty()) {
-                    String names = linkedUsers.stream()
-                            .map(LinkedUserEntry::getName)
-                            .collect(Collectors.joining(", "));
-                    ctx.append("\n## Linked users: ").append(names).append("\n");
-                }
+                ctx.append("\n");
             }
         }
         

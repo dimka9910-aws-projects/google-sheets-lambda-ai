@@ -33,12 +33,18 @@ public class SheetsRecordDTO {
 
     /**
      * Создаёт SheetsRecordDTO из ParsedCommand
+     * @param cmd parsed command with operation details
+     * @param contextUserName current user name from context (fallback for non-transfer operations)
      */
-    public static SheetsRecordDTO fromParsedCommand(ParsedCommand cmd, String userName) {
+    public static SheetsRecordDTO fromParsedCommand(ParsedCommand cmd, String contextUserName) {
+        // For transfers between linked users, userName is always filled by model
+        // For other operations, use context userName
+        String effectiveUserName = cmd.getUserName() != null ? cmd.getUserName() : contextUserName;
+        
         return SheetsRecordDTO.builder()
                 .amount(cmd.getAmount())
                 .currency(cmd.getCurrency())
-                .userName(userName)
+                .userName(effectiveUserName)
                 .accountName(cmd.getAccountName())
                 .fundName(cmd.getFundName())
                 .operationType(cmd.getOperationType().name())

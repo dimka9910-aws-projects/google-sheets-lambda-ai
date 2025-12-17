@@ -280,6 +280,7 @@ public class ResultHandler {
                 .secondAccount(action.getTargetAccount())
                 .secondPerson(action.getTargetPerson())
                 .secondCurrency(action.getTargetCurrency())
+                .userName(action.getUserName())
                 .understood(true)
                 .build();
     }

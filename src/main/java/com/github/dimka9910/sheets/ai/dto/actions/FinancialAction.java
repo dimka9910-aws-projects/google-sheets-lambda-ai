@@ -69,10 +69,17 @@ public class FinancialAction extends AgentAction {
     private String targetAccount;
     
     /**
-     * Target person for TRANSFER to linked user
+     * Target person for TRANSFER to/from linked user (person RECEIVING money).
+     * For transfers between linked users: MANDATORY, must be exact userName.
      */
     @JsonAlias({"secondPerson"})
     private String targetPerson;
+    
+    /**
+     * User name for TRANSFER to/from linked user (person SENDING money).
+     * For transfers between linked users: MANDATORY, must be exact userName.
+     */
+    private String userName;
     
     /**
      * Target currency for TRANSFER (if converting)

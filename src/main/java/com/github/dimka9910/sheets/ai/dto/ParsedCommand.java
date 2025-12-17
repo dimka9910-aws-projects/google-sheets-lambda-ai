@@ -25,10 +25,11 @@ public class ParsedCommand {
     private String comment;
     
     // Для переводов
-    private String secondPerson;
+    private String secondPerson;   // targetPerson - who RECEIVES money (MANDATORY for transfers with linked users)
     @com.fasterxml.jackson.annotation.JsonAlias({"to", "toAccountName"})
     private String secondAccount;
     private String secondCurrency;
+    private String userName;       // who SENDS money (MANDATORY for transfers with linked users)
     
     // Мета-информация
     private boolean understood;    // Удалось ли распознать команду
