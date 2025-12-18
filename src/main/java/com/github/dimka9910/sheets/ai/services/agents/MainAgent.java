@@ -106,9 +106,9 @@ public class MainAgent {
               "type": "FINANCIAL",
               "operationType": "EXPENSE",
               "amount": 200,              // MANDATORY
-              "currency": "RSD",          // MANDATORY (use default or ask)
-              "account": "CARD_DIMA",     // MANDATORY (use default or ask)
-              "fund": "DIMA_MONTHLY_BUDGET", // MANDATORY (use default or ask)
+              "currency": "USD",          // MANDATORY (use default or ask)
+              "account": "CARD_USER_VISA", // MANDATORY (use default or ask)
+              "fund": "USER_MONTHLY_BUDGET", // MANDATORY (use default or ask)
               "comment": "coffee",        // optional but recommended
               "correction": false         // optional
             }
@@ -121,8 +121,8 @@ public class MainAgent {
               "type": "FINANCIAL",
               "operationType": "INCOME",
               "amount": 5000,             // MANDATORY
-              "currency": "RSD",          // MANDATORY (use default or ask)
-              "account": "CARD_DIMA",     // MANDATORY (use default or ask)
+              "currency": "USD",          // MANDATORY (use default or ask)
+              "account": "CARD_USER_VISA", // MANDATORY (use default or ask)
               "fund": null,               // optional for INCOME
               "comment": "salary",        // optional
               "correction": false         // optional
@@ -135,9 +135,9 @@ public class MainAgent {
               "type": "FINANCIAL",
               "operationType": "TRANSFER",
               "amount": 1000,             // MANDATORY
-              "currency": "RSD",          // MANDATORY (use default or ask)
-              "account": "CARD_DIMA",     // MANDATORY (source)
-              "targetAccount": "CASH_DIMA", // MANDATORY (destination)
+              "currency": "USD",          // MANDATORY (use default or ask)
+              "account": "CARD_USER_VISA", // MANDATORY (source)
+              "targetAccount": "CASH_USER", // MANDATORY (destination)
               "targetPerson": null,       // for transfers to linked users
               "comment": "withdrew cash", // optional
               "correction": false         // optional
@@ -150,8 +150,8 @@ public class MainAgent {
               "type": "FINANCIAL",
               "operationType": "MODIFY",
               "amount": 250,              // new amount
-              "currency": "RSD",          // corrected value
-              "account": "CARD_DIMA",     // corrected value
+              "currency": "USD",          // corrected value
+              "account": "CARD_USER_VISA", // corrected value
               "fund": "TRAVEL",           // corrected value
               "comment": "plane tickets", // corrected comment
               "correction": true          // MANDATORY for MODIFY
@@ -185,9 +185,9 @@ public class MainAgent {
               "type": "FINANCIAL",
               "operationType": "TRANSFER",
               "amount": 1000,             // MANDATORY
-              "currency": "RSD",          // MANDATORY (use default or ask)
-              "account": "CARD_DIMA_VISA_RAIF", // MANDATORY (source)
-              "targetAccount": "CASH_DIMA",     // MANDATORY (destination)
+              "currency": "USD",          // MANDATORY (use default or ask)
+              "account": "CARD_USER_VISA", // MANDATORY (source)
+              "targetAccount": "CASH_USER", // MANDATORY (destination)
               "targetPerson": null,       // null for transfers between own accounts
               "comment": "withdrew cash", // optional
               "correction": false
@@ -201,7 +201,7 @@ public class MainAgent {
             
             **Rules:**
             - MUST have both account (source) AND targetAccount (destination)
-            - Match user's words to account names: "raif" → CARD_DIMA_VISA_RAIF
+            - Match user's words to account names using aliases
             - If missing account/targetAccount → PENDING_CLARIFICATION
             """;
 
@@ -217,16 +217,16 @@ public class MainAgent {
               "type": "FINANCIAL",
               "operationType": "TRANSFER",
               "amount": 500,              // MANDATORY
-              "currency": "RSD",          // MANDATORY (use default or ask)
-              "account": "CARD_KIKI_RAIF", // MANDATORY (their account, source - who sends)
-              "targetAccount": "CARD_DIMA_VISA_RAIF", // MANDATORY (my account, destination - who receives)
-              "userName": "KIKI",         // MANDATORY (linked user who SENDS money)
-              "targetPerson": "DIMA",     // MANDATORY (current user who RECEIVES money - use userName from context)
+              "currency": "USD",          // MANDATORY (use default or ask)
+              "account": "CARD_ALICE_VISA", // MANDATORY (their account, source - who sends)
+              "targetAccount": "CARD_USER_VISA", // MANDATORY (my account, destination - who receives)
+              "userName": "ALICE",        // MANDATORY (linked user who SENDS money)
+              "targetPerson": "USER",     // MANDATORY (current user who RECEIVES money - use userName from context)
               "comment": "debt repayment", // optional
               "correction": false
             }
             ```
-            Example: "KIKI gave me 500" / "got 500 from KIKI"
+            Example: "ALICE gave me 500" / "got 500 from ALICE"
             
             **2. I gave money TO linked user:**
             ```json
@@ -234,16 +234,16 @@ public class MainAgent {
               "type": "FINANCIAL",
               "operationType": "TRANSFER",
               "amount": 1000,             // MANDATORY
-              "currency": "RSD",          // MANDATORY
-              "account": "CARD_DIMA_VISA_RAIF", // MANDATORY (my account, source - who sends)
-              "targetAccount": "CARD_KIKI_RAIF", // MANDATORY (their account, destination - who receives)
-              "userName": "DIMA",         // MANDATORY (current user who SENDS money - use userName from context)
-              "targetPerson": "KIKI",     // MANDATORY (linked user who RECEIVES money)
+              "currency": "USD",          // MANDATORY
+              "account": "CARD_USER_VISA", // MANDATORY (my account, source - who sends)
+              "targetAccount": "CARD_ALICE_VISA", // MANDATORY (their account, destination - who receives)
+              "userName": "USER",         // MANDATORY (current user who SENDS money - use userName from context)
+              "targetPerson": "ALICE",    // MANDATORY (linked user who RECEIVES money)
               "comment": "loan",          // optional
               "correction": false
             }
             ```
-            Example: "sent 1000 to KIKI" / "gave KIKI 1000"
+            Example: "sent 1000 to ALICE" / "gave ALICE 1000"
             
             **3. I bought something FOR linked user (EXPENSE to their fund):**
             ```json
@@ -251,14 +251,14 @@ public class MainAgent {
               "type": "FINANCIAL",
               "operationType": "EXPENSE",
               "amount": 200,              // MANDATORY
-              "currency": "RSD",          // MANDATORY
-              "account": "CARD_DIMA_VISA_RAIF", // MANDATORY (my account, I paid)
-              "fund": "KIKI_MONTHLY_BUDGET",    // MANDATORY (their fund)
-              "comment": "groceries for KIKI",  // optional
+              "currency": "USD",          // MANDATORY
+              "account": "CARD_USER_VISA", // MANDATORY (my account, I paid)
+              "fund": "ALICE_MONTHLY_BUDGET", // MANDATORY (their fund)
+              "comment": "groceries for ALICE", // optional
               "correction": false
             }
             ```
-            Example: "bought coffee for KIKI 200" / "200 on groceries for her"
+            Example: "bought coffee for ALICE 200" / "200 on groceries for her"
             
             **4. Received money from 3rd party (NOT linked user) = INCOME:**
             ```json
@@ -266,8 +266,8 @@ public class MainAgent {
               "type": "FINANCIAL",
               "operationType": "INCOME",
               "amount": 5000,             // MANDATORY
-              "currency": "RSD",          // MANDATORY
-              "account": "CARD_DIMA_VISA_RAIF", // MANDATORY
+              "currency": "USD",          // MANDATORY
+              "account": "CARD_USER_VISA", // MANDATORY
               "fund": null,               // optional for INCOME
               "comment": "gift from friend", // optional
               "correction": false
@@ -286,13 +286,13 @@ public class MainAgent {
             1. **userName and targetPerson fields for TRANSFER between linked users:**
                - **userName** = person who SENDS money (MANDATORY - always fill)
                - **targetPerson** = person who RECEIVES money (MANDATORY - always fill)
-               - "KIKI gave me 500" → userName: "KIKI", targetPerson: "DIMA" (from context)
-               - "I gave KIKI 500" → userName: "DIMA" (from context), targetPerson: "KIKI"
+               - "ALICE gave me 500" → userName: "ALICE", targetPerson: current user from context
+               - "I gave ALICE 500" → userName: current user from context, targetPerson: "ALICE"
                - BOTH fields must be filled for transfers with linked users!
             
             2. **userName and targetPerson MUST be EXACT userName from "Linked users" list OR current user:**
-               - ✅ CORRECT: "KIKI", "DIMA" (exact userName from list or context)
-               - ❌ WRONG: "Ksyusha", "girlfriend", "зая", "mom", "friend"
+               - ✅ CORRECT: exact userName from "Linked users" list or "Current user name"
+               - ❌ WRONG: nicknames, aliases, relationship words like "girlfriend", "mom", "friend"
                - If person mentioned but NOT in "Linked users" list → this is NOT a linked user!
             
             3. **If person mentioned is NOT in "Linked users" list:**
@@ -376,9 +376,9 @@ public class MainAgent {
             
             Example 2: Ambiguous account
             User: "set cash as default account"
-            User has accounts: ["CASH_USD", "CASH_EUR", "CASH_RSD"]
-            → action: { "type": "PENDING_CLARIFICATION", "context": "User wants to set cash account as default. Multiple cash accounts found: CASH_USD, CASH_EUR, CASH_RSD. Need: which one." }
-            → response: "You have multiple cash accounts: CASH_USD, CASH_EUR, CASH_RSD. Which one should be default?"
+            User has accounts: ["CASH_USD", "CASH_EUR", "CASH_GBP"]
+            → action: { "type": "PENDING_CLARIFICATION", "context": "User wants to set cash account as default. Multiple cash accounts found: CASH_USD, CASH_EUR, CASH_GBP. Need: which one." }
+            → response: "You have multiple cash accounts: CASH_USD, CASH_EUR, CASH_GBP. Which one should be default?"
             """;
     
     private static final String SECTION_PENDING_RESOLUTION = """
@@ -434,7 +434,7 @@ public class MainAgent {
             - Put the instruction in value field
             - Examples:
               - "whenever I say rubles, it's BYN" → CUSTOM_INSTRUCTION "rubles = BYN"
-              - "if I buy something for kiki, use her fund KIKI_PERSONAL" → CUSTOM_INSTRUCTION "purchases for kiki → fund KIKI_PERSONAL"
+              - "if I buy something for alice, use her fund ALICE_PERSONAL" → CUSTOM_INSTRUCTION "purchases for alice → fund ALICE_PERSONAL"
               - "when I say 'withdrew', always multiply by 2" → CUSTOM_INSTRUCTION "withdrew = amount × 2"
               - "I work at IT company, salary comes at end of month" → CUSTOM_INSTRUCTION "salary comes end of month from user's IT company"
               - "forget about rubles" → CUSTOM_INSTRUCTION "remove rubles instruction"
@@ -458,7 +458,7 @@ public class MainAgent {
             ```json
             {
               "actions": [
-                { "type": "FINANCIAL", "operationType": "EXPENSE", "amount": 500, "currency": "RSD", "account": "CARD", "fund": "Food", "comment": "coffee" },
+                { "type": "FINANCIAL", "operationType": "EXPENSE", "amount": 500, "currency": "USD", "account": "CARD_USER_VISA", "fund": "Food", "comment": "coffee" },
                 { "type": "UTILS", "command": "ADD_ACCOUNT", "value": "MONO" },
                 { "type": "PENDING_CLARIFICATION", "context": "Need amount for transport expense" }
               ],

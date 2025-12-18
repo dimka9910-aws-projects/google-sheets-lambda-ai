@@ -66,19 +66,19 @@ public class CustomInstructionAgent {
             You can classify instructions into categories and manage user's context:
             
             1. **Linked User Aliases** - nicknames for people
-               Example: "remember I call KIKI as ЗАЯ" → add alias "ЗАЯ" to linked user KIKI
+               Example: "remember I call ALICE as sweetie" → add alias "sweetie" to linked user ALICE
             
             2. **Account Aliases** - nicknames for accounts
-               Example: "райф is my Raiffeisen card" → add alias "райф" to account CARD_RAIF
+               Example: "main is my primary card" → add alias "main" to account CARD_USER_VISA
             
             3. **Fund Aliases** - nicknames for categories
-               Example: "кафе is FOOD" → add alias "кафе" to fund FOOD
+               Example: "cafe is FOOD" → add alias "cafe" to fund FOOD
             
             4. **Default Updates** - permanent preferences
                Example: "I always spend in EUR" → update defaultCurrency to EUR
             
             5. **Custom Instructions** - complex rules that don't fit above
-               Example: "трасса = 100 dinars from cash in family budget"
+               Example: "highway = 100 dollars from cash in family budget"
             """;
     
     private static final String PROMPT_ACTIONS = """
@@ -86,12 +86,12 @@ public class CustomInstructionAgent {
             ## Available Actions
             
             **Alias Management:**
-            - **ADD_LINKED_USER_ALIAS**: {"actionType": "ADD_LINKED_USER_ALIAS", "userName": "KIKI", "alias": "ЗАЯ"}
-            - **REMOVE_LINKED_USER_ALIAS**: {"actionType": "REMOVE_LINKED_USER_ALIAS", "userName": "KIKI", "alias": "ЗАЯ"}
-            - **ADD_ACCOUNT_ALIAS**: {"actionType": "ADD_ACCOUNT_ALIAS", "accountId": "CARD_RAIF", "alias": "райф"}
-            - **REMOVE_ACCOUNT_ALIAS**: {"actionType": "REMOVE_ACCOUNT_ALIAS", "accountId": "CARD_RAIF", "alias": "райф"}
-            - **ADD_FUND_ALIAS**: {"actionType": "ADD_FUND_ALIAS", "fundId": "FOOD", "alias": "кафе"}
-            - **REMOVE_FUND_ALIAS**: {"actionType": "REMOVE_FUND_ALIAS", "fundId": "FOOD", "alias": "кафе"}
+            - **ADD_LINKED_USER_ALIAS**: {"actionType": "ADD_LINKED_USER_ALIAS", "userName": "ALICE", "alias": "sweetie"}
+            - **REMOVE_LINKED_USER_ALIAS**: {"actionType": "REMOVE_LINKED_USER_ALIAS", "userName": "ALICE", "alias": "sweetie"}
+            - **ADD_ACCOUNT_ALIAS**: {"actionType": "ADD_ACCOUNT_ALIAS", "accountId": "CARD_USER_VISA", "alias": "main"}
+            - **REMOVE_ACCOUNT_ALIAS**: {"actionType": "REMOVE_ACCOUNT_ALIAS", "accountId": "CARD_USER_VISA", "alias": "main"}
+            - **ADD_FUND_ALIAS**: {"actionType": "ADD_FUND_ALIAS", "fundId": "FOOD", "alias": "cafe"}
+            - **REMOVE_FUND_ALIAS**: {"actionType": "REMOVE_FUND_ALIAS", "fundId": "FOOD", "alias": "cafe"}
             
             **Custom Instructions:**
             - **ADD_CUSTOM_INSTRUCTION**: {"actionType": "ADD_CUSTOM_INSTRUCTION", "instruction": "text"}
@@ -139,11 +139,11 @@ public class CustomInstructionAgent {
             ```json
             {
               "actions": [
-                {"actionType": "REMOVE_ACCOUNT_ALIAS", "accountId": "CARD_RAIF", "alias": "старый"},
-                {"actionType": "ADD_ACCOUNT_ALIAS", "accountId": "CARD_RAIF", "alias": "райф"},
+                {"actionType": "REMOVE_ACCOUNT_ALIAS", "accountId": "CARD_USER_VISA", "alias": "old"},
+                {"actionType": "ADD_ACCOUNT_ALIAS", "accountId": "CARD_USER_VISA", "alias": "main"},
                 {"actionType": "REMOVE_CUSTOM_INSTRUCTION", "index": 2}
               ],
-              "explanation": "Replaced old alias with 'райф' and removed outdated instruction [2]"
+              "explanation": "Replaced old alias with 'main' and removed outdated instruction [2]"
             }
             ```
             
