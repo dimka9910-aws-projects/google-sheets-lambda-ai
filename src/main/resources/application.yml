@@ -21,10 +21,9 @@ spring:
     open-in-view: false  # Disable OSIV for Lambda (no HTTP session)
   
   # DataSource configuration (overridden by DataSourceConfig if DATABASE_URL env var exists)
+  # Note: DataSourceConfig converts DATABASE_URL from postgresql:// to jdbc:postgresql:// format
   datasource:
-    url: ${DATABASE_URL:jdbc:postgresql://localhost:5432/financetracker}
-    username: ${DB_USERNAME:postgres}
-    password: ${DB_PASSWORD:postgres}
+    url: ${DATABASE_URL:}
     driver-class-name: org.postgresql.Driver
     hikari:
       # ⚠️ CRITICAL: SnapStart-optimized connection pool settings

@@ -37,8 +37,47 @@ public class DataSourceConfig {
 
         log.info("🔌 Initializing SnapStart-optimized database connection pool...");
         
+        // Convert DATABASE_URL from Heroku/Neon format (postgresql://user:pass@host/db)
+        // to JDBC format (jdbc:postgresql://host/db)
+        String jdbcUrl = databaseUrl;
+        String username = null;
+        String password = null;
+        
+        if (databaseUrl.startsWith("postgresql://")) {
+            // Extract credentials from URL: postgresql://user:pass@host/db
+            String afterProtocol = databaseUrl.substring("postgresql://".length());
+            int atIndex = afterProtocol.indexOf("@");
+            
+            if (atIndex > 0) {
+                String userPass = afterProtocol.substring(0, atIndex);
+                String hostAndDb = afterProtocol.substring(atIndex + 1);
+                
+                // Parse username:password
+                int colonIndex = userPass.indexOf(":");
+                if (colonIndex > 0) {
+                    username = userPass.substring(0, colonIndex);
+                    password = userPass.substring(colonIndex + 1);
+                }
+                
+                // Rebuild as JDBC URL
+                jdbcUrl = "jdbc:postgresql://" + hostAndDb;
+                
+                // Remove channel_binding parameter if present (not supported by JDBC driver)
+                jdbcUrl = jdbcUrl.replaceAll("&?channel_binding=require", "");
+                
+                log.info("📝 Converted DATABASE_URL to JDBC format: jdbc:postgresql://{}...", 
+                    hostAndDb.substring(0, Math.min(30, hostAndDb.length())));
+            }
+        }
+        
         HikariConfig config = new HikariConfig();
-        config.setJdbcUrl(databaseUrl);
+        config.setJdbcUrl(jdbcUrl);
+        
+        // Set credentials if extracted from URL
+        if (username != null && password != null) {
+            config.setUsername(username);
+            config.setPassword(password);
+        }
         
         // ⚠️ CRITICAL: SnapStart + Lambda optimization
         // Lambda processes 1 request at a time = needs only 1 connection
