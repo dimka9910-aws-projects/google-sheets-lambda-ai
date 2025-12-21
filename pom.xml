@@ -207,7 +207,9 @@
                 <version>4.24.0</version>
                 <configuration>
                     <changeLogFile>src/main/resources/db/changelog/db.changelog-master.yaml</changeLogFile>
-                    <url>${env.DATABASE_URL}</url>
+                    <url>${liquibase.url}</url>
+                    <username>${liquibase.username}</username>
+                    <password>${liquibase.password}</password>
                     <driver>org.postgresql.Driver</driver>
                     <verbose>true</verbose>
                     <logging>info</logging>

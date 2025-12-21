@@ -69,7 +69,14 @@ jobs:
           DATABASE_URL: ${{ secrets.DATABASE_URL_DEV }}
         run: |
           echo "🚀 Running database migrations to DEV..."
-          mvn liquibase:update
+          # Parse DATABASE_URL (format: postgresql://user:pass@host:port/db?params)
+          DB_USER=$(echo "$DATABASE_URL" | sed -n 's|postgresql://\([^:]*\):.*|\1|p')
+          DB_PASS=$(echo "$DATABASE_URL" | sed -n 's|postgresql://[^:]*:\([^@]*\)@.*|\1|p')
+          JDBC_URL=$(echo "$DATABASE_URL" | sed 's|postgresql://[^@]*@|jdbc:postgresql://|')
+          mvn liquibase:update \
+            -Dliquibase.url="$JDBC_URL" \
+            -Dliquibase.username="$DB_USER" \
+            -Dliquibase.password="$DB_PASS"
       
       - name: SAM Build
         run: sam build
@@ -135,7 +142,14 @@ jobs:
           DATABASE_URL: ${{ secrets.DATABASE_URL_PROD }}
         run: |
           echo "🚀 Running database migrations to PROD..."
-          mvn liquibase:update
+          # Parse DATABASE_URL (format: postgresql://user:pass@host:port/db?params)
+          DB_USER=$(echo "$DATABASE_URL" | sed -n 's|postgresql://\([^:]*\):.*|\1|p')
+          DB_PASS=$(echo "$DATABASE_URL" | sed -n 's|postgresql://[^:]*:\([^@]*\)@.*|\1|p')
+          JDBC_URL=$(echo "$DATABASE_URL" | sed 's|postgresql://[^@]*@|jdbc:postgresql://|')
+          mvn liquibase:update \
+            -Dliquibase.url="$JDBC_URL" \
+            -Dliquibase.username="$DB_USER" \
+            -Dliquibase.password="$DB_PASS"
       
       - name: SAM Build
         run: sam build
