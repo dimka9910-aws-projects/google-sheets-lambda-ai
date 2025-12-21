@@ -89,11 +89,13 @@ public interface FinancialOperationRepository extends JpaRepository<FinancialOpe
 
     /**
      * Найти последнюю операцию пользователя
+     * Returns List instead of Optional because Pageable requires collection return type
+     * Use Pageable.ofSize(1) to get single result
      */
     @Query("SELECT f FROM FinancialOperation f WHERE f.userId = :userId " +
            "AND f.deletedAt IS NULL " +
            "ORDER BY f.createdAt DESC")
-    Optional<FinancialOperation> findLatestByUserId(@Param("userId") String userId, Pageable pageable);
+    List<FinancialOperation> findLatestByUserId(@Param("userId") String userId, Pageable pageable);
 
     /**
      * Найти все операции пользователя (не удалённые), sorted by transaction date
