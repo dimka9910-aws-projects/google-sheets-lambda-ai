@@ -35,19 +35,20 @@ public class DataSourceConfig {
             return null;
         }
 
-        log.info("🔌 Initializing Lambda-optimized database connection pool...");
+        log.info("🔌 Initializing SnapStart-optimized database connection pool...");
         
         HikariConfig config = new HikariConfig();
         config.setJdbcUrl(databaseUrl);
         
-        // ⚠️ CRITICAL: Lambda optimization
-        // Each Lambda instance handles 1 request at a time, but may scale to multiple instances
-        config.setMaximumPoolSize(2);           // Max 2 connections per Lambda instance
-        config.setMinimumIdle(0);               // No idle connections
-        config.setConnectionTimeout(10000);     // 10s max wait
-        config.setIdleTimeout(30000);           // 30s idle = close
-        config.setMaxLifetime(60000);           // 1min max lifetime
-        config.setKeepaliveTime(30000);         // 30s keepalive
+        // ⚠️ CRITICAL: SnapStart + Lambda optimization
+        // Lambda processes 1 request at a time = needs only 1 connection
+        // CRaC library ensures connections close before snapshot and reopen after restore
+        config.setMaximumPoolSize(1);           // 1 connection max (Lambda is single-threaded)
+        config.setMinimumIdle(0);               // No idle connections (close all before snapshot)
+        config.setConnectionTimeout(10000);     // 10s max wait for new connection
+        config.setIdleTimeout(30000);           // 30s idle = close connection
+        config.setMaxLifetime(540000);          // 9 minutes (forces reconnect before Lambda timeout)
+        config.setKeepaliveTime(0);             // Disable keepalive (rely on max-lifetime)
         config.setLeakDetectionThreshold(60000); // Detect connection leaks after 60s
         
         // Connection validation
@@ -61,7 +62,7 @@ public class DataSourceConfig {
         // Pool name for debugging
         config.setPoolName("FinanceTrackerHikariPool");
         
-        log.info("✅ Database connection pool initialized (max_pool_size=2, min_idle=0)");
+        log.info("✅ Database connection pool initialized (max_pool_size=1, min_idle=0, SnapStart-ready)");
         
         return new HikariDataSource(config);
     }

@@ -98,6 +98,14 @@
             <artifactId>liquibase-core</artifactId>
         </dependency>
 
+        <!-- CRaC for AWS Lambda SnapStart (Coordinated Restore at Checkpoint) -->
+        <!-- Allows Spring Boot to gracefully close resources before snapshot and reopen after restore -->
+        <dependency>
+            <groupId>org.crac</groupId>
+            <artifactId>crac</artifactId>
+            <version>1.4.0</version>
+        </dependency>
+
         <!-- OpenAI via LangChain4j -->
         <dependency>
             <groupId>dev.langchain4j</groupId>

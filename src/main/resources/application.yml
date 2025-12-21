@@ -18,21 +18,24 @@ spring:
           time_zone: UTC
         format_sql: true
     show-sql: false
+    open-in-view: false  # Disable OSIV for Lambda (no HTTP session)
   
-  # DataSource configuration (overridden by DatabaseConfig if DATABASE_URL env var exists)
+  # DataSource configuration (overridden by DataSourceConfig if DATABASE_URL env var exists)
   datasource:
     url: ${DATABASE_URL:jdbc:postgresql://localhost:5432/financetracker}
     username: ${DB_USERNAME:postgres}
     password: ${DB_PASSWORD:postgres}
     driver-class-name: org.postgresql.Driver
     hikari:
-      # Lambda-optimized connection pool settings
-      maximum-pool-size: 2  # Small pool for Lambda
-      minimum-idle: 0       # No idle connections
-      connection-timeout: 10000
-      idle-timeout: 30000
-      max-lifetime: 60000
-      leak-detection-threshold: 60000
+      # ⚠️ CRITICAL: SnapStart-optimized connection pool settings
+      # Lambda processes 1 request at a time, needs only 1 connection
+      maximum-pool-size: 1  # 1 connection max (Lambda is single-threaded per instance)
+      minimum-idle: 0       # No idle connections (close all before snapshot)
+      connection-timeout: 10000  # 10s timeout for new connection
+      max-lifetime: 540000  # 9 minutes (less than Lambda 10min timeout, forces reconnect)
+      keepalive-time: 0     # Disable keepalive (rely on max-lifetime)
+      idle-timeout: 30000   # 30s idle = close connection
+      leak-detection-threshold: 60000  # Detect leaks after 60s
   
   # Liquibase configuration
   liquibase:
