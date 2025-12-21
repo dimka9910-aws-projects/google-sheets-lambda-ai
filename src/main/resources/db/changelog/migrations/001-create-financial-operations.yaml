@@ -1,0 +1,116 @@
+databaseChangeLog:
+  - changeSet:
+      id: 001-create-financial-operations-table
+      author: dimka9910
+      changes:
+        - createTable:
+            tableName: financial_operations
+            columns:
+              - column:
+                  name: id
+                  type: UUID
+                  defaultValueComputed: gen_random_uuid()
+                  constraints:
+                    primaryKey: true
+                    nullable: false
+              - column:
+                  name: user_id
+                  type: VARCHAR(100)
+                  constraints:
+                    nullable: false
+              - column:
+                  name: operation_type
+                  type: VARCHAR(20)
+                  constraints:
+                    nullable: false
+              - column:
+                  name: account
+                  type: VARCHAR(100)
+              - column:
+                  name: fund
+                  type: VARCHAR(100)
+              - column:
+                  name: amount
+                  type: DECIMAL(32, 18)
+                  constraints:
+                    nullable: false
+              - column:
+                  name: currency
+                  type: VARCHAR(10)
+                  constraints:
+                    nullable: false
+              - column:
+                  name: transaction_date
+                  type: TIMESTAMP
+                  constraints:
+                    nullable: false
+              - column:
+                  name: description
+                  type: TEXT
+              - column:
+                  name: link_id
+                  type: UUID
+              - column:
+                  name: created_at
+                  type: TIMESTAMP
+                  defaultValueComputed: CURRENT_TIMESTAMP
+                  constraints:
+                    nullable: false
+              - column:
+                  name: updated_at
+                  type: TIMESTAMP
+                  defaultValueComputed: CURRENT_TIMESTAMP
+                  constraints:
+                    nullable: false
+              - column:
+                  name: deleted_at
+                  type: TIMESTAMP
+
+        - addForeignKeyConstraint:
+            baseTableName: financial_operations
+            baseColumnNames: link_id
+            constraintName: fk_financial_operations_link
+            referencedTableName: financial_operations
+            referencedColumnNames: id
+            onDelete: SET NULL
+
+        - createIndex:
+            indexName: idx_financial_operations_user_id
+            tableName: financial_operations
+            columns:
+              - column:
+                  name: user_id
+
+        - createIndex:
+            indexName: idx_financial_operations_operation_type
+            tableName: financial_operations
+            columns:
+              - column:
+                  name: operation_type
+
+        - createIndex:
+            indexName: idx_financial_operations_transaction_date
+            tableName: financial_operations
+            columns:
+              - column:
+                  name: transaction_date
+
+        - createIndex:
+            indexName: idx_financial_operations_deleted_at
+            tableName: financial_operations
+            columns:
+              - column:
+                  name: deleted_at
+
+        - createIndex:
+            indexName: idx_financial_operations_link_id
+            tableName: financial_operations
+            columns:
+              - column:
+                  name: link_id
+
+      rollback:
+        - dropTable:
+            tableName: financial_operations
+
+

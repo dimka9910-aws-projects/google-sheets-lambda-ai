@@ -8,14 +8,15 @@ import com.github.dimka9910.sheets.ai.dto.user.LinkedUserEntry;
 import com.github.dimka9910.sheets.ai.dto.user.UserEntity;
 import com.github.dimka9910.sheets.ai.dto.actions.InstructionAction;
 import com.github.dimka9910.sheets.ai.services.llm.LLMClient;
-import com.github.dimka9910.sheets.ai.services.llm.OpenAIClient;
+import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.stereotype.Component;
 
 import java.util.ArrayList;
 import java.util.List;
 
 /**
- * CustomInstructionAgent - intelligent context manager.
+ * Spring Component for custom instruction management using LLM.
  * 
  * Responsibilities:
  * - Classify new instructions to correct context (aliases, defaults, custom instructions)
@@ -26,6 +27,8 @@ import java.util.List;
  * Model: gpt-4o-mini
  */
 @Slf4j
+@Component
+@RequiredArgsConstructor
 public class CustomInstructionAgent {
 
     private static final String MODEL = "gpt-5-mini";
@@ -157,16 +160,6 @@ public class CustomInstructionAgent {
     
     private final LLMClient client;
     private final ObjectMapper objectMapper;
-
-    public CustomInstructionAgent() {
-        this.client = OpenAIClient.getInstance();
-        this.objectMapper = new ObjectMapper();
-    }
-
-    public CustomInstructionAgent(LLMClient client) {
-        this.client = client;
-        this.objectMapper = new ObjectMapper();
-    }
 
     public Response process(Request request) {
         long start = System.currentTimeMillis();

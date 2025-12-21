@@ -1,0 +1,49 @@
+spring:
+  application:
+    name: finance-tracker-ai
+  
+  # Cloud Function configuration
+  cloud:
+    function:
+      definition: sqsMessageHandler
+  
+  # JPA configuration for PostgreSQL
+  jpa:
+    database-platform: org.hibernate.dialect.PostgreSQLDialect
+    hibernate:
+      ddl-auto: validate  # Liquibase handles schema, Hibernate only validates
+    properties:
+      hibernate:
+        jdbc:
+          time_zone: UTC
+        format_sql: true
+    show-sql: false
+  
+  # DataSource configuration (overridden by DatabaseConfig if DATABASE_URL env var exists)
+  datasource:
+    url: ${DATABASE_URL:jdbc:postgresql://localhost:5432/financetracker}
+    username: ${DB_USERNAME:postgres}
+    password: ${DB_PASSWORD:postgres}
+    driver-class-name: org.postgresql.Driver
+    hikari:
+      # Lambda-optimized connection pool settings
+      maximum-pool-size: 2  # Small pool for Lambda
+      minimum-idle: 0       # No idle connections
+      connection-timeout: 10000
+      idle-timeout: 30000
+      max-lifetime: 60000
+      leak-detection-threshold: 60000
+  
+  # Liquibase configuration
+  liquibase:
+    enabled: false  # Migrations run separately in CI/CD, not at Lambda startup
+    change-log: classpath:/db/changelog/db.changelog-master.yaml
+
+# Logging configuration
+logging:
+  level:
+    root: INFO
+    com.github.dimka9910.sheets.ai: DEBUG
+    org.springframework: WARN
+    org.hibernate: WARN
+    liquibase: INFO

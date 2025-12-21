@@ -24,7 +24,7 @@ jobs:
           distribution: 'corretto'
           cache: 'maven'
       
-      - name: Build with Maven
+      - name: Build with Maven (Spring Boot)
         run: mvn clean package -DskipTests
       
       - name: Upload artifact
@@ -51,7 +51,7 @@ jobs:
           distribution: 'corretto'
           cache: 'maven'
       
-      - name: Build with Maven
+      - name: Build with Maven (Spring Boot)
         run: mvn clean package -DskipTests
       
       - name: Configure AWS credentials
@@ -64,12 +64,19 @@ jobs:
       - name: Setup SAM CLI
         uses: aws-actions/setup-sam@v2
       
+      - name: Run Database Migrations
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL_DEV }}
+        run: |
+          echo "🚀 Running database migrations to DEV..."
+          mvn liquibase:update
+      
       - name: SAM Build
         run: sam build
       
       - name: SAM Deploy to DEV
         run: |
-          PARAMS="Environment=dev OpenAIApiKey=${{ secrets.OPENAI_API_KEY }} DryRun=true"
+          PARAMS="Environment=dev OpenAIApiKey=${{ secrets.OPENAI_API_KEY }} DatabaseUrl=${{ secrets.DATABASE_URL_DEV }} DryRun=true"
           if [ -n "${{ secrets.SHEETS_QUEUE_URL_DEV }}" ]; then
             PARAMS="$PARAMS SheetsQueueUrl=${{ secrets.SHEETS_QUEUE_URL_DEV }}"
           fi
@@ -110,7 +117,7 @@ jobs:
           distribution: 'corretto'
           cache: 'maven'
       
-      - name: Build with Maven
+      - name: Build with Maven (Spring Boot)
         run: mvn clean package -DskipTests
       
       - name: Configure AWS credentials
@@ -123,12 +130,19 @@ jobs:
       - name: Setup SAM CLI
         uses: aws-actions/setup-sam@v2
       
+      - name: Run Database Migrations
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL_PROD }}
+        run: |
+          echo "🚀 Running database migrations to PROD..."
+          mvn liquibase:update
+      
       - name: SAM Build
         run: sam build
       
       - name: SAM Deploy to PROD
         run: |
-          PARAMS="Environment=prod OpenAIApiKey=${{ secrets.OPENAI_API_KEY }} DryRun=false"
+          PARAMS="Environment=prod OpenAIApiKey=${{ secrets.OPENAI_API_KEY }} DatabaseUrl=${{ secrets.DATABASE_URL_PROD }} DryRun=false"
           if [ -n "${{ secrets.SHEETS_QUEUE_URL_PROD }}" ]; then
             PARAMS="$PARAMS SheetsQueueUrl=${{ secrets.SHEETS_QUEUE_URL_PROD }}"
           fi

@@ -1,12 +1,10 @@
 package com.github.dimka9910.sheets.ai.dto.user;
 
-import com.github.dimka9910.sheets.ai.dto.ParsedCommand;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 import software.amazon.awssdk.enhanced.dynamodb.mapper.annotations.DynamoDbBean;
-import software.amazon.awssdk.enhanced.dynamodb.mapper.annotations.DynamoDbIgnore;
 
 /**
  * Одно сообщение в истории диалога.
@@ -26,9 +24,6 @@ public class ConversationMessage {
     // Флаг что это был уточняющий вопрос
     private Boolean wasClarification;
     
-    // parsedResult НЕ хранится в DynamoDB — это временные данные в runtime
-    private transient ParsedCommand parsedResult;
-    
     public static ConversationMessage userMessage(String content) {
         return ConversationMessage.builder()
                 .role("user")
@@ -38,25 +33,9 @@ public class ConversationMessage {
                 .build();
     }
     
-    public static ConversationMessage assistantMessage(String content, ParsedCommand parsed, boolean clarification) {
-        return ConversationMessage.builder()
-                .role("assistant")
-                .content(content)
-                .timestamp(System.currentTimeMillis())
-                .parsedResult(parsed)
-                .wasClarification(clarification)
-                .build();
-    }
-    
     // Getter для DynamoDB (Boolean вместо boolean для nullable)
     public Boolean getWasClarification() {
         return wasClarification != null ? wasClarification : false;
-    }
-    
-    // parsedResult игнорируется DynamoDB — аннотация на getter
-    @DynamoDbIgnore
-    public ParsedCommand getParsedResult() {
-        return parsedResult;
     }
 }
 

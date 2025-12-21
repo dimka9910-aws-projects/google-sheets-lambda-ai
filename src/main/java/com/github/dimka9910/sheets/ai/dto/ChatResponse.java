@@ -21,17 +21,6 @@ public class ChatResponse {
     private boolean success;
     
     /**
-     * Список распознанных команд (для multi-command)
-     */
-    private List<ParsedCommand> parsedCommands;
-    
-    /**
-     * @deprecated Используй parsedCommands — поддерживает несколько команд
-     */
-    @Deprecated
-    private ParsedCommand parsedCommand;  // Что распознали (для отладки)
-    
-    /**
      * Количество успешно записанных операций
      */
     private int operationsCount;

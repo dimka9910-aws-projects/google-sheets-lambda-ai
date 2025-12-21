@@ -13,6 +13,10 @@ Parameters:
     Type: String
     Description: OpenAI API Key
     NoEcho: true
+  DatabaseUrl:
+    Type: String
+    Description: Neon PostgreSQL connection string
+    NoEcho: true
   SheetsQueueUrl:
     Type: String
     Description: URL of the SQS queue for google-sheets-lambda
@@ -39,15 +43,22 @@ Resources:
       FunctionName: !Sub telegram-sqs-handler-${Environment}
       Handler: com.github.dimka9910.sheets.ai.SQSHandler::handleRequest
       CodeUri: .
-      Description: Processes Telegram requests from SQS, parses with AI, sends responses to Response Queue
+      Description: Spring Boot Lambda - processes Telegram requests from SQS, parses with AI, sends responses
+      # SnapStart for faster cold starts (Java 17+)
+      SnapStart:
+        ApplyOn: PublishedVersions
+      AutoPublishAlias: live
       Environment:
         Variables:
           ENVIRONMENT: !Ref Environment
           OPENAI_API_KEY: !Ref OpenAIApiKey
+          DATABASE_URL: !Ref DatabaseUrl
           SHEETS_QUEUE_URL: !Ref SheetsQueueUrl
           USERS_TABLE_NAME: !Ref UsersTable
           DRY_RUN: !Ref DryRun
           RESPONSE_QUEUE_URL: !Ref ResponsesQueue
+          # Spring Cloud Function configuration
+          SPRING_CLOUD_FUNCTION_DEFINITION: sqsMessageHandler
       Policies:
         - DynamoDBCrudPolicy:
             TableName: !Ref UsersTable

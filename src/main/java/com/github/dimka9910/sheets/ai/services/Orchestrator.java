@@ -1,5 +1,6 @@
 package com.github.dimka9910.sheets.ai.services;
 
+import com.github.dimka9910.sheets.ai.db.service.FinancialOperationService;
 import com.github.dimka9910.sheets.ai.dto.*;
 import com.github.dimka9910.sheets.ai.dto.actions.MainAgentResponse;
 import com.github.dimka9910.sheets.ai.dto.user.LinkedUserEntry;
@@ -8,14 +9,16 @@ import com.github.dimka9910.sheets.ai.services.agents.MainAgent;
 import com.github.dimka9910.sheets.ai.services.agents.MessageClassifierAgent;
 import com.github.dimka9910.sheets.ai.services.agents.MessageClassifierAgent.Tag;
 import com.github.dimka9910.sheets.ai.telemetry.RequestTelemetry;
+import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.stereotype.Service;
 
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 
 /**
- * Orchestrator - coordinates ALL AI agents and result handling.
+ * Spring Service for orchestrating ALL AI agents and result handling.
  * 
  * Full flow:
  * 1. ClassifierAgent (gpt-4o-mini) — determine context tags
@@ -23,21 +26,13 @@ import java.util.Set;
  * 3. ResultHandler — execute and build response
  */
 @Slf4j
+@Service
+@RequiredArgsConstructor
 public class Orchestrator {
     
     private final MessageClassifierAgent classifierAgent;
     private final MainAgent mainAgent;
     private final ResultHandler resultHandler;
-    
-    // ═══════════════════════════════════════════════════════════════════════════
-    // CONSTRUCTORS
-    // ═══════════════════════════════════════════════════════════════════════════
-    
-    public Orchestrator(SQSPublisher sqsPublisher, UserEntityService userContextService) {
-        this.classifierAgent = new MessageClassifierAgent();
-        this.mainAgent = new MainAgent();
-        this.resultHandler = new ResultHandler(sqsPublisher, userContextService);
-    }
     
     // ═══════════════════════════════════════════════════════════════════════════
     // MAIN API

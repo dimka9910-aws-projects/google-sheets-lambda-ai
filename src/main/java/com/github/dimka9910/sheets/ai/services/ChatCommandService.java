@@ -4,12 +4,15 @@ import com.github.dimka9910.sheets.ai.dto.*;
 import com.github.dimka9910.sheets.ai.dto.user.LinkedUserEntry;
 import com.github.dimka9910.sheets.ai.dto.user.UserEntity;
 import com.github.dimka9910.sheets.ai.telemetry.RequestTelemetry;
+import jakarta.annotation.PostConstruct;
+import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.stereotype.Service;
 
 import java.util.List;
 
 /**
- * Main entry point for chat commands.
+ * Spring Service - main entry point for chat commands.
  * 
  * Flow:
  * 1. Check admin commands
@@ -19,25 +22,18 @@ import java.util.List;
  * 5. Send response
  */
 @Slf4j
+@Service
+@RequiredArgsConstructor
 public class ChatCommandService {
 
     private final Orchestrator orchestrator;
     private final SQSPublisher sqsPublisher;
     private final UserEntityService userContextService;
     private final AdminCommandHandler adminHandler;
-
-    public ChatCommandService() {
-        this.sqsPublisher = new SQSPublisher();
-        this.userContextService = new UserEntityService();
-        this.orchestrator = new Orchestrator(sqsPublisher, userContextService);
-        this.adminHandler = new AdminCommandHandler(userContextService);
-    }
-
-    public ChatCommandService(UserEntityService userContextService) {
-        this.sqsPublisher = new SQSPublisher();
-        this.userContextService = userContextService;
-        this.orchestrator = new Orchestrator(sqsPublisher, userContextService);
-        this.adminHandler = new AdminCommandHandler(userContextService);
+    
+    @PostConstruct
+    public void init() {
+        log.info("✅ ChatCommandService initialized");
     }
 
     /**

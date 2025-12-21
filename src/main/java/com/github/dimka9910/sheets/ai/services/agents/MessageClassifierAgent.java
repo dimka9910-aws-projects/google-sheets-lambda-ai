@@ -3,18 +3,20 @@ package com.github.dimka9910.sheets.ai.services.agents;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.github.dimka9910.sheets.ai.services.llm.LLMClient;
-import com.github.dimka9910.sheets.ai.services.llm.OpenAIClient;
+import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.stereotype.Component;
 
 import java.util.HashSet;
 import java.util.Set;
 
 /**
- * MessageClassifierAgent - classifies user message to determine what context to load.
- * 
+ * Spring Component for message classification using LLM.
  * Uses gpt-4o-mini (fast, cheap) for classification.
  */
 @Slf4j
+@Component
+@RequiredArgsConstructor
 public class MessageClassifierAgent {
     
     // ═══════════════════════════════════════════════════════════════════════════
@@ -140,21 +142,11 @@ public class MessageClassifierAgent {
             """;
     
     // ═══════════════════════════════════════════════════════════════════════════
-    // DEPENDENCIES
+    // DEPENDENCIES (injected by Spring)
     // ═══════════════════════════════════════════════════════════════════════════
     
     private final LLMClient client;
     private final ObjectMapper objectMapper;
-    
-    public MessageClassifierAgent() {
-        this.client = OpenAIClient.getInstance();
-        this.objectMapper = new ObjectMapper();
-    }
-    
-    public MessageClassifierAgent(LLMClient client) {
-        this.client = client;
-        this.objectMapper = new ObjectMapper();
-    }
     
     // ═══════════════════════════════════════════════════════════════════════════
     // PROCESS

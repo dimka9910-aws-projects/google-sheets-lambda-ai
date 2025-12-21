@@ -2,20 +2,20 @@ package com.github.dimka9910.sheets.ai.services;
 
 import com.github.dimka9910.sheets.ai.dto.*;
 import com.github.dimka9910.sheets.ai.dto.user.UserEntity;
+import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.stereotype.Service;
 
 /**
- * Handles admin/debug commands (/debug, /reset, /info, /note).
+ * Spring Service for handling admin/debug commands (/debug, /reset, /info, /note).
  * These are NOT processed by AI — direct system commands.
  */
 @Slf4j
+@Service
+@RequiredArgsConstructor
 public class AdminCommandHandler {
 
     private final UserEntityService userContextService;
-
-    public AdminCommandHandler(UserEntityService userContextService) {
-        this.userContextService = userContextService;
-    }
 
     /**
      * Try to handle admin command.

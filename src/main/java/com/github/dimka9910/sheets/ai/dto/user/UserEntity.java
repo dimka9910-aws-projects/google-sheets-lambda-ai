@@ -1,6 +1,5 @@
 package com.github.dimka9910.sheets.ai.dto.user;
 
-import com.github.dimka9910.sheets.ai.dto.ParsedCommand;
 import com.github.dimka9910.sheets.ai.dto.actions.PendingClarificationAction;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
@@ -69,12 +68,7 @@ public class UserEntity {
     @Builder.Default
     private List<ConversationMessage> conversationHistory = new ArrayList<>();
     
-    // Pending commands (awaiting clarification) - DEPRECATED, use pendingActions
-    @Builder.Default
-    @Deprecated
-    private List<ParsedCommand> pendingCommands = new ArrayList<>();
-    
-    // Pending clarifications from MainAgent (new format)
+    // Pending clarifications from MainAgent
     @Builder.Default
     private List<PendingClarificationAction> pendingActions = new ArrayList<>();
     
@@ -84,10 +78,6 @@ public class UserEntity {
     // Debug mode
     @Builder.Default
     private Boolean debugMode = false;
-    
-    // Last operations for undo
-    @Builder.Default
-    private List<ParsedCommand> lastOperations = new ArrayList<>();
     
     // ═══════════════════════════════════════════════════════════════════════════
     // DynamoDB KEYS
@@ -259,39 +249,9 @@ public class UserEntity {
         return pendingActions != null && !pendingActions.isEmpty();
     }
     
-    // ═══════════════════════════════════════════════════════════════════════════
-    // LAST OPERATIONS (for undo)
-    // ═══════════════════════════════════════════════════════════════════════════
-    
-    private static final int MAX_UNDO_OPERATIONS = 5;
-    
-    public void addOperation(ParsedCommand operation) {
-        if (lastOperations == null) {
-            lastOperations = new ArrayList<>();
-        }
-        lastOperations.add(operation);
-        if (lastOperations.size() > MAX_UNDO_OPERATIONS) {
-            lastOperations.remove(0);
-        }
-    }
-    
-    public ParsedCommand getLastOperation() {
-        if (lastOperations == null || lastOperations.isEmpty()) {
-            return null;
-        }
-        return lastOperations.get(lastOperations.size() - 1);
-    }
-    
-    public ParsedCommand popLastOperation() {
-        if (lastOperations == null || lastOperations.isEmpty()) {
-            return null;
-        }
-        return lastOperations.remove(lastOperations.size() - 1);
-    }
-    
-    public boolean hasOperationsToUndo() {
-        return lastOperations != null && !lastOperations.isEmpty();
-    }
+    // ════════════════════════════════════════════════════════════════════════════
+    // NOTE: UNDO feature removed - никогда не работал в legacy коде
+    // ════════════════════════════════════════════════════════════════════════════
     
     // ═══════════════════════════════════════════════════════════════════════════
     // LINKED USER CONTEXTS (transient)

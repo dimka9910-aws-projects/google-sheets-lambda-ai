@@ -2,8 +2,9 @@ package com.github.dimka9910.sheets.ai.services.llm;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.github.dimka9910.sheets.ai.config.AppConfig;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.stereotype.Service;
 
 import java.net.URI;
 import java.net.http.HttpClient;
@@ -16,7 +17,8 @@ import java.util.Map;
 import java.util.Set;
 
 /**
- * OpenAI API client implementation with retry logic.
+ * Spring Service for OpenAI API client with retry logic.
+ * Uses Spring DI for API key configuration.
  * 
  * Supports:
  * - Standard models: gpt-4o, gpt-4o-mini
@@ -28,55 +30,34 @@ import java.util.Set;
  * - No retry on 400, 401, 403 (client errors)
  */
 @Slf4j
+@Service
 public class OpenAIClient implements LLMClient {
     
     private static final String OPENAI_API_URL = "https://api.openai.com/v1/chat/completions";
-    private static final Duration DEFAULT_TIMEOUT = Duration.ofSeconds(60);
     
     // Retry config
     private static final int MAX_RETRIES = 3;
     private static final long INITIAL_BACKOFF_MS = 1000;
     private static final Set<Integer> RETRYABLE_STATUS_CODES = Set.of(429, 500, 502, 503, 504);
     
-    private static OpenAIClient instance;
-    
     private final String apiKey;
     private final HttpClient httpClient;
     private final ObjectMapper objectMapper;
     
-    // ═══════════════════════════════════════════════════════════════════════════
-    // SINGLETON
-    // ═══════════════════════════════════════════════════════════════════════════
-    
-    private OpenAIClient() {
-        this.apiKey = AppConfig.getOpenAiApiKey();
+    public OpenAIClient(
+            @Value("${OPENAI_API_KEY}") String apiKey,
+            HttpClient httpClient,
+            ObjectMapper objectMapper) {
+        this.apiKey = apiKey;
+        this.httpClient = httpClient;
+        this.objectMapper = objectMapper;
+        
         if (apiKey == null || apiKey.isBlank()) {
             throw new LLMException(
-                "OpenAI API key not set. Add to application.properties or set OPENAI_API_KEY env var");
+                "OpenAI API key not set. Set OPENAI_API_KEY env var");
         }
-        this.httpClient = HttpClient.newBuilder()
-                .connectTimeout(DEFAULT_TIMEOUT)
-                .build();
-        this.objectMapper = new ObjectMapper();
-    }
-    
-    public static synchronized OpenAIClient getInstance() {
-        if (instance == null) {
-            instance = new OpenAIClient();
-        }
-        return instance;
-    }
-    
-    public static void setInstance(OpenAIClient client) {
-        instance = client;
-    }
-    
-    public OpenAIClient(String apiKey) {
-        this.apiKey = apiKey;
-        this.httpClient = HttpClient.newBuilder()
-                .connectTimeout(DEFAULT_TIMEOUT)
-                .build();
-        this.objectMapper = new ObjectMapper();
+        
+        log.info("✅ OpenAIClient initialized");
     }
     
     // ═══════════════════════════════════════════════════════════════════════════
@@ -161,7 +142,7 @@ public class OpenAIClient implements LLMClient {
                     .uri(URI.create(OPENAI_API_URL))
                     .header("Content-Type", "application/json")
                     .header("Authorization", "Bearer " + apiKey)
-                    .timeout(DEFAULT_TIMEOUT)
+                    .timeout(Duration.ofSeconds(60))
                     .POST(HttpRequest.BodyPublishers.ofString(jsonBody))
                     .build();
             

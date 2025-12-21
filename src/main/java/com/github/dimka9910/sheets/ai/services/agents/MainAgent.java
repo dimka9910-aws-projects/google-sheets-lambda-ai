@@ -1,7 +1,6 @@
 package com.github.dimka9910.sheets.ai.services.agents;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.github.dimka9910.sheets.ai.dto.*;
 import com.github.dimka9910.sheets.ai.dto.actions.*;
 import com.github.dimka9910.sheets.ai.dto.user.AccountEntry;
 import com.github.dimka9910.sheets.ai.dto.user.ConversationMessage;
@@ -10,8 +9,9 @@ import com.github.dimka9910.sheets.ai.dto.user.LinkedUserEntry;
 import com.github.dimka9910.sheets.ai.dto.user.UserEntity;
 import com.github.dimka9910.sheets.ai.services.agents.MessageClassifierAgent.Tag;
 import com.github.dimka9910.sheets.ai.services.llm.LLMClient;
-import com.github.dimka9910.sheets.ai.services.llm.OpenAIClient;
+import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.stereotype.Component;
 
 import java.util.List;
 import java.util.Map;
@@ -19,7 +19,7 @@ import java.util.Set;
 import java.util.stream.Collectors;
 
 /**
- * MainAgent - parses user commands using gpt-5-mini (reasoning model).
+ * Spring Component for main AI agent - parses user commands using gpt-5-mini (reasoning model).
  * 
  * Returns unified response format:
  * {
@@ -28,6 +28,8 @@ import java.util.stream.Collectors;
  * }
  */
 @Slf4j
+@Component
+@RequiredArgsConstructor
 public class MainAgent {
 
     // ═══════════════════════════════════════════════════════════════════════════
@@ -483,21 +485,11 @@ public class MainAgent {
     );
 
     // ═══════════════════════════════════════════════════════════════════════════
-    // DEPENDENCIES
+    // DEPENDENCIES (injected by Spring)
     // ═══════════════════════════════════════════════════════════════════════════
     
     private final LLMClient client;
     private final ObjectMapper objectMapper;
-
-    public MainAgent() {
-        this.client = OpenAIClient.getInstance();
-        this.objectMapper = new ObjectMapper();
-    }
-
-    public MainAgent(LLMClient client) {
-        this.client = client;
-        this.objectMapper = new ObjectMapper();
-    }
 
     // ═══════════════════════════════════════════════════════════════════════════
     // PROCESS
@@ -753,17 +745,6 @@ public class MainAgent {
         }
         
         // Always show last operation - model can use it for corrections or context
-            var lastOp = context.getLastOperation();
-            if (lastOp != null) {
-                ctx.append("\n## Last Operation:\n");
-                ctx.append(lastOp.getOperationType())
-                   .append(" ").append(lastOp.getAmount())
-                   .append(" ").append(lastOp.getCurrency())
-                   .append(" → ").append(lastOp.getAccountName())
-                   .append(" / ").append(lastOp.getFundName())
-                   .append(" (").append(lastOp.getComment()).append(")\n");
-            }
-            
         // Always show recent conversation - model can use it for context
             List<ConversationMessage> history = context.getConversationHistory();
             if (history != null && !history.isEmpty()) {

@@ -9,13 +9,15 @@ import com.github.dimka9910.sheets.ai.dto.user.FundEntry;
 import com.github.dimka9910.sheets.ai.dto.user.LinkedUserEntry;
 import com.github.dimka9910.sheets.ai.dto.user.UserEntity;
 import com.github.dimka9910.sheets.ai.services.agents.CustomInstructionAgent;
+import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.stereotype.Service;
 
 import java.util.ArrayList;
 import java.util.List;
 
 /**
- * Handler for processing custom instructions.
+ * Spring Service for processing custom instructions.
  * 
  * Responsibilities:
  * - Call CustomInstructionAgent to analyze user instructions
@@ -24,17 +26,13 @@ import java.util.List;
  * - Manage UserEntity aliases and custom instructions
  */
 @Slf4j
+@Service
+@RequiredArgsConstructor
 public class CustomInstructionHandler {
 
     private final CustomInstructionAgent customInstructionAgent;
     private final UserEntityService userEntityService;
     private final SQSPublisher sqsPublisher;
-
-    public CustomInstructionHandler(UserEntityService userEntityService, SQSPublisher sqsPublisher) {
-        this.customInstructionAgent = new CustomInstructionAgent();
-        this.userEntityService = userEntityService;
-        this.sqsPublisher = sqsPublisher;
-    }
 
     /**
      * Process CUSTOM_INSTRUCTION actions asynchronously.

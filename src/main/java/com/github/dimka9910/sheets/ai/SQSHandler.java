@@ -3,74 +3,35 @@ package com.github.dimka9910.sheets.ai;
 import com.amazonaws.services.lambda.runtime.Context;
 import com.amazonaws.services.lambda.runtime.RequestHandler;
 import com.amazonaws.services.lambda.runtime.events.SQSEvent;
-import com.fasterxml.jackson.databind.ObjectMapper;
-import com.github.dimka9910.sheets.ai.dto.ChatRequest;
-import com.github.dimka9910.sheets.ai.dto.ChatResponse;
-import com.github.dimka9910.sheets.ai.dto.user.UserEntity;
-import com.github.dimka9910.sheets.ai.services.ChatCommandService;
-import com.github.dimka9910.sheets.ai.services.SQSPublisher;
-import com.github.dimka9910.sheets.ai.services.UserEntityService;
-import lombok.extern.slf4j.Slf4j;
-
-import java.util.Optional;
+import com.github.dimka9910.sheets.ai.handler.SqsMessageHandler;
+import org.springframework.boot.SpringApplication;
+import org.springframework.context.ConfigurableApplicationContext;
 
 /**
- * SQS Lambda handler.
+ * AWS Lambda handler for SQS messages from Telegram Bot.
  * 
- * Flow: Telegram Bot → SQS Requests → this handler → ChatCommandService → SQS Responses
- *       Telegram Bot слушает Response Queue и отправляет в Telegram API.
+ * This class serves as the entry point for AWS Lambda and delegates
+ * to Spring Cloud Function for actual processing.
  * 
- * Resolves telegramUserId → userName before processing.
+ * Handler in template.yaml should point to this class:
+ * Handler: com.github.dimka9910.sheets.ai.SQSHandler::handleRequest
  */
-@Slf4j
 public class SQSHandler implements RequestHandler<SQSEvent, Void> {
-
-    private final ObjectMapper objectMapper = new ObjectMapper();
-    private final ChatCommandService chatCommandService;
-    private final SQSPublisher sqsPublisher;
-    private final UserEntityService userContextService;
-
-    public SQSHandler() {
-        this.userContextService = new UserEntityService();
-        this.chatCommandService = new ChatCommandService(userContextService);
-        this.sqsPublisher = new SQSPublisher();
+    
+    private static ConfigurableApplicationContext applicationContext;
+    private static SqsMessageHandler sqsMessageHandler;
+    
+    static {
+        // Initialize Spring Boot context once (Lambda container reuse)
+        applicationContext = SpringApplication.run(FinanceTrackerApplication.class);
+        sqsMessageHandler = applicationContext.getBean(SqsMessageHandler.class);
     }
-
+    
     @Override
     public Void handleRequest(SQSEvent event, Context context) {
-        log.info("Received {} SQS messages", event.getRecords().size());
-
-        for (SQSEvent.SQSMessage message : event.getRecords()) {
-            try {
-                processMessage(message);
-            } catch (Exception e) {
-                log.error("Error processing SQS message: {}", e.getMessage(), e);
-            }
-        }
-
-        return null;
-    }
-
-    private void processMessage(SQSEvent.SQSMessage message) throws Exception {
-        String body = message.getBody();
-        log.info("Processing SQS message: {}", body);
-
-        ChatRequest chatRequest = objectMapper.readValue(body, ChatRequest.class);
-        
-        // Resolve telegramUserId → userName
-        String telegramUserId = chatRequest.getTelegramUserId();
-        if (telegramUserId != null && chatRequest.getUserName() == null) {
-            Optional<UserEntity> userContext = userContextService.getByTelegramId(telegramUserId);
-            if (userContext.isPresent()) {
-                chatRequest.setUserName(userContext.get().getUserName());
-                log.info("Resolved telegramUserId {} → userName {}", telegramUserId, chatRequest.getUserName());
-            } else {
-                // New user from Telegram — userName not set yet
-                log.info("New Telegram user {}, userName not yet assigned", telegramUserId);
-            }
-        }
-        
-        // ChatCommandService internally handles sending response to SQS
-        chatCommandService.processCommand(chatRequest);
+        // Delegate to Spring Cloud Function handler
+        return sqsMessageHandler.apply(event);
     }
 }
+
+

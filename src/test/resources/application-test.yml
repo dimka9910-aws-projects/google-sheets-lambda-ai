@@ -1,0 +1,48 @@
+spring:
+  datasource:
+    url: jdbc:h2:mem:testdb
+    driver-class-name: org.h2.Driver
+    username: sa
+    password:
+    
+    hikari:
+      maximum-pool-size: 1
+      minimum-idle: 0
+
+  jpa:
+    hibernate:
+      ddl-auto: create-drop
+    show-sql: true
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.H2Dialect
+
+  liquibase:
+    enabled: false
+
+  cloud:
+    aws:
+      region:
+        static: eu-central-1
+      sqs:
+        enabled: false
+      dynamodb:
+        enabled: false
+
+app:
+  openai:
+    api-key: test-key
+  sheets:
+    queue-url: http://localhost:9324/queue/test-sheets
+    dry-run: true
+  response:
+    queue-url: http://localhost:9324/queue/test-responses
+  dynamodb:
+    users-table: test-users
+
+logging:
+  level:
+    root: WARN
+    com.github.dimka9910.sheets.ai: DEBUG
+
+

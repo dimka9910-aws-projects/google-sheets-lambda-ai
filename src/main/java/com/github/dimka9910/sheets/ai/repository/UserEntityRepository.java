@@ -1,53 +1,43 @@
 package com.github.dimka9910.sheets.ai.repository;
 
-import com.github.dimka9910.sheets.ai.config.AppConfig;
 import com.github.dimka9910.sheets.ai.dto.user.UserEntity;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.stereotype.Repository;
 import software.amazon.awssdk.enhanced.dynamodb.DynamoDbEnhancedClient;
 import software.amazon.awssdk.enhanced.dynamodb.DynamoDbIndex;
 import software.amazon.awssdk.enhanced.dynamodb.DynamoDbTable;
 import software.amazon.awssdk.enhanced.dynamodb.Key;
 import software.amazon.awssdk.enhanced.dynamodb.TableSchema;
 import software.amazon.awssdk.enhanced.dynamodb.model.QueryConditional;
-import software.amazon.awssdk.regions.Region;
-import software.amazon.awssdk.services.dynamodb.DynamoDbClient;
 
 import java.util.Optional;
 
 /**
- * Repository for UserEntity in DynamoDB.
+ * Spring Repository for UserEntity in DynamoDB.
+ * Uses Spring DI for DynamoDB client and table name.
  * 
  * Table: finance-tracker-users-{env}
  * PK: userName (e.g., "DIMA", "KIKI")
  * GSI: telegramId-index (for lookup from Telegram)
  */
 @Slf4j
+@Repository
 public class UserEntityRepository {
 
     private final DynamoDbTable<UserEntity> table;
     private final DynamoDbIndex<UserEntity> telegramIdIndex;
 
-    public UserEntityRepository() {
-        String tableName = AppConfig.getUsersTableName();
-        String region = AppConfig.getAwsRegion();
+    public UserEntityRepository(
+            DynamoDbEnhancedClient dynamoDbEnhancedClient,
+            @Value("${USERS_TABLE_NAME:users-dev}") String tableName) {
         
-        log.info("Initializing UserEntityRepository: table={}, region={}", tableName, region);
+        log.info("🔌 Initializing UserEntityRepository: table={}", tableName);
+
+        this.table = dynamoDbEnhancedClient.table(tableName, TableSchema.fromBean(UserEntity.class));
+        this.telegramIdIndex = table.index("telegramId-index");
         
-        DynamoDbClient dynamoDbClient = DynamoDbClient.builder()
-                .region(Region.of(region))
-                .build();
-
-        DynamoDbEnhancedClient enhancedClient = DynamoDbEnhancedClient.builder()
-                .dynamoDbClient(dynamoDbClient)
-                .build();
-
-        this.table = enhancedClient.table(tableName, TableSchema.fromBean(UserEntity.class));
-        this.telegramIdIndex = table.index("telegramId-index");
-    }
-
-    public UserEntityRepository(DynamoDbEnhancedClient enhancedClient, String tableName) {
-        this.table = enhancedClient.table(tableName, TableSchema.fromBean(UserEntity.class));
-        this.telegramIdIndex = table.index("telegramId-index");
+        log.info("✅ UserEntityRepository initialized");
     }
 
     /**

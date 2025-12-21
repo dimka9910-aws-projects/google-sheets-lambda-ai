@@ -4,30 +4,27 @@ import com.github.dimka9910.sheets.ai.dto.user.AccountEntry;
 import com.github.dimka9910.sheets.ai.dto.user.FundEntry;
 import com.github.dimka9910.sheets.ai.dto.user.UserEntity;
 import com.github.dimka9910.sheets.ai.repository.UserEntityRepository;
+import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.stereotype.Service;
 
 import java.util.List;
 import java.util.Optional;
 
 /**
- * Service for managing user context.
+ * Spring Service for managing user context.
  * Reads/writes to DynamoDB via UserEntityRepository.
+ * Uses Spring DI.
  * 
  * Primary key: userName (e.g., "DIMA", "KIKI")
  * GSI: telegramId (for lookup from Telegram)
  */
 @Slf4j
+@Service
+@RequiredArgsConstructor
 public class UserEntityService {
 
     private final UserEntityRepository repository;
-
-    public UserEntityService() {
-        this.repository = new UserEntityRepository();
-    }
-
-    public UserEntityService(UserEntityRepository repository) {
-        this.repository = repository;
-    }
 
     // ═══════════════════════════════════════════════════════════════════════════
     // GET CONTEXT
