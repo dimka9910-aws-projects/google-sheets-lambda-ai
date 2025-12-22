@@ -83,7 +83,7 @@ jobs:
       
       - name: SAM Deploy to DEV
         run: |
-          PARAMS="Environment=dev OpenAIApiKey=${{ secrets.OPENAI_API_KEY }} DatabaseUrl=${{ secrets.DATABASE_URL_DEV }} DryRun=true"
+          PARAMS="Environment=dev OpenAIApiKey=${{ secrets.OPENAI_API_KEY }} DatabaseUrl=${{ secrets.DATABASE_URL_DEV }} DryRun=false"
           if [ -n "${{ secrets.SHEETS_QUEUE_URL_DEV }}" ]; then
             PARAMS="$PARAMS SheetsQueueUrl=${{ secrets.SHEETS_QUEUE_URL_DEV }}"
           fi
