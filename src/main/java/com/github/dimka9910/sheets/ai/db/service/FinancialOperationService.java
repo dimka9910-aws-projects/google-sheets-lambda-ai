@@ -4,8 +4,8 @@ import com.github.dimka9910.sheets.ai.db.entity.FinancialOperation;
 import com.github.dimka9910.sheets.ai.db.mapper.FinancialOperationMapper;
 import com.github.dimka9910.sheets.ai.db.repository.FinancialOperationRepository;
 import com.github.dimka9910.sheets.ai.dto.actions.FinancialAction;
-import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -23,15 +23,28 @@ import java.util.UUID;
  * - EXCHANGE: Not yet implemented
  * 
  * All operations are transactional.
+ * 
+ * DRY_RUN mode: when enabled, only logs operations without actually saving to DB.
  */
 @Slf4j
 @Service
-@RequiredArgsConstructor
 @ConditionalOnProperty(name = "DATABASE_URL")
 public class FinancialOperationService {
 
     private final FinancialOperationRepository repository;
     private final FinancialOperationMapper mapper;
+    private final boolean dryRun;
+
+    public FinancialOperationService(
+            FinancialOperationRepository repository,
+            FinancialOperationMapper mapper,
+            @Value("${DRY_RUN:false}") String dryRunStr) {
+        this.repository = repository;
+        this.mapper = mapper;
+        this.dryRun = "true".equalsIgnoreCase(dryRunStr) || "1".equals(dryRunStr);
+        
+        log.info("✅ FinancialOperationService initialized (DRY_RUN={})", this.dryRun);
+    }
 
     /**
      * Save EXPENSE operation to database.
@@ -47,6 +60,14 @@ public class FinancialOperationService {
             action.getAmount(), action.getCurrency(), action.getAccount(), action.getFund());
         
         FinancialOperation entity = mapper.toExpenseEntity(action, userId);
+        
+        // DRY_RUN mode - only log, don't save to DB
+        if (dryRun) {
+            log.info("[DRY_RUN] Would save EXPENSE: id={}, amount={}, currency={}, account={}", 
+                entity.getId(), entity.getAmount(), entity.getCurrency(), entity.getAccount());
+            return entity;
+        }
+        
         FinancialOperation saved = repository.save(entity);
         
         log.info("✅ EXPENSE saved: id={}, amount={}", saved.getId(), saved.getAmount());
@@ -67,6 +88,14 @@ public class FinancialOperationService {
             action.getAmount(), action.getCurrency(), action.getAccount(), action.getFund());
         
         FinancialOperation entity = mapper.toIncomeEntity(action, userId);
+        
+        // DRY_RUN mode - only log, don't save to DB
+        if (dryRun) {
+            log.info("[DRY_RUN] Would save INCOME: id={}, amount={}, currency={}, account={}", 
+                entity.getId(), entity.getAmount(), entity.getCurrency(), entity.getAccount());
+            return entity;
+        }
+        
         FinancialOperation saved = repository.save(entity);
         
         log.info("✅ INCOME saved: id={}, amount={}", saved.getId(), saved.getAmount());
@@ -90,13 +119,23 @@ public class FinancialOperationService {
             action.getAmount(), action.getCurrency(), action.getAccount(), action.getTargetAccount());
         
         FinancialOperation[] entities = mapper.toTransferEntities(action, userId);
-        FinancialOperation debit = repository.save(entities[0]);
-        FinancialOperation credit = repository.save(entities[1]);
+        FinancialOperation debit = entities[0];
+        FinancialOperation credit = entities[1];
+        
+        // DRY_RUN mode - only log, don't save to DB
+        if (dryRun) {
+            log.info("[DRY_RUN] Would save TRANSFER: link_id={}, from={} to={}, amount={}", 
+                debit.getLinkId(), action.getAccount(), action.getTargetAccount(), action.getAmount());
+            return List.of(debit, credit);
+        }
+        
+        FinancialOperation savedDebit = repository.save(debit);
+        FinancialOperation savedCredit = repository.save(credit);
         
         log.info("✅ TRANSFER saved: link_id={}, debit_id={}, credit_id={}", 
-            debit.getLinkId(), debit.getId(), credit.getId());
+            savedDebit.getLinkId(), savedDebit.getId(), savedCredit.getId());
         
-        return List.of(debit, credit);
+        return List.of(savedDebit, savedCredit);
     }
 
     /**

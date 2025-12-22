@@ -21,23 +21,20 @@ public class SQSPublisher {
     private final SqsClient sqsClient;
     private final ObjectMapper objectMapper;
     private final String responseQueueUrl;
-    private final boolean dryRun;
 
     public SQSPublisher(
             SqsClient sqsClient,
             ObjectMapper objectMapper,
-            @Value("${RESPONSE_QUEUE_URL:}") String responseQueueUrl,
-            @Value("${DRY_RUN:false}") String dryRunStr) {
+            @Value("${RESPONSE_QUEUE_URL:}") String responseQueueUrl) {
         this.sqsClient = sqsClient;
         this.objectMapper = objectMapper;
         this.responseQueueUrl = responseQueueUrl;
-        this.dryRun = "true".equalsIgnoreCase(dryRunStr) || "1".equals(dryRunStr);
 
         if (responseQueueUrl == null || responseQueueUrl.isBlank()) {
             log.warn("⚠️ RESPONSE_QUEUE_URL is not set - responses won't be sent back");
         }
         
-        log.info("✅ SQSPublisher initialized (DRY_RUN={})", this.dryRun);
+        log.info("✅ SQSPublisher initialized");
     }
 
     /**
@@ -51,12 +48,6 @@ public class SQSPublisher {
 
         try {
             String messageBody = objectMapper.writeValueAsString(response);
-            
-            // DRY_RUN mode - только логируем
-            if (dryRun) {
-                log.info("[DRY_RUN] Would send response: {}", messageBody);
-                return;
-            }
             
             log.info("📤 Sending response to Telegram bot");
 
