@@ -39,32 +39,26 @@ public class ChatCommandService {
      * Process chat command.
      */
     public ChatResponse processCommand(ChatRequest request) {
-        String userName = request.getUserName();
         String telegramUserId = request.getTelegramUserId();
         String message = request.getMessage() != null ? request.getMessage().trim() : "";
         
-        log.info("Processing: user={}, telegramUserId={}, message={}", userName, telegramUserId, message);
+        log.info("Processing: telegramUserId={}, message={}", telegramUserId, message);
 
-        // Resolve user: userName → DynamoDB OR telegramUserId → DynamoDB
-        UserEntity userContext = null;
-        
-        if (userName != null && !userName.isBlank()) {
-            // Direct userName provided (e.g., from Web app)
-            userContext = userContextService.getByUserName(userName);
-        } else if (telegramUserId != null && !telegramUserId.isBlank()) {
-            // From Telegram: try to find user by telegramId
-            var found = userContextService.getByTelegramId(telegramUserId);
-            if (found.isPresent()) {
-                userContext = found.get();
-                userName = userContext.getUserName();
-                log.info("Resolved telegramUserId={} → userName={}", telegramUserId, userName);
-            }
-        }
-        
-        // New user — need to create account first
-        if (userContext == null) {
+        // Resolve user from Telegram ID via DynamoDB
+        if (telegramUserId == null || telegramUserId.isBlank()) {
+            log.warn("No telegramUserId provided in request");
             return handleNewUser(request);
         }
+        
+        var found = userContextService.getByTelegramId(telegramUserId);
+        if (found.isEmpty()) {
+            // New user — need to create account first
+            return handleNewUser(request);
+        }
+        
+        UserEntity userContext = found.get();
+        String userName = userContext.getUserName();
+        log.info("Resolved telegramUserId={} → userName={}", telegramUserId, userName);
         
         loadLinkedUserEntitys(userContext);
         
