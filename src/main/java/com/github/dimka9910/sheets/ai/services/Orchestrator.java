@@ -38,7 +38,7 @@ public class Orchestrator {
     // ═══════════════════════════════════════════════════════════════════════════
     
     /**
-     * Full processing: classify → parse → handle → ChatResponse
+     * Full processing: validate → classify → parse → handle → ChatResponse
      */
     public ChatResponse process(ChatRequest request, UserEntity userContext) {
         String message = request.getMessage();
@@ -50,6 +50,11 @@ public class Orchestrator {
         log.info("Input: \"{}\"", truncate(message, 60));
         
         try {
+            // Step 0: Validate basic setup
+            if (!hasBasicSetup(userContext)) {
+                return buildSetupRequiredResponse(request, userContext);
+            }
+            
             // Step 1: Classify
             Set<Tag> tags = classify(message, previousBotMessage, hasPendingResponse, linkedUsers);
             
@@ -104,6 +109,50 @@ public class Orchestrator {
         }
         
         return tags;
+    }
+    
+    // ═══════════════════════════════════════════════════════════════════════════
+    // VALIDATION
+    // ═══════════════════════════════════════════════════════════════════════════
+    
+    /**
+     * Check if user has basic setup (at least 1 account and 1 fund).
+     */
+    private boolean hasBasicSetup(UserEntity userContext) {
+        boolean hasAccounts = userContext.getAccounts() != null && !userContext.getAccounts().isEmpty();
+        boolean hasFunds = userContext.getFunds() != null && !userContext.getFunds().isEmpty();
+        return hasAccounts && hasFunds;
+    }
+    
+    /**
+     * Build response for user missing setup.
+     */
+    private ChatResponse buildSetupRequiredResponse(ChatRequest request, UserEntity userContext) {
+        log.info("User {} missing setup", userContext.getUserName());
+        
+        boolean hasAccounts = userContext.getAccounts() != null && !userContext.getAccounts().isEmpty();
+        boolean hasFunds = userContext.getFunds() != null && !userContext.getFunds().isEmpty();
+        
+        StringBuilder sb = new StringBuilder();
+        sb.append("⚙️ Before I can help you track expenses, please set up:\n\n");
+        
+        if (!hasAccounts) {
+            sb.append("📋 **Accounts** - where your money is stored\n");
+            sb.append("   Example: \"add account CARD\" or \"add account CASH\"\n\n");
+        }
+        
+        if (!hasFunds) {
+            sb.append("📂 **Funds/Categories** - how you categorize expenses\n");
+            sb.append("   Example: \"add fund FOOD\" or \"add fund TRANSPORT\"\n\n");
+        }
+        
+        sb.append("After setup, you can start tracking: \"coffee 200\" ☕");
+        
+        return ChatResponse.builder()
+                .chatId(request.getResponseChatId())
+                .success(true)
+                .message(sb.toString())
+                .build();
     }
     
     // ═══════════════════════════════════════════════════════════════════════════

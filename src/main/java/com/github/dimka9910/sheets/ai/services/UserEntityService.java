@@ -2,6 +2,7 @@ package com.github.dimka9910.sheets.ai.services;
 
 import com.github.dimka9910.sheets.ai.dto.user.AccountEntry;
 import com.github.dimka9910.sheets.ai.dto.user.FundEntry;
+import com.github.dimka9910.sheets.ai.dto.user.LinkedUserEntry;
 import com.github.dimka9910.sheets.ai.dto.user.UserEntity;
 import com.github.dimka9910.sheets.ai.repository.UserEntityRepository;
 import lombok.RequiredArgsConstructor;
@@ -60,71 +61,43 @@ public class UserEntityService {
     }
 
     /**
-     * Save user context.
+     * Resolve user context from Telegram ID with loaded linked users.
+     * 
+     * This is the main method for resolving user context from incoming Telegram messages.
+     * 
+     * @param telegramId Telegram user ID
+     * @return Optional<UserEntity> with loaded linked users, or empty if not found
+     */
+    public Optional<UserEntity> resolveWithLinkedUsers(String telegramId) {
+        if (telegramId == null || telegramId.isBlank()) {
+            log.warn("Cannot resolve: telegramId is null or blank");
+            return Optional.empty();
+        }
+
+        log.info("Resolving telegramId={}", telegramId);
+        
+        var found = getByTelegramId(telegramId);
+        if (found.isEmpty()) {
+            log.info("User not found for telegramId={}", telegramId);
+            return Optional.empty();
+        }
+
+        UserEntity userContext = found.get();
+        String userName = userContext.getUserName();
+        log.info("Resolved telegramId={} → userName={}", telegramId, userName);
+
+        // Load linked users' contexts
+        loadLinkedUserContexts(userContext);
+
+        return Optional.of(userContext);
+    }
+
+    /**
+     * Save user context to DynamoDB.
      */
     public void saveContext(UserEntity context) {
         log.info("Saving context for userName: {}", context.getUserName());
         repository.save(context);
-    }
-
-    // ═══════════════════════════════════════════════════════════════════════════
-    // SETTINGS OPERATIONS
-    // ═══════════════════════════════════════════════════════════════════════════
-
-    public void addInstruction(String userName, String instruction) {
-        UserEntity context = getByUserName(userName);
-        context.addInstruction(instruction);
-        saveContext(context);
-        log.info("Added instruction for {}: {}", userName, instruction);
-    }
-
-    public void removeInstruction(String userName, int index) {
-        UserEntity context = getByUserName(userName);
-        context.removeInstruction(index);
-        saveContext(context);
-        log.info("Removed instruction {} for {}", index, userName);
-    }
-
-    public void setDefaultCurrency(String userName, String currency) {
-        UserEntity context = getByUserName(userName);
-        context.setDefaultCurrency(currency);
-        saveContext(context);
-        log.info("Set default currency for {}: {}", userName, currency);
-    }
-
-    public void setDefaultAccount(String userName, String account) {
-        UserEntity context = getByUserName(userName);
-        context.setDefaultAccount(account);
-        saveContext(context);
-        log.info("Set default account for {}: {}", userName, account);
-    }
-
-    public void setDefaultFund(String userName, String fund) {
-        UserEntity context = getByUserName(userName);
-        context.setDefaultFund(fund);
-        saveContext(context);
-        log.info("Set default fund for {}: {}", userName, fund);
-    }
-
-    public void addAccount(String userName, String account) {
-        UserEntity context = getByUserName(userName);
-        context.addAccount(account);
-        saveContext(context);
-        log.info("Added account for {}: {}", userName, account);
-    }
-
-    public void addFund(String userName, String fund) {
-        UserEntity context = getByUserName(userName);
-        context.addFund(fund);
-        saveContext(context);
-        log.info("Added fund for {}: {}", userName, fund);
-    }
-
-    public void clearInstructions(String userName) {
-        UserEntity context = getByUserName(userName);
-        context.clearInstructions();
-        saveContext(context);
-        log.info("Cleared instructions for {}", userName);
     }
 
     // ═══════════════════════════════════════════════════════════════════════════
@@ -189,6 +162,31 @@ public class UserEntityService {
         }
         
         return sb.toString();
+    }
+    
+    /**
+     * Load linked users' full contexts (accounts, funds, etc.)
+     */
+    private void loadLinkedUserContexts(UserEntity userContext) {
+        List<LinkedUserEntry> linkedUsers = userContext.getLinkedUsers();
+        if (linkedUsers == null || linkedUsers.isEmpty()) {
+            return;
+        }
+
+        for (LinkedUserEntry linkedUser : linkedUsers) {
+            String linkedUserName = linkedUser.getUserName();
+            if (linkedUserName != null && !linkedUserName.equals(userContext.getUserName())) {
+                try {
+                    UserEntity linkedContext = getByUserName(linkedUserName);
+                    if (linkedContext != null && linkedContext.getUserName() != null) {
+                        userContext.addLinkedUserEntity(linkedUserName, linkedContext);
+                        log.debug("Loaded linked user context: {}", linkedUserName);
+                    }
+                } catch (Exception e) {
+                    log.warn("Failed to load linked user context: {}", linkedUserName, e);
+                }
+            }
+        }
     }
     
     private String orNotSet(String value) {
