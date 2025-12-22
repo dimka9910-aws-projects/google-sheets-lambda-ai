@@ -40,17 +40,32 @@ public class ChatCommandService {
      */
     public ChatResponse processCommand(ChatRequest request) {
         String userName = request.getUserName();
+        String telegramUserId = request.getTelegramUserId();
         String message = request.getMessage() != null ? request.getMessage().trim() : "";
         
-        log.info("Processing: user={}, message={}", userName, message);
+        log.info("Processing: user={}, telegramUserId={}, message={}", userName, telegramUserId, message);
 
-        // New user without userName — need to create account first
-        if (userName == null || userName.isBlank()) {
+        // Resolve user: userName → DynamoDB OR telegramUserId → DynamoDB
+        UserEntity userContext = null;
+        
+        if (userName != null && !userName.isBlank()) {
+            // Direct userName provided (e.g., from Web app)
+            userContext = userContextService.getByUserName(userName);
+        } else if (telegramUserId != null && !telegramUserId.isBlank()) {
+            // From Telegram: try to find user by telegramId
+            var found = userContextService.getByTelegramId(telegramUserId);
+            if (found.isPresent()) {
+                userContext = found.get();
+                userName = userContext.getUserName();
+                log.info("Resolved telegramUserId={} → userName={}", telegramUserId, userName);
+            }
+        }
+        
+        // New user — need to create account first
+        if (userContext == null) {
             return handleNewUser(request);
         }
-
-        // Load user context by userName
-        UserEntity userContext = userContextService.getByUserName(userName);
+        
         loadLinkedUserEntitys(userContext);
         
         // 1. Admin commands (/debug, /reset, etc.)
