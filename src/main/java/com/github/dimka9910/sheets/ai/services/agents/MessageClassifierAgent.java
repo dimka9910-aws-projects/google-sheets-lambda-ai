@@ -1,18 +1,27 @@
 package com.github.dimka9910.sheets.ai.services.agents;
 
-import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
-import com.github.dimka9910.sheets.ai.services.llm.LLMClient;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.ai.chat.messages.SystemMessage;
+import org.springframework.ai.chat.messages.UserMessage;
+import org.springframework.ai.chat.model.ChatModel;
+import org.springframework.ai.chat.prompt.Prompt;
+import org.springframework.ai.converter.BeanOutputConverter;
+import org.springframework.ai.openai.OpenAiChatOptions;
+import org.springframework.ai.openai.api.OpenAiApi;
 import org.springframework.stereotype.Component;
 
-import java.util.HashSet;
+import java.util.List;
 import java.util.Set;
 
 /**
- * Spring Component for message classification using LLM.
+ * Spring Component for message classification using Spring AI + OpenAI.
  * Uses gpt-4o-mini (fast, cheap) for classification.
+ * 
+ * Leverages Spring AI features:
+ * - ChatModel for LLM calls
+ * - BeanOutputConverter for structured JSON output
+ * - Automatic retry and error handling
  */
 @Slf4j
 @Component
@@ -133,35 +142,79 @@ public class MessageClassifierAgent {
             - Simple single expense → just ["FINANCIAL"]
             """;
     
-    private static final String PROMPT_FORMAT = """
-            
-            ## Response Format (JSON only, no explanation)
-            ```json
-            {"tags": ["FINANCIAL"]}
-            ```
-            """;
+    // ═══════════════════════════════════════════════════════════════════════════
+    // DTO for Structured Output
+    // ═══════════════════════════════════════════════════════════════════════════
+    
+    /**
+     * Classification result from LLM (used for structured output parsing).
+     */
+    public record ClassificationResult(List<String> tags) {}
     
     // ═══════════════════════════════════════════════════════════════════════════
     // DEPENDENCIES (injected by Spring)
     // ═══════════════════════════════════════════════════════════════════════════
     
-    private final LLMClient client;
-    private final ObjectMapper objectMapper;
+    private final ChatModel chatModel;
+    private final BeanOutputConverter<ClassificationResult> outputConverter;
     
     // ═══════════════════════════════════════════════════════════════════════════
-    // PROCESS
+    // CONSTRUCTOR (for manual converter creation)
+    // ═══════════════════════════════════════════════════════════════════════════
+    
+    public MessageClassifierAgent(ChatModel chatModel) {
+        this.chatModel = chatModel;
+        this.outputConverter = new BeanOutputConverter<>(ClassificationResult.class);
+    }
+    
+    // ═══════════════════════════════════════════════════════════════════════════
+    // PROCESS (using Spring AI)
     // ═══════════════════════════════════════════════════════════════════════════
     
     public Response process(Request request) {
         long start = System.currentTimeMillis();
         
         try {
-            String prompt = buildPrompt(request);
-            LLMClient.Response llmResponse = client.complete(MODEL, prompt, MAX_TOKENS);
-            return parseResponse(llmResponse, start);
+            // Build system + user messages
+            String systemPrompt = buildSystemPrompt();
+            String userPrompt = buildUserPrompt(request);
+            
+            // Add JSON schema for structured output
+            String format = outputConverter.getFormat();
+            systemPrompt += "\n\n## Response Format\nReturn JSON following this schema:\n" + format;
+            
+            // Create Spring AI Prompt with messages
+            Prompt prompt = new Prompt(
+                    List.of(
+                            new SystemMessage(systemPrompt),
+                            new UserMessage(userPrompt)
+                    ),
+                    OpenAiChatOptions.builder()
+                            .withModel(MODEL)
+                            .withMaxTokens(MAX_TOKENS)
+                            .withTemperature(0.3)  // Lower temperature for classification
+                            .build()
+            );
+            
+            // Call LLM via Spring AI
+            org.springframework.ai.chat.model.ChatResponse chatResponse = chatModel.call(prompt);
+            
+            // Parse structured output
+            String content = chatResponse.getResult().getOutput().getContent();
+            ClassificationResult result = outputConverter.convert(content);
+            
+            // Convert to Set<Tag>
+            Set<Tag> tags = parseTags(result.tags());
+            
+            long latency = System.currentTimeMillis() - start;
+            int tokensUsed = chatResponse.getMetadata().getUsage().getTotalTokens().intValue();
+            
+            log.info("✅ Classification: tags={} ({}ms, {} tokens)", tags, latency, tokensUsed);
+            
+            return new Response(tags, content, latency, tokensUsed, null);
             
         } catch (Exception e) {
-            log.error("Classification error: {}", e.getMessage());
+            log.error("❌ Classification error: {}", e.getMessage(), e);
             return new Response(
                     Set.of(Tag.FINANCIAL),  // Safe fallback
                     "{\"error\":\"" + e.getMessage() + "\"}",
@@ -180,78 +233,52 @@ public class MessageClassifierAgent {
     }
     
     // ═══════════════════════════════════════════════════════════════════════════
-    // BUILD PROMPT
+    // BUILD PROMPT (Spring AI uses system + user messages)
     // ═══════════════════════════════════════════════════════════════════════════
     
-    private String buildPrompt(Request request) {
+    private String buildSystemPrompt() {
+        return PROMPT_INTRO + PROMPT_TAGS + PROMPT_RULES;
+    }
+    
+    private String buildUserPrompt(Request request) {
         StringBuilder sb = new StringBuilder();
-        
-        sb.append(PROMPT_INTRO);
-        sb.append(PROMPT_TAGS);
-        sb.append(PROMPT_RULES);
-        sb.append(PROMPT_FORMAT);
         
         // Context
         if (request.previousBotMessage() != null && !request.previousBotMessage().isBlank()) {
-            sb.append("\n## Previous Bot Message\n```\n")
+            sb.append("## Previous Bot Message\n```\n")
               .append(request.previousBotMessage())
-              .append("\n```\n");
+              .append("\n```\n\n");
         } else {
-            sb.append("\n## Previous Bot Message\nNone (new conversation)\n");
+            sb.append("## Previous Bot Message\nNone (new conversation)\n\n");
         }
         
-        sb.append("\n## User Message\n```\n")
+        sb.append("## User Message\n```\n")
           .append(request.message())
-          .append("\n```\n\nJSON response:");
+          .append("\n```");
         
         return sb.toString();
     }
     
     // ═══════════════════════════════════════════════════════════════════════════
-    // PARSE RESPONSE
+    // PARSE TAGS (Spring AI handles JSON parsing, we just convert strings to enums)
     // ═══════════════════════════════════════════════════════════════════════════
     
-    private Response parseResponse(LLMClient.Response llmResponse, long startTime) {
-        try {
-            String json = llmResponse.contentJson();
-            JsonNode root = objectMapper.readTree(json);
-            
-            Set<Tag> tags = new HashSet<>();
-            JsonNode tagsNode = root.path("tags");
-            if (tagsNode.isArray()) {
-                for (JsonNode tagNode : tagsNode) {
-                    Tag tag = parseTag(tagNode.asText());
-                    if (tag != null) tags.add(tag);
-                }
+    private Set<Tag> parseTags(List<String> tagStrings) {
+        Set<Tag> tags = new java.util.HashSet<>();
+        
+        for (String tagStr : tagStrings) {
+            try {
+                Tag tag = Tag.valueOf(tagStr.toUpperCase().trim());
+                tags.add(tag);
+            } catch (IllegalArgumentException e) {
+                log.warn("Unknown tag '{}', ignoring", tagStr);
             }
-            
-            if (tags.isEmpty()) {
-                tags.add(Tag.FINANCIAL);  // Default
-            }
-            
-            long latency = System.currentTimeMillis() - startTime;
-            log.info("Classified: {} ({}ms, {} tokens)", tags, latency, llmResponse.totalTokens());
-            
-            return new Response(tags, json, latency, llmResponse.totalTokens(), null);
-            
-        } catch (Exception e) {
-            log.error("Parse error: {}", e.getMessage());
-            return new Response(
-                    Set.of(Tag.FINANCIAL),
-                    llmResponse.content(),
-                    System.currentTimeMillis() - startTime,
-                    llmResponse.totalTokens(),
-                    "Parse error: " + e.getMessage()
-            );
         }
-    }
-    
-    private Tag parseTag(String tagStr) {
-        try {
-            return Tag.valueOf(tagStr.toUpperCase().trim());
-        } catch (IllegalArgumentException e) {
-            log.warn("Unknown tag '{}', ignoring", tagStr);
-            return null;
+        
+        if (tags.isEmpty()) {
+            tags.add(Tag.FINANCIAL);  // Default fallback
         }
+        
+        return tags;
     }
 }

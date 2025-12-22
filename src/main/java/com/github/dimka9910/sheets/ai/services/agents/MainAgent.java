@@ -517,7 +517,7 @@ public class MainAgent {
             
             LLMClient.Response llmResponse = client.completeWithReasoning(MODEL, prompt, MAX_COMPLETION_TOKENS);
             
-            log.info("AI response: {}", truncate(llmResponse.content(), 200));
+            log.info("AI response: {}", truncate(llmResponse.content(), 400));
             
             return parseResponse(llmResponse, start);
             
