@@ -102,6 +102,13 @@ public class MainAgent {
             
             ## Financial Operations (type: FINANCIAL):
             
+            **🚨 CRITICAL RULE FOR ALL FINANCIAL ACTIONS:**
+            - Fields marked `// MANDATORY` MUST be filled
+            - If you CANNOT determine a MANDATORY field value:
+              - ❌ DO NOT create FINANCIAL action with null/missing value
+              - ✅ CREATE PENDING_CLARIFICATION asking user for missing info
+              - Example: Missing targetAccount → ask "Which account should I use for KIKI?"
+            
             **EXPENSE - Money spent:**
             ```json
             {
@@ -309,9 +316,12 @@ public class MainAgent {
             
             4. **targetAccount is MANDATORY for TRANSFER to/from linked user:**
                - Use their account from "Linked users" list (shown with "— accounts: ...")
-               - try to choose account applying the rules of default's, aliases, otherwise if you can't determine one for sure - create PENDING_CLARIFICATION
-               - If no account available → create PENDING_CLARIFICATION
-               - NEVER send TRANSFER with null targetAccount!
+               - Try to choose account applying the rules of defaults, aliases
+               - **If you cannot determine targetAccount for sure:**
+                 - ❌ DO NOT create TRANSFER action with targetAccount: null
+                 - ✅ CREATE PENDING_CLARIFICATION asking user to specify the account
+                 - Example: "Which account should I use for KIKI? Available: CARD_KIKI_RAIF, CASH_KIKI"
+               - **CRITICAL: TRANSFER with null targetAccount will fail!**
             
             5. **NEVER create TRANSFER to/from linked user with:**
                - Missing or null userName (must always specify who sends)
