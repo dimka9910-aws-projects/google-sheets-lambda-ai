@@ -1,35 +1,72 @@
 package com.github.dimka9910.sheets.ai.dto.actions;
 
-import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
-import com.fasterxml.jackson.annotation.JsonSubTypes;
-import com.fasterxml.jackson.annotation.JsonTypeInfo;
+import com.fasterxml.jackson.annotation.JsonIgnore;
+import lombok.AllArgsConstructor;
+import lombok.Builder;
 import lombok.Data;
+import lombok.NoArgsConstructor;
 
 /**
- * Base class for all instruction-related actions.
- * Used by CustomInstructionAgent to modify user context.
+ * Universal action for CustomInstructionAgent.
+ * Replaces 8 separate action classes with one flexible structure.
+ * 
+ * Examples:
+ * - ADD_LINKED_USER_ALIAS: entityType="linkedUser", entityId="KIKI", value="Ksyusha"
+ * - ADD_ACCOUNT_ALIAS: entityType="account", entityId="CARD_DIMA_RAIF", value="raif"
+ * - ADD_FUND_ALIAS: entityType="fund", entityId="DIMA_MONTHLY_BUDGET", value="monthly"
+ * - ADD_CUSTOM_INSTRUCTION: entityType="customInstruction", value="rubles = BYN"
+ * - REMOVE_ACCOUNT_ALIAS: entityType="account", entityId="CARD_DIMA_RAIF", value="raif"
+ * - REMOVE_CUSTOM_INSTRUCTION: entityType="customInstruction", index=2
+ * - UPDATE_DEFAULT: entityType="default", entityId="currency", value="EUR"
  */
 @Data
-@JsonIgnoreProperties(ignoreUnknown = true)
-@JsonTypeInfo(
-    use = JsonTypeInfo.Id.NAME,
-    include = JsonTypeInfo.As.PROPERTY,
-    property = "actionType"
-)
-@JsonSubTypes({
-    @JsonSubTypes.Type(value = AddLinkedUserAliasAction.class, name = "ADD_LINKED_USER_ALIAS"),
-    @JsonSubTypes.Type(value = RemoveLinkedUserAliasAction.class, name = "REMOVE_LINKED_USER_ALIAS"),
-    @JsonSubTypes.Type(value = AddAccountAliasAction.class, name = "ADD_ACCOUNT_ALIAS"),
-    @JsonSubTypes.Type(value = RemoveAccountAliasAction.class, name = "REMOVE_ACCOUNT_ALIAS"),
-    @JsonSubTypes.Type(value = AddFundAliasAction.class, name = "ADD_FUND_ALIAS"),
-    @JsonSubTypes.Type(value = RemoveFundAliasAction.class, name = "REMOVE_FUND_ALIAS"),
-    @JsonSubTypes.Type(value = AddCustomInstructionAction.class, name = "ADD_CUSTOM_INSTRUCTION"),
-    @JsonSubTypes.Type(value = RemoveCustomInstructionAction.class, name = "REMOVE_CUSTOM_INSTRUCTION"),
-    @JsonSubTypes.Type(value = UpdateDefaultAction.class, name = "UPDATE_DEFAULT"),
-    @JsonSubTypes.Type(value = AskClarificationAction.class, name = "ASK_CLARIFICATION")
-})
-public abstract class InstructionAction {
+@Builder
+@NoArgsConstructor
+@AllArgsConstructor
+public class InstructionAction implements CustomInstructionActionBase {
     
-    public abstract String getActionType();
+    /**
+     * Action type identifier.
+     * Examples: "ADD_LINKED_USER_ALIAS", "REMOVE_ACCOUNT_ALIAS", "UPDATE_DEFAULT"
+     */
+    private String actionType;
+    
+    /**
+     * Entity type being modified.
+     * Values: "linkedUser", "account", "fund", "customInstruction", "default"
+     */
+    private String entityType;
+    
+    /**
+     * Entity identifier (for linkedUser/account/fund/default operations).
+     * Examples: userName="KIKI", accountId="CARD_DIMA_RAIF", defaultKey="currency"
+     */
+    private String entityId;
+    
+    /**
+     * Value to add/set.
+     * Examples: alias="Ksyusha", instruction="rubles = BYN", defaultValue="EUR"
+     */
+    private String value;
+    
+    /**
+     * Index for REMOVE operations on list items (e.g., custom instructions).
+     * Optional, only used for REMOVE_CUSTOM_INSTRUCTION.
+     */
+    private Integer index;
+    
+    @JsonIgnore
+    public boolean isAdd() {
+        return actionType != null && actionType.startsWith("ADD_");
+    }
+    
+    @JsonIgnore
+    public boolean isRemove() {
+        return actionType != null && actionType.startsWith("REMOVE_");
+    }
+    
+    @JsonIgnore
+    public boolean isUpdate() {
+        return actionType != null && actionType.startsWith("UPDATE_");
+    }
 }
-

@@ -6,7 +6,7 @@ import com.github.dimka9910.sheets.ai.dto.user.AccountEntry;
 import com.github.dimka9910.sheets.ai.dto.user.FundEntry;
 import com.github.dimka9910.sheets.ai.dto.user.LinkedUserEntry;
 import com.github.dimka9910.sheets.ai.dto.user.UserEntity;
-import com.github.dimka9910.sheets.ai.dto.actions.InstructionAction;
+import com.github.dimka9910.sheets.ai.dto.actions.CustomInstructionActionBase;
 import com.github.dimka9910.sheets.ai.services.llm.LLMClient;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -40,7 +40,7 @@ public class CustomInstructionAgent {
     ) {}
 
     public record Response(
-            List<InstructionAction> actions,
+            List<CustomInstructionActionBase> actions,
             String explanation,
             long latencyMs,
             int tokensUsed,
@@ -289,10 +289,10 @@ public class CustomInstructionAgent {
             String json = cleanJsonResponse(llmResponse.content());
             JsonNode root = objectMapper.readTree(json);
 
-            List<InstructionAction> actions = new ArrayList<>();
+            List<CustomInstructionActionBase> actions = new ArrayList<>();
             if (root.has("actions") && root.path("actions").isArray()) {
                 for (JsonNode actionNode : root.path("actions")) {
-                    InstructionAction action = objectMapper.treeToValue(actionNode, InstructionAction.class);
+                    CustomInstructionActionBase action = objectMapper.treeToValue(actionNode, CustomInstructionActionBase.class);
                     actions.add(action);
                 }
             }

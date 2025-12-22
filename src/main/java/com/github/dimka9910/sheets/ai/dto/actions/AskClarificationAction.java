@@ -9,22 +9,24 @@ import lombok.NoArgsConstructor;
 /**
  * Action to ask user for clarification before making changes.
  * Used when agent is uncertain or detects potential conflicts.
+ * 
+ * Note: This is a separate action type, not an InstructionAction.
+ * It has different fields and handling logic.
  */
 @Data
 @Builder
 @NoArgsConstructor
 @AllArgsConstructor
-@EqualsAndHashCode(callSuper = false)
-public class AskClarificationAction extends InstructionAction {
+public class AskClarificationAction implements CustomInstructionActionBase {
     
     public static final String TYPE = "ASK_CLARIFICATION";
     
-    private String question;  // Question to ask user
-    private String context;   // Internal context for next resolution
+    private String actionType;  // Always "ASK_CLARIFICATION"
+    private String question;    // Question to ask user
+    private String context;     // Internal context for next resolution
     
-    @Override
     public String getActionType() {
-        return TYPE;
+        return actionType != null ? actionType : TYPE;
     }
 }
 

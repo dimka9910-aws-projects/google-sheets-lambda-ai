@@ -61,11 +61,13 @@ public class CustomInstructionHandler {
             
             // Apply all actions and collect clarification requests
             List<AskClarificationAction> clarifications = new ArrayList<>();
-            for (InstructionAction action : agentResponse.actions()) {
-                if (action instanceof AskClarificationAction) {
-                    clarifications.add((AskClarificationAction) action);
+            for (var action : agentResponse.actions()) {
+                if (action instanceof AskClarificationAction askAction) {
+                    clarifications.add(askAction);
+                } else if (action instanceof InstructionAction instructionAction) {
+                    applyInstructionAction(instructionAction, userEntity);
                 } else {
-                    applyInstructionAction(action, userEntity);
+                    log.warn("Unknown action type: {}", action.getClass().getName());
                 }
             }
             
@@ -87,73 +89,86 @@ public class CustomInstructionHandler {
 
     /**
      * Apply a single InstructionAction to UserEntity.
+     * Uses universal InstructionAction structure instead of separate classes.
      */
     private void applyInstructionAction(InstructionAction action, UserEntity userEntity) {
         String actionType = action.getActionType();
+        String entityType = action.getEntityType();
+        String entityId = action.getEntityId();
+        String value = action.getValue();
         
-        switch (actionType) {
-            case "ADD_LINKED_USER_ALIAS" -> {
-                var aliasAction = (AddLinkedUserAliasAction) action;
-                addLinkedUserAlias(userEntity, aliasAction.getUserName(), aliasAction.getAlias());
+        // Handle ADD operations
+        if (action.isAdd()) {
+            switch (entityType) {
+                case "linkedUser" -> {
+                    addLinkedUserAlias(userEntity, entityId, value);
+                }
+                case "account" -> {
+                    addAccountAlias(userEntity, entityId, value);
+                }
+                case "fund" -> {
+                    addFundAlias(userEntity, entityId, value);
+                }
+                case "customInstruction" -> {
+                    userEntity.addInstruction(value);
+                    log.info("Added custom instruction: {}", value);
+                }
+                default -> log.warn("Unknown entity type for ADD: {}", entityType);
             }
-            
-            case "REMOVE_LINKED_USER_ALIAS" -> {
-                var aliasAction = (RemoveLinkedUserAliasAction) action;
-                removeLinkedUserAlias(userEntity, aliasAction.getUserName(), aliasAction.getAlias());
-            }
-            
-            case "ADD_ACCOUNT_ALIAS" -> {
-                var aliasAction = (AddAccountAliasAction) action;
-                addAccountAlias(userEntity, aliasAction.getAccountId(), aliasAction.getAlias());
-            }
-            
-            case "REMOVE_ACCOUNT_ALIAS" -> {
-                var aliasAction = (RemoveAccountAliasAction) action;
-                removeAccountAlias(userEntity, aliasAction.getAccountId(), aliasAction.getAlias());
-            }
-            
-            case "ADD_FUND_ALIAS" -> {
-                var aliasAction = (AddFundAliasAction) action;
-                addFundAlias(userEntity, aliasAction.getFundId(), aliasAction.getAlias());
-            }
-            
-            case "REMOVE_FUND_ALIAS" -> {
-                var aliasAction = (RemoveFundAliasAction) action;
-                removeFundAlias(userEntity, aliasAction.getFundId(), aliasAction.getAlias());
-            }
-            
-            case "ADD_CUSTOM_INSTRUCTION" -> {
-                var addAction = (AddCustomInstructionAction) action;
-                userEntity.addInstruction(addAction.getInstruction());
-                log.info("Added custom instruction: {}", addAction.getInstruction());
-            }
-            
-            case "REMOVE_CUSTOM_INSTRUCTION" -> {
-                var removeAction = (RemoveCustomInstructionAction) action;
-                userEntity.removeInstruction(removeAction.getIndex());
-                log.info("Removed custom instruction at index: {}", removeAction.getIndex());
-            }
-            
-            case "UPDATE_DEFAULT" -> {
-                var defaultAction = (UpdateDefaultAction) action;
-                switch (defaultAction.getDefaultType()) {
-                    case CURRENCY -> {
-                        userEntity.setDefaultCurrency(defaultAction.getValue());
-                        log.info("Updated default currency: {}", defaultAction.getValue());
-                    }
-                    case ACCOUNT -> {
-                        userEntity.setDefaultAccount(defaultAction.getValue());
-                        log.info("Updated default account: {}", defaultAction.getValue());
-                    }
-                    case FUND -> {
-                        userEntity.setDefaultFund(defaultAction.getValue());
-                        log.info("Updated default fund: {}", defaultAction.getValue());
+            return;
+        }
+        
+        // Handle REMOVE operations
+        if (action.isRemove()) {
+            switch (entityType) {
+                case "linkedUser" -> {
+                    removeLinkedUserAlias(userEntity, entityId, value);
+                }
+                case "account" -> {
+                    removeAccountAlias(userEntity, entityId, value);
+                }
+                case "fund" -> {
+                    removeFundAlias(userEntity, entityId, value);
+                }
+                case "customInstruction" -> {
+                    Integer index = action.getIndex();
+                    if (index != null) {
+                        userEntity.removeInstruction(index);
+                        log.info("Removed custom instruction at index: {}", index);
+                    } else {
+                        log.warn("REMOVE_CUSTOM_INSTRUCTION requires index field");
                     }
                 }
+                default -> log.warn("Unknown entity type for REMOVE: {}", entityType);
             }
-            
-            default -> log.warn("Unknown instruction action type: {}", actionType);
+            return;
         }
+        
+        // Handle UPDATE operations
+        if (action.isUpdate()) {
+            if ("default".equals(entityType)) {
+                switch (entityId) {
+                    case "currency" -> {
+                        userEntity.setDefaultCurrency(value);
+                        log.info("Updated default currency: {}", value);
+                    }
+                    case "account" -> {
+                        userEntity.setDefaultAccount(value);
+                        log.info("Updated default account: {}", value);
+                    }
+                    case "fund" -> {
+                        userEntity.setDefaultFund(value);
+                        log.info("Updated default fund: {}", value);
+                    }
+                    default -> log.warn("Unknown default type: {}", entityId);
+                }
+            } else {
+                log.warn("Unknown entity type for UPDATE: {}", entityType);
+            }
+            return;
+        }
+        
+        log.warn("Unknown instruction action type: {}", actionType);
     }
 
     /**
