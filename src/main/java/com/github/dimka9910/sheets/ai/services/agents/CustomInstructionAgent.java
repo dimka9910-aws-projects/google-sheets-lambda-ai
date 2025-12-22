@@ -7,16 +7,24 @@ import com.github.dimka9910.sheets.ai.dto.user.FundEntry;
 import com.github.dimka9910.sheets.ai.dto.user.LinkedUserEntry;
 import com.github.dimka9910.sheets.ai.dto.user.UserEntity;
 import com.github.dimka9910.sheets.ai.dto.actions.CustomInstructionActionBase;
-import com.github.dimka9910.sheets.ai.services.llm.LLMClient;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.ai.chat.messages.SystemMessage;
+import org.springframework.ai.chat.messages.UserMessage;
+import org.springframework.ai.chat.model.ChatModel;
+import org.springframework.ai.chat.prompt.Prompt;
+import org.springframework.ai.openai.OpenAiChatOptions;
 import org.springframework.stereotype.Component;
 
 import java.util.ArrayList;
 import java.util.List;
 
 /**
- * Spring Component for custom instruction management using LLM.
+ * Spring Component for custom instruction management using Spring AI + OpenAI.
+ * 
+ * Leverages Spring AI features:
+ * - ChatModel for LLM calls
+ * - Automatic retry and error handling
  * 
  * Responsibilities:
  * - Classify new instructions to correct context (aliases, defaults, custom instructions)
@@ -24,7 +32,7 @@ import java.util.List;
  * - Add/remove/update instructions intelligently
  * - Ask for clarification when uncertain
  * 
- * Model: gpt-4o-mini
+ * Model: gpt-5-mini
  */
 @Slf4j
 @Component
@@ -158,19 +166,39 @@ public class CustomInstructionAgent {
             - Explanation should be concise (1-2 sentences)
             """;
     
-    private final LLMClient client;
+    private final ChatModel chatModel;
     private final ObjectMapper objectMapper;
 
     public Response process(Request request) {
         long start = System.currentTimeMillis();
         try {
-            String prompt = buildPrompt(request);
-            log.debug("CustomInstructionAgent prompt length: {} chars", prompt.length());
+            // Build system and user prompts
+            String systemPrompt = buildSystemPrompt();
+            String userPrompt = buildUserPrompt(request);
+            
+            log.debug("CustomInstructionAgent system prompt: {} chars, user prompt: {} chars", 
+                    systemPrompt.length(), userPrompt.length());
 
-            LLMClient.Response llmResponse = client.completeWithReasoning(MODEL, prompt, MAX_COMPLETION_TOKENS);
-            log.info("CustomInstructionAgent raw response: {}", llmResponse.content());
+            // Create Spring AI Prompt
+            Prompt prompt = new Prompt(
+                    List.of(
+                            new SystemMessage(systemPrompt),
+                            new UserMessage(userPrompt)
+                    ),
+                    OpenAiChatOptions.builder()
+                            .withModel(MODEL)
+                            .withMaxCompletionTokens(MAX_COMPLETION_TOKENS)
+                            .withTemperature(0.7)
+                            .build()
+            );
 
-            return parseResponse(llmResponse, start);
+            // Call LLM via Spring AI
+            org.springframework.ai.chat.model.ChatResponse chatResponse = chatModel.call(prompt);
+            String content = chatResponse.getResult().getOutput().getContent();
+            
+            log.info("CustomInstructionAgent raw response: {}", content);
+
+            return parseResponse(chatResponse, start);
         } catch (Exception e) {
             log.error("CustomInstructionAgent error: {}", e.getMessage(), e);
             return new Response(
@@ -183,7 +211,10 @@ public class CustomInstructionAgent {
         }
     }
 
-    private String buildPrompt(Request request) {
+    /**
+     * Build system prompt (instructions + user context, NO user message).
+     */
+    private String buildSystemPrompt() {
         StringBuilder sb = new StringBuilder();
         
         sb.append(PROMPT_INTRO);
@@ -191,8 +222,18 @@ public class CustomInstructionAgent {
         sb.append(PROMPT_ACTIONS);
         sb.append(PROMPT_CONFLICT_MANAGEMENT);
         sb.append(PROMPT_CLARIFICATION);
+        sb.append(PROMPT_RESPONSE_FORMAT);
         
-        sb.append("\n## Current User Context\n\n");
+        return sb.toString();
+    }
+
+    /**
+     * Build user prompt (user context + new instructions).
+     */
+    private String buildUserPrompt(Request request) {
+        StringBuilder sb = new StringBuilder();
+        
+        sb.append("## Current User Context\n\n");
         
         UserEntity user = request.userEntity();
         
@@ -279,14 +320,13 @@ public class CustomInstructionAgent {
             }
         }
         
-        sb.append(PROMPT_RESPONSE_FORMAT);
-        
         return sb.toString();
     }
 
-    private Response parseResponse(LLMClient.Response llmResponse, long startTime) {
+    private Response parseResponse(org.springframework.ai.chat.model.ChatResponse chatResponse, long startTime) {
         try {
-            String json = cleanJsonResponse(llmResponse.content());
+            String content = chatResponse.getResult().getOutput().getContent();
+            String json = cleanJsonResponse(content);
             JsonNode root = objectMapper.readTree(json);
 
             List<CustomInstructionActionBase> actions = new ArrayList<>();
@@ -300,18 +340,20 @@ public class CustomInstructionAgent {
             String explanation = root.path("explanation").asText("No explanation provided.");
 
             long latency = System.currentTimeMillis() - startTime;
-            log.info("CustomInstructionAgent parsed: {} actions ({}ms, {} tokens)",
-                    actions.size(), latency, llmResponse.totalTokens());
+            int totalTokens = chatResponse.getMetadata().getUsage().getTotalTokens().intValue();
+            
+            log.info("✅ CustomInstructionAgent parsed: {} actions ({}ms, {} tokens)",
+                    actions.size(), latency, totalTokens);
 
-            return new Response(actions, explanation, latency, llmResponse.totalTokens(), null);
+            return new Response(actions, explanation, latency, totalTokens, null);
 
         } catch (Exception e) {
-            log.error("CustomInstructionAgent parse error: {}", e.getMessage(), e);
+            log.error("❌ CustomInstructionAgent parse error: {}", e.getMessage(), e);
             return new Response(
                     List.of(),
                     "Parse error: " + e.getMessage(),
                     System.currentTimeMillis() - startTime,
-                    llmResponse.totalTokens(),
+                    0,
                     "Parse error: " + e.getMessage()
             );
         }
