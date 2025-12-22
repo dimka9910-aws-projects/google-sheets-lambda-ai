@@ -2,7 +2,7 @@ package com.github.dimka9910.sheets.ai.services;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.github.dimka9910.sheets.ai.dto.ChatResponse;
+import com.github.dimka9910.sheets.ai.dto.telegram.ChatResponse;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;

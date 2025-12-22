@@ -1,6 +1,7 @@
 package com.github.dimka9910.sheets.ai.services;
 
-import com.github.dimka9910.sheets.ai.dto.*;
+import com.github.dimka9910.sheets.ai.dto.telegram.ChatRequest;
+import com.github.dimka9910.sheets.ai.dto.telegram.ChatResponse;
 import com.github.dimka9910.sheets.ai.dto.user.UserEntity;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -39,11 +40,6 @@ public class AdminCommandHandler {
                     .build();
         }
         
-        // /debug on|off
-        if (msgLower.startsWith("/debug")) {
-            return handleDebugToggle(chatId, msgLower, userContext);
-        }
-        
         // /reset — delete user
         if (msgLower.equals("/reset") || msgLower.equals("/restart") || msgLower.equals("/clear")) {
             if (userName != null) {
@@ -71,42 +67,9 @@ public class AdminCommandHandler {
         return null; // Not an admin command
     }
 
-    private ChatResponse handleDebugToggle(String chatId, String msgLower, UserEntity userContext) {
-        String arg = msgLower.replace("/debug", "").trim();
-        
-        if (arg.equals("on") || arg.equals("1") || arg.equals("true")) {
-            userContext.setDebugMode(true);
-            userContextService.saveContext(userContext);
-            return ChatResponse.builder()
-                    .chatId(chatId)
-                    .success(true)
-                    .message("🔧 Debug mode ON — you'll see internal data with each response")
-                    .build();
-        }
-        
-        if (arg.equals("off") || arg.equals("0") || arg.equals("false")) {
-            userContext.setDebugMode(false);
-            userContextService.saveContext(userContext);
-            return ChatResponse.builder()
-                    .chatId(chatId)
-                    .success(true)
-                    .message("🔧 Debug mode OFF")
-                    .build();
-        }
-        
-        String status = Boolean.TRUE.equals(userContext.getDebugMode()) ? "ON" : "OFF";
-        return ChatResponse.builder()
-                .chatId(chatId)
-                .success(true)
-                .message("🔧 Debug mode: " + status + "\nUse: /debug on or /debug off")
-                .build();
-    }
-
     private static final String INFO_MESSAGE = """
             🛠️ Admin Commands:
             
-            /debug on  — enable debug mode (show internal data)
-            /debug off — disable debug mode
             /reset     — delete user and start fresh
             /note TEXT — save note to logs for developer
             /info      — show this help

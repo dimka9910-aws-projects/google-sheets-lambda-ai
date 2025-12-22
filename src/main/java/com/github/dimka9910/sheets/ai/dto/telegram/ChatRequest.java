@@ -1,4 +1,4 @@
-package com.github.dimka9910.sheets.ai.dto;
+package com.github.dimka9910.sheets.ai.dto.telegram;
 
 import com.fasterxml.jackson.annotation.JsonAlias;
 import com.fasterxml.jackson.annotation.JsonIgnore;

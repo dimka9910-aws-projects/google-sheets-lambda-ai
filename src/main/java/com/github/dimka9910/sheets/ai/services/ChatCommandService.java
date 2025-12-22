@@ -1,9 +1,9 @@
 package com.github.dimka9910.sheets.ai.services;
 
-import com.github.dimka9910.sheets.ai.dto.*;
+import com.github.dimka9910.sheets.ai.dto.telegram.ChatRequest;
+import com.github.dimka9910.sheets.ai.dto.telegram.ChatResponse;
 import com.github.dimka9910.sheets.ai.dto.user.LinkedUserEntry;
 import com.github.dimka9910.sheets.ai.dto.user.UserEntity;
-import com.github.dimka9910.sheets.ai.telemetry.RequestTelemetry;
 import jakarta.annotation.PostConstruct;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -18,8 +18,7 @@ import java.util.List;
  * 1. Check admin commands
  * 2. Check user setup (accounts, funds)
  * 3. Delegate to Orchestrator → ChatResponse
- * 4. Add debug info if enabled
- * 5. Send response
+ * 4. Send response via SQS
  */
 @Slf4j
 @Service
@@ -68,16 +67,8 @@ public class ChatCommandService {
             return setupResponse;
         }
 
-        // 3. Create telemetry
-        RequestTelemetry telemetry = new RequestTelemetry(userName, message);
-        
-        // 4. Orchestrate (classify → parse → handle)
-        ChatResponse response = orchestrator.process(request, userContext, telemetry);
-        
-        // 5. Add debug info if enabled
-        if (Boolean.TRUE.equals(userContext.getDebugMode())) {
-            response.setMessage(response.getMessage() + "\n\n" + telemetry.formatForTelegram());
-        }
+        // 3. Orchestrate (classify → parse → handle)
+        ChatResponse response = orchestrator.process(request, userContext);
 
         sqsPublisher.sendResponse(response);
         return response;

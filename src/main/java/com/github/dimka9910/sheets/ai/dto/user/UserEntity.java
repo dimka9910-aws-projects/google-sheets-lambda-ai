@@ -75,10 +75,6 @@ public class UserEntity {
     // Preferred language (ISO code: en, ru, sr)
     private String preferredLanguage;
     
-    // Debug mode
-    @Builder.Default
-    private Boolean debugMode = false;
-    
     // ═══════════════════════════════════════════════════════════════════════════
     // DynamoDB KEYS
     // ═══════════════════════════════════════════════════════════════════════════

@@ -1,7 +1,7 @@
 package com.github.dimka9910.sheets.ai.services;
 
-import com.github.dimka9910.sheets.ai.dto.ChatRequest;
-import com.github.dimka9910.sheets.ai.dto.ChatResponse;
+import com.github.dimka9910.sheets.ai.dto.telegram.ChatRequest;
+import com.github.dimka9910.sheets.ai.dto.telegram.ChatResponse;
 import com.github.dimka9910.sheets.ai.dto.actions.*;
 import com.github.dimka9910.sheets.ai.dto.user.AccountEntry;
 import com.github.dimka9910.sheets.ai.dto.user.ConversationMessage;

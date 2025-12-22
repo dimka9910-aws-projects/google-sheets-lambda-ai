@@ -1,11 +1,9 @@
-package com.github.dimka9910.sheets.ai.dto;
+package com.github.dimka9910.sheets.ai.dto.telegram;
 
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
-
-import java.util.List;
 
 /**
  * Ответ для отправки обратно в Telegram

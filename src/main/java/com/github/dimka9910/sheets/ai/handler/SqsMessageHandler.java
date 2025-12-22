@@ -2,7 +2,7 @@ package com.github.dimka9910.sheets.ai.handler;
 
 import com.amazonaws.services.lambda.runtime.events.SQSEvent;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.github.dimka9910.sheets.ai.dto.ChatRequest;
+import com.github.dimka9910.sheets.ai.dto.telegram.ChatRequest;
 import com.github.dimka9910.sheets.ai.services.ChatCommandService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;

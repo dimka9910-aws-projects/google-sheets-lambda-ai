@@ -1,8 +1,9 @@
 package com.github.dimka9910.sheets.ai.services;
 
 import com.github.dimka9910.sheets.ai.db.service.FinancialOperationService;
-import com.github.dimka9910.sheets.ai.dto.*;
 import com.github.dimka9910.sheets.ai.dto.actions.*;
+import com.github.dimka9910.sheets.ai.dto.telegram.ChatRequest;
+import com.github.dimka9910.sheets.ai.dto.telegram.ChatResponse;
 import com.github.dimka9910.sheets.ai.dto.user.ConversationMessage;
 import com.github.dimka9910.sheets.ai.dto.user.UserEntity;
 import jakarta.annotation.PostConstruct;

@@ -1,4 +1,4 @@
-package com.github.dimka9910.sheets.ai.dto;
+package com.github.dimka9910.sheets.ai.dto.user;
 
 import com.github.dimka9910.sheets.ai.services.agents.MessageClassifierAgent.Tag;
 import lombok.AllArgsConstructor;

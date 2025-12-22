@@ -1,14 +1,13 @@
 package com.github.dimka9910.sheets.ai.services;
 
-import com.github.dimka9910.sheets.ai.db.service.FinancialOperationService;
-import com.github.dimka9910.sheets.ai.dto.*;
 import com.github.dimka9910.sheets.ai.dto.actions.MainAgentResponse;
+import com.github.dimka9910.sheets.ai.dto.telegram.ChatRequest;
+import com.github.dimka9910.sheets.ai.dto.telegram.ChatResponse;
 import com.github.dimka9910.sheets.ai.dto.user.LinkedUserEntry;
 import com.github.dimka9910.sheets.ai.dto.user.UserEntity;
 import com.github.dimka9910.sheets.ai.services.agents.MainAgent;
 import com.github.dimka9910.sheets.ai.services.agents.MessageClassifierAgent;
 import com.github.dimka9910.sheets.ai.services.agents.MessageClassifierAgent.Tag;
-import com.github.dimka9910.sheets.ai.telemetry.RequestTelemetry;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -41,7 +40,7 @@ public class Orchestrator {
     /**
      * Full processing: classify → parse → handle → ChatResponse
      */
-    public ChatResponse process(ChatRequest request, UserEntity userContext, RequestTelemetry telemetry) {
+    public ChatResponse process(ChatRequest request, UserEntity userContext) {
         String message = request.getMessage();
         String previousBotMessage = userContext.getLastBotMessageContent();
         boolean hasPendingResponse = userContext.isAwaitingClarification();
@@ -52,7 +51,7 @@ public class Orchestrator {
         
         try {
             // Step 1: Classify
-            Set<Tag> tags = classify(message, previousBotMessage, hasPendingResponse, linkedUsers, telemetry);
+            Set<Tag> tags = classify(message, previousBotMessage, hasPendingResponse, linkedUsers);
             
             log.info("Classification: tags={}", tags);
             
@@ -62,29 +61,15 @@ public class Orchestrator {
             var agentResponse = mainAgent.process(agentRequest);
             MainAgentResponse result = agentResponse.result();
             
-            // Record MainAgent telemetry
-            if (telemetry != null) {
-                String summary = result.hasPendingClarifications() 
-                        ? "PENDING: " + result.getPendingClarifications().size()
-                        : "OK: " + result.getActions().size() + " action(s)";
-                if (agentResponse.reasoningTokens() > 0) {
-                    summary += " (reason: " + agentResponse.reasoningTokens() + ")";
-                }
-                telemetry.recordAgent("MainAgent", "gpt-5-mini", summary, 
-                        agentResponse.latencyMs(), agentResponse.tokensUsed());
-            }
-            
-            log.info("Parsed: {} actions, pending={}", 
-                    result.getActions().size(), result.hasPendingClarifications());
+            log.info("Parsed: {} actions, pending={} ({}ms, {} tokens)", 
+                    result.getActions().size(), result.hasPendingClarifications(),
+                    agentResponse.latencyMs(), agentResponse.tokensUsed());
             
             // Step 3: Handle result
             return resultHandler.handle(request, result, userContext);
             
         } catch (Exception e) {
             log.error("Orchestration failed: {}", e.getMessage(), e);
-            if (telemetry != null) {
-                telemetry.setError(e.getMessage());
-            }
             return ChatResponse.builder()
                     .chatId(request.getResponseChatId())
                     .success(false)
@@ -98,17 +83,14 @@ public class Orchestrator {
     // ═══════════════════════════════════════════════════════════════════════════
     
     private Set<Tag> classify(String message, String previousBotMessage, 
-                              boolean hasPendingResponse, List<LinkedUserEntry> linkedUsers,
-                              RequestTelemetry telemetry) {
+                              boolean hasPendingResponse, List<LinkedUserEntry> linkedUsers) {
         // Classify message tags
         var classifierResponse = classifierAgent.classify(message, previousBotMessage);
         
-        if (telemetry != null) {
-            telemetry.recordAgent("ClassifierAgent", "gpt-4o-mini", 
-                    classifierResponse.tags().toString(), 
-                    classifierResponse.latencyMs(), 
-                    classifierResponse.tokensUsed());
-        }
+        log.info("ClassifierAgent: tags={} ({}ms, {} tokens)", 
+                classifierResponse.tags(), 
+                classifierResponse.latencyMs(), 
+                classifierResponse.tokensUsed());
         
         Set<Tag> tags = classifierResponse.tags();
         
