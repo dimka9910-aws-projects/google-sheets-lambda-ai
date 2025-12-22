@@ -1,0 +1,19 @@
+databaseChangeLog:
+  - changeSet:
+      id: 002-remove-link-fk-constraint
+      author: dimka9910
+      comment: Remove FK constraint on link_id - it references records in same transaction
+      changes:
+        - dropForeignKeyConstraint:
+            baseTableName: financial_operations
+            constraintName: fk_financial_operations_link
+      
+      rollback:
+        - addForeignKeyConstraint:
+            baseTableName: financial_operations
+            baseColumnNames: link_id
+            constraintName: fk_financial_operations_link
+            referencedTableName: financial_operations
+            referencedColumnNames: id
+            onDelete: SET NULL
+
