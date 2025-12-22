@@ -31,7 +31,7 @@ public class Orchestrator {
     
     private final MessageClassifierAgent classifierAgent;
     private final MainAgent mainAgent;
-    private final ResultHandler resultHandler;
+    private final MainAgentResultHandler mainAgentResultHandler;
     
     // ═══════════════════════════════════════════════════════════════════════════
     // MAIN API
@@ -71,7 +71,7 @@ public class Orchestrator {
                     agentResponse.latencyMs(), agentResponse.tokensUsed());
             
             // Step 3: Handle result
-            return resultHandler.handle(request, result, userContext);
+            return mainAgentResultHandler.handle(request, result, userContext);
             
         } catch (Exception e) {
             log.error("Orchestration failed: {}", e.getMessage(), e);

@@ -20,7 +20,7 @@ import org.springframework.stereotype.Service;
 @Slf4j
 @Service
 @RequiredArgsConstructor
-public class ChatCommandService {
+public class SqsMessageProcessor {
 
     private final UserEntityService userEntityService;
     private final AdminCommandHandler adminHandler;

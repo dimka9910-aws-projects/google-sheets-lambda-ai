@@ -5,7 +5,7 @@ import com.amazonaws.services.lambda.runtime.RequestHandler;
 import com.amazonaws.services.lambda.runtime.events.SQSEvent;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.github.dimka9910.sheets.ai.dto.telegram.ChatRequest;
-import com.github.dimka9910.sheets.ai.services.ChatCommandService;
+import com.github.dimka9910.sheets.ai.services.SqsMessageProcessor;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.boot.SpringApplication;
@@ -24,13 +24,13 @@ public class SQSHandler implements RequestHandler<SQSEvent, Void> {
     private static final Logger log = LoggerFactory.getLogger(SQSHandler.class);
     
     private static ConfigurableApplicationContext applicationContext;
-    private static ChatCommandService chatCommandService;
+    private static SqsMessageProcessor sqsMessageProcessor;
     private static ObjectMapper objectMapper;
     
     static {
         // Initialize Spring Boot context once (Lambda container reuse)
         applicationContext = SpringApplication.run(FinanceTrackerApplication.class);
-        chatCommandService = applicationContext.getBean(ChatCommandService.class);
+        sqsMessageProcessor = applicationContext.getBean(SqsMessageProcessor.class);
         objectMapper = applicationContext.getBean(ObjectMapper.class);
         log.info("✅ SQSHandler initialized with Spring Boot context");
     }
@@ -47,7 +47,7 @@ public class SQSHandler implements RequestHandler<SQSEvent, Void> {
                 ChatRequest request = objectMapper.readValue(body, ChatRequest.class);
                 
                 // Process command (response sent via SQS inside)
-                chatCommandService.processCommand(request);
+                sqsMessageProcessor.processCommand(request);
                 
                 log.info("✅ Successfully processed message: {}", message.getMessageId());
             } catch (Exception e) {

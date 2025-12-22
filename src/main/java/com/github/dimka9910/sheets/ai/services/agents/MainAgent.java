@@ -2,11 +2,8 @@ package com.github.dimka9910.sheets.ai.services.agents;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.github.dimka9910.sheets.ai.dto.actions.*;
-import com.github.dimka9910.sheets.ai.dto.user.AccountEntry;
-import com.github.dimka9910.sheets.ai.dto.user.ConversationMessage;
-import com.github.dimka9910.sheets.ai.dto.user.FundEntry;
-import com.github.dimka9910.sheets.ai.dto.user.LinkedUserEntry;
 import com.github.dimka9910.sheets.ai.dto.user.UserEntity;
+import com.github.dimka9910.sheets.ai.services.UserContextToPromptMapper;
 import com.github.dimka9910.sheets.ai.services.agents.MessageClassifierAgent.Tag;
 import com.github.dimka9910.sheets.ai.services.llm.LLMClient;
 import lombok.RequiredArgsConstructor;
@@ -14,7 +11,6 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 
 import java.util.List;
-import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
 
@@ -506,6 +502,7 @@ public class MainAgent {
     
     private final LLMClient client;
     private final ObjectMapper objectMapper;
+    private final UserContextToPromptMapper contextMapper;
 
     // ═══════════════════════════════════════════════════════════════════════════
     // PROCESS
@@ -646,138 +643,12 @@ public class MainAgent {
         return SECTION_CLASSIFICATION_META.formatted(loadedTags, notLoadedTags);
     }
 
+    /**
+     * Build user context prompt using dedicated mapper.
+     * Delegates to UserContextToPromptMapper for clean separation of concerns.
+     */
     private String buildUserContext(UserEntity context, Set<Tag> tags) {
-        StringBuilder ctx = new StringBuilder();
-        ctx.append("\n\n### User Context ###\n");
-        
-        // Always show userName (needed for TRANSFER operations)
-        ctx.append("Current user name: ").append(context.getUserName()).append("\n");
-        
-        if (context.getDisplayName() != null) {
-            ctx.append("Display name: ").append(context.getDisplayName()).append("\n");
-        }
-        
-        if (context.getPreferredLanguage() != null) {
-            ctx.append("Language: ").append(context.getPreferredLanguage()).append("\n");
-        }
-        
-        // Always show defaults, accounts, and funds
-            ctx.append("\n## Defaults:\n");
-            ctx.append("- Currency: ").append(orNotSet(context.getDefaultCurrency())).append("\n");
-            ctx.append("- Account: ").append(orNotSet(context.getDefaultAccount())).append("\n");
-            ctx.append("- Fund: ").append(orNotSet(context.getDefaultFund())).append("\n");
-            
-        List<AccountEntry> accounts = context.getAccounts();
-            if (accounts != null && !accounts.isEmpty()) {
-            String accountsList = accounts.stream()
-                    .map(a -> {
-                        StringBuilder sb = new StringBuilder(a.getAccountId());
-                        if (a.getDisplayName() != null) {
-                            sb.append(" (").append(a.getDisplayName()).append(")");
-                        }
-                        if (a.getAliases() != null && !a.getAliases().isEmpty()) {
-                            sb.append(" [aliases: ").append(String.join(", ", a.getAliases())).append("]");
-                        }
-                        return sb.toString();
-                    })
-                    .collect(Collectors.joining(", "));
-            ctx.append("\n## Accounts: ").append(accountsList).append("\n");
-        }
-        
-        List<FundEntry> funds = context.getFunds();
-            if (funds != null && !funds.isEmpty()) {
-            String fundsList = funds.stream()
-                    .map(f -> {
-                        StringBuilder sb = new StringBuilder(f.getFundId());
-                        if (f.getDisplayName() != null) {
-                            sb.append(" (").append(f.getDisplayName()).append(")");
-                        }
-                        if (f.getAliases() != null && !f.getAliases().isEmpty()) {
-                            sb.append(" [aliases: ").append(String.join(", ", f.getAliases())).append("]");
-                        }
-                        return sb.toString();
-                    })
-                    .collect(Collectors.joining(", "));
-            ctx.append("## Funds: ").append(fundsList).append("\n");
-        }
-        
-        // Show linked users with their accounts when THIRD_PARTY tag is present
-        // Note: THIRD_PARTY tag is only set by Orchestrator if linkedUsers list is not empty
-        if (tags.contains(Tag.THIRD_PARTY)) {
-            List<LinkedUserEntry> linkedUsers = context.getLinkedUsers();
-            ctx.append("\n## Linked users:\n");
-            Map<String, UserEntity> linkedContexts = context.getLinkedUserEntitys();
-            
-            for (LinkedUserEntry linkedUser : linkedUsers) {
-                ctx.append("- **").append(linkedUser.getName()).append("**");
-                if (linkedUser.getDisplayName() != null) {
-                    ctx.append(" (").append(linkedUser.getDisplayName()).append(")");
-                }
-                if (linkedUser.getAliases() != null && !linkedUser.getAliases().isEmpty()) {
-                    ctx.append(" [aliases: ").append(String.join(", ", linkedUser.getAliases())).append("]");
-                }
-                
-                // Show their accounts if available
-                if (linkedContexts != null && linkedContexts.containsKey(linkedUser.getName())) {
-                    UserEntity linked = linkedContexts.get(linkedUser.getName());
-                    List<AccountEntry> linkedAccounts = linked.getAccounts();
-                    if (linkedAccounts != null && !linkedAccounts.isEmpty()) {
-                        String accountsList = linkedAccounts.stream()
-                                .map(a -> {
-                                    StringBuilder sb = new StringBuilder(a.getAccountId());
-                                    if (a.getDisplayName() != null) {
-                                        sb.append(" (").append(a.getDisplayName()).append(")");
-                                    }
-                                    if (a.getAliases() != null && !a.getAliases().isEmpty()) {
-                                        sb.append(" [aliases: ").append(String.join(", ", a.getAliases())).append("]");
-                                    }
-                                    return sb.toString();
-                                })
-                                .collect(Collectors.joining(", "));
-                        ctx.append(" — accounts: ").append(accountsList);
-                    }
-                }
-                ctx.append("\n");
-            }
-        }
-        
-        // Always show custom instructions if they exist
-            List<String> instructions = context.getCustomInstructions();
-            if (instructions != null && !instructions.isEmpty()) {
-                ctx.append("\n## Custom Instructions:\n");
-                for (int i = 0; i < instructions.size(); i++) {
-                    ctx.append("[").append(i).append("] ").append(instructions.get(i)).append("\n");
-                }
-            }
-        
-        // Show pending clarifications if any
-        List<PendingClarificationAction> pendingActions = context.getPendingActions();
-        if (pendingActions != null && !pendingActions.isEmpty()) {
-            ctx.append("\n## Pending Clarifications (from previous request):\n");
-            for (int i = 0; i < pendingActions.size(); i++) {
-                ctx.append("[").append(i).append("] ").append(pendingActions.get(i).getContext()).append("\n");
-            }
-            ctx.append("→ Try to resolve these with user's new message, or replace/clear if topic changed.\n");
-        }
-        
-        // Always show last operation - model can use it for corrections or context
-        // Always show recent conversation - model can use it for context
-            List<ConversationMessage> history = context.getConversationHistory();
-            if (history != null && !history.isEmpty()) {
-                ctx.append("\n## Recent Conversation:\n");
-            int start = Math.max(0, history.size() - 4); // last 4 messages
-            for (int i = start; i < history.size(); i++) {
-                ConversationMessage msg = history.get(i);
-                    String role = "user".equals(msg.getRole()) ? "User" : "Bot";
-                    ctx.append(role).append(": ").append(msg.getContent()).append("\n");
-            }
-        }
-        
-        return ctx.toString();
-    }
-
-    private String orNotSet(String value) {
-        return value != null ? value : "⚠️ NOT SET";
+        return contextMapper.buildContextPrompt(context, tags);
     }
 
     private String truncate(String s, int maxLen) {

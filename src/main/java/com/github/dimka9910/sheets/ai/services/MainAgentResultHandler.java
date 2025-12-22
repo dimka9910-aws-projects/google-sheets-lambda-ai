@@ -27,7 +27,7 @@ import java.util.Optional;
 @Slf4j
 @Service
 @RequiredArgsConstructor
-public class ResultHandler {
+public class MainAgentResultHandler {
 
     private final SQSPublisher sqsPublisher;
     private final UserEntityService userContextService;
