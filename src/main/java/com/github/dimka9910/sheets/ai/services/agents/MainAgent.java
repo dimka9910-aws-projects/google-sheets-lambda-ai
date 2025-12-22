@@ -5,9 +5,13 @@ import com.github.dimka9910.sheets.ai.dto.actions.*;
 import com.github.dimka9910.sheets.ai.dto.user.UserEntity;
 import com.github.dimka9910.sheets.ai.services.UserContextToPromptMapper;
 import com.github.dimka9910.sheets.ai.services.agents.MessageClassifierAgent.Tag;
-import com.github.dimka9910.sheets.ai.services.llm.LLMClient;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.ai.chat.messages.SystemMessage;
+import org.springframework.ai.chat.messages.UserMessage;
+import org.springframework.ai.chat.model.ChatModel;
+import org.springframework.ai.chat.prompt.Prompt;
+import org.springframework.ai.openai.OpenAiChatOptions;
 import org.springframework.stereotype.Component;
 
 import java.util.List;
@@ -15,7 +19,13 @@ import java.util.Set;
 import java.util.stream.Collectors;
 
 /**
- * Spring Component for main AI agent - parses user commands using gpt-5-mini (reasoning model).
+ * Spring Component for main AI agent - parses user commands using Spring AI + OpenAI.
+ * Uses gpt-5-mini (reasoning model) for complex parsing.
+ * 
+ * Leverages Spring AI features:
+ * - ChatModel for LLM calls
+ * - Reasoning models support (o1-mini, gpt-5-mini)
+ * - Automatic retry and error handling
  * 
  * Returns unified response format:
  * {
@@ -500,7 +510,7 @@ public class MainAgent {
     // DEPENDENCIES (injected by Spring)
     // ═══════════════════════════════════════════════════════════════════════════
     
-    private final LLMClient client;
+    private final ChatModel chatModel;
     private final ObjectMapper objectMapper;
     private final UserContextToPromptMapper contextMapper;
 
@@ -512,14 +522,34 @@ public class MainAgent {
         long start = System.currentTimeMillis();
         
         try {
-            String prompt = buildPrompt(request);
-            log.debug("Prompt length: {} chars", prompt.length());
+            // Build system and user messages
+            String systemPrompt = buildSystemPrompt(request.userContext(), request.tags());
+            String userPrompt = "### User Message ###\n" + request.message();
             
-            LLMClient.Response llmResponse = client.completeWithReasoning(MODEL, prompt, MAX_COMPLETION_TOKENS);
+            log.debug("System prompt length: {} chars, User prompt length: {} chars", 
+                    systemPrompt.length(), userPrompt.length());
             
-            log.info("AI response: {}", truncate(llmResponse.content(), 400));
+            // Create Spring AI Prompt with messages
+            Prompt prompt = new Prompt(
+                    List.of(
+                            new SystemMessage(systemPrompt),
+                            new UserMessage(userPrompt)
+                    ),
+                    OpenAiChatOptions.builder()
+                            .withModel(MODEL)
+                            .withMaxCompletionTokens(MAX_COMPLETION_TOKENS)
+                            .withTemperature(0.7)
+                            .build()
+            );
             
-            return parseResponse(llmResponse, start);
+            // Call LLM via Spring AI
+            org.springframework.ai.chat.model.ChatResponse chatResponse = chatModel.call(prompt);
+            
+            String content = chatResponse.getResult().getOutput().getContent();
+            log.info("AI response: {}", truncate(content, 400));
+            
+            // Parse response (using existing parser)
+            return parseResponse(chatResponse, start);
             
         } catch (Exception e) {
             log.error("MainAgent error: {}", e.getMessage(), e);
@@ -536,14 +566,13 @@ public class MainAgent {
     }
 
     // ═══════════════════════════════════════════════════════════════════════════
-    // BUILD PROMPT
+    // BUILD PROMPT (Spring AI uses separate system + user messages)
     // ═══════════════════════════════════════════════════════════════════════════
 
-    public String buildPrompt(Request request) {
-        return buildPrompt(request.userContext(), request.message(), request.tags());
-    }
-
-    public String buildPrompt(UserEntity context, String message, Set<Tag> tags) {
+    /**
+     * Build system prompt (instructions + user context, but NOT user message).
+     */
+    private String buildSystemPrompt(UserEntity context, Set<Tag> tags) {
         StringBuilder prompt = new StringBuilder();
         
         prompt.append(SECTION_CORE);
@@ -576,7 +605,7 @@ public class MainAgent {
         }
         
         // Always include correction section - model will decide if it's relevant
-            prompt.append(SECTION_CORRECTION);
+        prompt.append(SECTION_CORRECTION);
         
         if (context.getCustomInstructions() != null && !context.getCustomInstructions().isEmpty()) {
             prompt.append(SECTION_CUSTOM_INSTRUCTIONS);
@@ -585,9 +614,6 @@ public class MainAgent {
         prompt.append(SECTION_RESPONSE_FORMAT);
         prompt.append(buildUserContext(context, tags));
         
-        prompt.append("\n### User Message ###\n");
-        prompt.append(message);
-        
         return prompt.toString();
     }
 
@@ -595,31 +621,38 @@ public class MainAgent {
     // PARSE RESPONSE
     // ═══════════════════════════════════════════════════════════════════════════
 
-    private Response parseResponse(LLMClient.Response llmResponse, long startTime) {
+    private Response parseResponse(org.springframework.ai.chat.model.ChatResponse chatResponse, long startTime) {
         try {
-            String cleanJson = cleanJsonResponse(llmResponse.content());
+            String content = chatResponse.getResult().getOutput().getContent();
+            String cleanJson = cleanJsonResponse(content);
             MainAgentResponse result = objectMapper.readValue(cleanJson, MainAgentResponse.class);
             
             long latency = System.currentTimeMillis() - startTime;
-            log.info("Parsed: {} actions, response='{}' ({}ms, {} tokens)", 
+            int totalTokens = chatResponse.getMetadata().getUsage().getTotalTokens().intValue();
+            
+            // Reasoning tokens (for reasoning models like o1-mini/gpt-5-mini)
+            // Spring AI M4 doesn't expose detailed token breakdown yet
+            // Will be properly supported in future Spring AI versions
+            int reasoningTokens = 0;
+            
+            log.info("✅ Parsed: {} actions, response='{}' ({}ms, {} tokens)", 
                     result.getActions().size(), 
                     truncate(result.getResponse(), 50),
                     latency, 
-                    llmResponse.totalTokens());
+                    totalTokens);
             
-            return new Response(result, latency, llmResponse.totalTokens(), 
-                    llmResponse.reasoningTokens(), null);
+            return new Response(result, latency, totalTokens, reasoningTokens, null);
             
         } catch (Exception e) {
-            log.error("Parse error: {}", e.getMessage());
+            log.error("❌ Parse error: {}", e.getMessage(), e);
             return new Response(
                     MainAgentResponse.builder()
                             .actions(List.of())
                             .response("Sorry, please try again.")
                             .build(),
                     System.currentTimeMillis() - startTime,
-                    llmResponse.totalTokens(),
-                    llmResponse.reasoningTokens(),
+                    0,
+                    0,
                     "Parse error: " + e.getMessage()
             );
         }
