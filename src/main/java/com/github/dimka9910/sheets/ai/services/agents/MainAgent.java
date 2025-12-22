@@ -302,6 +302,11 @@ public class MainAgent {
                - Option B: If it's spending FOR someone (not linked user) → EXPENSE with comment
                - Examples: "gift for mom", "coffee with friend" → if mom or that friend is not on the list of linked users and not mentioned in aliases - it's EXPENSE with comment, not transfer
             
+            **When user EXPLAINS who someone is (provides alias/mapping):**
+            - User: "Ksyusha is KIKI" / "that was for KIKI" / "remember that Ksyusha = KIKI"
+            - Action 1: Create UTILS action with command=CUSTOM_INSTRUCTION, value="Ksyusha = KIKI (linked user alias)"
+            - Action 2: If there's a pending transaction → create PENDING_CLARIFICATION with updated info (now that you know the mapping)
+            
             4. **targetAccount is MANDATORY for TRANSFER to/from linked user:**
                - Use their account from "Linked users" list (shown with "— accounts: ...")
                - try to choose account applying the rules of default's, aliases, otherwise if you can't determine one for sure - create PENDING_CLARIFICATION
@@ -438,6 +443,7 @@ public class MainAgent {
               - "whenever I say rubles, it's BYN" → CUSTOM_INSTRUCTION "rubles = BYN"
               - "if I buy something for alice, use her fund ALICE_PERSONAL" → CUSTOM_INSTRUCTION "purchases for alice → fund ALICE_PERSONAL"
               - "when I say 'withdrew', always multiply by 2" → CUSTOM_INSTRUCTION "withdrew = amount × 2"
+              - "Ksyusha is KIKI" / "Ksyusha = KIKI" → CUSTOM_INSTRUCTION "Ksyusha = KIKI (linked user alias)"
               - "I work at IT company, salary comes at end of month" → CUSTOM_INSTRUCTION "salary comes end of month from user's IT company"
               - "forget about rubles" → CUSTOM_INSTRUCTION "remove rubles instruction"
               - "clear all my instructions" → CUSTOM_INSTRUCTION "clear all"
