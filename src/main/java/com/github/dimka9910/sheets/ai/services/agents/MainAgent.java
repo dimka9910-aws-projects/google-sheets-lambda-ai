@@ -220,15 +220,15 @@ public class MainAgent {
               "operationType": "TRANSFER",
               "amount": 500,              // MANDATORY
               "currency": "USD",          // MANDATORY (use default or ask)
-              "account": "CARD_ALICE_VISA", // MANDATORY (their account, source - who sends)
+              "account": "CARD_BOB_VISA", // MANDATORY (their account, source - who sends)
               "targetAccount": "CARD_USER_VISA", // MANDATORY (my account, destination - who receives)
-              "userName": "ALICE",        // MANDATORY (linked user who SENDS money)
+              "userName": "BOB",          // MANDATORY (linked user who SENDS money)
               "targetPerson": "USER",     // MANDATORY (current user who RECEIVES money - use userName from context)
               "comment": "debt repayment", // optional
               "correction": false
             }
             ```
-            Example: "ALICE gave me 500" / "got 500 from ALICE"
+            Example: "BOB gave me 500" / "got 500 from BOB"
             
             **2. I gave money TO linked user:**
             ```json
@@ -238,14 +238,14 @@ public class MainAgent {
               "amount": 1000,             // MANDATORY
               "currency": "USD",          // MANDATORY
               "account": "CARD_USER_VISA", // MANDATORY (my account, source - who sends)
-              "targetAccount": "CARD_ALICE_VISA", // MANDATORY (their account, destination - who receives)
+              "targetAccount": "CARD_BOB_VISA", // MANDATORY (their account, destination - who receives)
               "userName": "USER",         // MANDATORY (current user who SENDS money - use userName from context)
-              "targetPerson": "ALICE",    // MANDATORY (linked user who RECEIVES money)
+              "targetPerson": "BOB",      // MANDATORY (linked user who RECEIVES money)
               "comment": "loan",          // optional
               "correction": false
             }
             ```
-            Example: "sent 1000 to ALICE" / "gave ALICE 1000"
+            Example: "sent 1000 to BOB" / "gave BOB 1000"
             
             **3. I bought something FOR linked user (EXPENSE to their fund):**
             ```json
@@ -255,12 +255,12 @@ public class MainAgent {
               "amount": 200,              // MANDATORY
               "currency": "USD",          // MANDATORY
               "account": "CARD_USER_VISA", // MANDATORY (my account, I paid)
-              "fund": "ALICE_MONTHLY_BUDGET", // MANDATORY (their fund)
-              "comment": "groceries for ALICE", // optional
+              "fund": "BOB_MONTHLY_BUDGET", // MANDATORY (their fund)
+              "comment": "groceries for BOB", // optional
               "correction": false
             }
             ```
-            Example: "bought coffee for ALICE 200" / "200 on groceries for her"
+            Example: "bought coffee for BOB 200" / "200 on groceries for them"
             
             **4. Received money from 3rd party (NOT linked user) = INCOME:**
             ```json
@@ -288,8 +288,8 @@ public class MainAgent {
             1. **userName and targetPerson fields for TRANSFER between linked users:**
                - **userName** = person who SENDS money (MANDATORY - always fill)
                - **targetPerson** = person who RECEIVES money (MANDATORY - always fill)
-               - "ALICE gave me 500" → userName: "ALICE", targetPerson: current user from context
-               - "I gave ALICE 500" → userName: current user from context, targetPerson: "ALICE"
+               - "BOB gave me 500" → userName: "BOB", targetPerson: current user from context
+               - "I gave BOB 500" → userName: current user from context, targetPerson: "BOB"
                - BOTH fields must be filled for transfers with linked users!
             
             2. **userName and targetPerson MUST be EXACT userName from "Linked users" list OR current user:**
@@ -303,8 +303,8 @@ public class MainAgent {
                - Examples: "gift for mom", "coffee with friend" → if mom or that friend is not on the list of linked users and not mentioned in aliases - it's EXPENSE with comment, not transfer
             
             **When user EXPLAINS who someone is (provides alias/mapping):**
-            - User: "Ksyusha is KIKI" / "that was for KIKI" / "remember that Ksyusha = KIKI"
-            - Action 1: Create UTILS action with command=CUSTOM_INSTRUCTION, value="Ksyusha = KIKI (linked user alias)"
+            - User: "Sarah is my partner" / "that was for BOB" / "remember that Sarah = BOB"
+            - Action 1: Create UTILS action with command=CUSTOM_INSTRUCTION, value="Sarah = BOB (linked user alias)"
             - Action 2: If there's a pending transaction → create PENDING_CLARIFICATION with updated info (now that you know the mapping)
             
             4. **targetAccount is MANDATORY for TRANSFER to/from linked user:**
@@ -441,9 +441,9 @@ public class MainAgent {
             - Put the instruction in value field
             - Examples:
               - "whenever I say rubles, it's BYN" → CUSTOM_INSTRUCTION "rubles = BYN"
-              - "if I buy something for alice, use her fund ALICE_PERSONAL" → CUSTOM_INSTRUCTION "purchases for alice → fund ALICE_PERSONAL"
+              - "if I buy something for partner, use their fund PARTNER_PERSONAL" → CUSTOM_INSTRUCTION "purchases for partner → fund PARTNER_PERSONAL"
               - "when I say 'withdrew', always multiply by 2" → CUSTOM_INSTRUCTION "withdrew = amount × 2"
-              - "Ksyusha is KIKI" / "Ksyusha = KIKI" → CUSTOM_INSTRUCTION "Ksyusha = KIKI (linked user alias)"
+              - "Sarah is my girlfriend" / "Sarah = linked user BOB" → CUSTOM_INSTRUCTION "Sarah = BOB (linked user alias)"
               - "I work at IT company, salary comes at end of month" → CUSTOM_INSTRUCTION "salary comes end of month from user's IT company"
               - "forget about rubles" → CUSTOM_INSTRUCTION "remove rubles instruction"
               - "clear all my instructions" → CUSTOM_INSTRUCTION "clear all"
