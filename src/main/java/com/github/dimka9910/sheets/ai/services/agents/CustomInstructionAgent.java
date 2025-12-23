@@ -2,21 +2,21 @@ package com.github.dimka9910.sheets.ai.services.agents;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.github.dimka9910.sheets.ai.dto.user.AccountEntry;
-import com.github.dimka9910.sheets.ai.dto.user.FundEntry;
-import com.github.dimka9910.sheets.ai.dto.user.LinkedUserEntry;
 import com.github.dimka9910.sheets.ai.dto.user.UserEntity;
 import com.github.dimka9910.sheets.ai.dto.actions.CustomInstructionActionBase;
+import com.github.dimka9910.sheets.ai.services.UserContextToPromptMapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.ai.chat.messages.SystemMessage;
 import org.springframework.ai.chat.messages.UserMessage;
 import org.springframework.ai.chat.model.ChatModel;
+import org.springframework.ai.chat.model.ChatResponse;
 import org.springframework.ai.chat.prompt.Prompt;
 import org.springframework.ai.openai.OpenAiChatOptions;
 import org.springframework.stereotype.Component;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 
 /**
@@ -50,8 +50,6 @@ public class CustomInstructionAgent {
     public record Response(
             List<CustomInstructionActionBase> actions,
             String explanation,
-            long latencyMs,
-            int tokensUsed,
             String errorMessage
     ) {
         public boolean isSuccess() {
@@ -168,9 +166,9 @@ public class CustomInstructionAgent {
     
     private final ChatModel chatModel;
     private final ObjectMapper objectMapper;
+    private final UserContextToPromptMapper contextMapper;
 
     public Response process(Request request) {
-        long start = System.currentTimeMillis();
         try {
             // Build system and user prompts
             String systemPrompt = buildSystemPrompt();
@@ -186,26 +184,24 @@ public class CustomInstructionAgent {
                             new UserMessage(userPrompt)
                     ),
                     OpenAiChatOptions.builder()
-                            .withModel(MODEL)
-                            .withMaxCompletionTokens(MAX_COMPLETION_TOKENS)
-                            .withTemperature(0.7)
+                            .model(MODEL)
+                            .maxCompletionTokens(MAX_COMPLETION_TOKENS)
+                            .temperature(0.7)
                             .build()
             );
 
-            // Call LLM via Spring AI
-            org.springframework.ai.chat.model.ChatResponse chatResponse = chatModel.call(prompt);
-            String content = chatResponse.getResult().getOutput().getContent();
+            // Call LLM via Spring AI (observability handled automatically)
+            ChatResponse chatResponse = chatModel.call(prompt);
+            String content = chatResponse.getResult().getOutput().getText();  
             
-            log.info("CustomInstructionAgent raw response: {}", content);
+            log.debug("CustomInstructionAgent raw response: {}", content);
 
-            return parseResponse(chatResponse, start);
+            return parseResponse(chatResponse);
         } catch (Exception e) {
             log.error("CustomInstructionAgent error: {}", e.getMessage(), e);
             return new Response(
                     List.of(),
                     "Error processing instruction: " + e.getMessage(),
-                    System.currentTimeMillis() - start,
-                    0,
                     e.getMessage()
             );
         }
@@ -229,83 +225,15 @@ public class CustomInstructionAgent {
 
     /**
      * Build user prompt (user context + new instructions).
+     * Reuses UserContextToPromptMapper for consistent formatting (DRY principle).
      */
     private String buildUserPrompt(Request request) {
         StringBuilder sb = new StringBuilder();
+
+        String userContext = contextMapper.buildContextPrompt(request.userEntity(), Collections.emptySet());
+        sb.append(userContext);
         
-        sb.append("## Current User Context\n\n");
-        
-        UserEntity user = request.userEntity();
-        
-        // Defaults
-        sb.append("### Defaults:\n");
-        sb.append("- Currency: ").append(user.getDefaultCurrency() != null ? user.getDefaultCurrency() : "NOT SET").append("\n");
-        sb.append("- Account: ").append(user.getDefaultAccount() != null ? user.getDefaultAccount() : "NOT SET").append("\n");
-        sb.append("- Fund: ").append(user.getDefaultFund() != null ? user.getDefaultFund() : "NOT SET").append("\n\n");
-        
-        // Accounts
-        List<AccountEntry> accounts = user.getAccounts();
-        if (accounts != null && !accounts.isEmpty()) {
-            sb.append("### Accounts:\n");
-            for (AccountEntry acc : accounts) {
-                sb.append("- ").append(acc.getAccountId());
-                if (acc.getDisplayName() != null) {
-                    sb.append(" (").append(acc.getDisplayName()).append(")");
-                }
-                if (acc.getAliases() != null && !acc.getAliases().isEmpty()) {
-                    sb.append(" — aliases: ").append(String.join(", ", acc.getAliases()));
-                }
-                sb.append("\n");
-            }
-            sb.append("\n");
-        }
-        
-        // Funds
-        List<FundEntry> funds = user.getFunds();
-        if (funds != null && !funds.isEmpty()) {
-            sb.append("### Funds:\n");
-            for (FundEntry fund : funds) {
-                sb.append("- ").append(fund.getFundId());
-                if (fund.getDisplayName() != null) {
-                    sb.append(" (").append(fund.getDisplayName()).append(")");
-                }
-                if (fund.getAliases() != null && !fund.getAliases().isEmpty()) {
-                    sb.append(" — aliases: ").append(String.join(", ", fund.getAliases()));
-                }
-                sb.append("\n");
-            }
-            sb.append("\n");
-        }
-        
-        // Linked Users
-        List<LinkedUserEntry> linkedUsers = user.getLinkedUsers();
-        if (linkedUsers != null && !linkedUsers.isEmpty()) {
-            sb.append("### Linked Users:\n");
-            for (LinkedUserEntry linked : linkedUsers) {
-                sb.append("- ").append(linked.getUserName());
-                if (linked.getDisplayName() != null) {
-                    sb.append(" (").append(linked.getDisplayName()).append(")");
-                }
-                if (linked.getAliases() != null && !linked.getAliases().isEmpty()) {
-                    sb.append(" — aliases: ").append(String.join(", ", linked.getAliases()));
-                }
-                sb.append("\n");
-            }
-            sb.append("\n");
-        }
-        
-        // Custom Instructions
-        List<String> instructions = user.getCustomInstructions();
-        if (instructions != null && !instructions.isEmpty()) {
-            sb.append("### Custom Instructions:\n");
-            for (int i = 0; i < instructions.size(); i++) {
-                sb.append("[").append(i).append("] ").append(instructions.get(i)).append("\n");
-            }
-            sb.append("\n");
-        } else {
-            sb.append("### Custom Instructions:\n(none)\n\n");
-        }
-        
+        // Add new instructions (specific to CustomInstructionAgent)
         sb.append("\n## User's New Instructions\n\n");
         List<String> newInstructions = request.instructions();
         if (newInstructions.size() == 1) {
@@ -323,9 +251,9 @@ public class CustomInstructionAgent {
         return sb.toString();
     }
 
-    private Response parseResponse(org.springframework.ai.chat.model.ChatResponse chatResponse, long startTime) {
+    private Response parseResponse(ChatResponse chatResponse) {
         try {
-            String content = chatResponse.getResult().getOutput().getContent();
+            String content = chatResponse.getResult().getOutput().getText();
             String json = cleanJsonResponse(content);
             JsonNode root = objectMapper.readTree(json);
 
@@ -338,22 +266,17 @@ public class CustomInstructionAgent {
             }
 
             String explanation = root.path("explanation").asText("No explanation provided.");
-
-            long latency = System.currentTimeMillis() - startTime;
-            int totalTokens = chatResponse.getMetadata().getUsage().getTotalTokens().intValue();
             
-            log.info("✅ CustomInstructionAgent parsed: {} actions ({}ms, {} tokens)",
-                    actions.size(), latency, totalTokens);
+            log.info("✅ CustomInstructionAgent parsed: {} actions",
+                    actions.size());
 
-            return new Response(actions, explanation, latency, totalTokens, null);
+            return new Response(actions, explanation, null);
 
         } catch (Exception e) {
             log.error("❌ CustomInstructionAgent parse error: {}", e.getMessage(), e);
             return new Response(
                     List.of(),
                     "Parse error: " + e.getMessage(),
-                    System.currentTimeMillis() - startTime,
-                    0,
                     "Parse error: " + e.getMessage()
             );
         }

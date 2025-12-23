@@ -33,7 +33,7 @@ public interface FinancialOperationRepository extends JpaRepository<FinancialOpe
      * Найти все операции пользователя (не удалённые, с пагинацией)
      */
     @Query("SELECT f FROM FinancialOperation f WHERE f.userId = :userId AND f.deletedAt IS NULL ORDER BY f.transactionDate DESC")
-    Page<FinancialOperation> findByUserIdAndNotDeleted(@Param("userId") String userId, Pageable pageable);
+    Page<FinancialOperation> findByUserIdAndNotDeleted(@Param("userId") UUID userId, Pageable pageable);
 
     /**
      * Найти операции пользователя за период
@@ -43,7 +43,7 @@ public interface FinancialOperationRepository extends JpaRepository<FinancialOpe
            "AND f.deletedAt IS NULL " +
            "ORDER BY f.transactionDate DESC")
     List<FinancialOperation> findByUserIdAndDateRange(
-        @Param("userId") String userId,
+        @Param("userId") UUID userId,
         @Param("startDate") LocalDateTime startDate,
         @Param("endDate") LocalDateTime endDate
     );
@@ -56,7 +56,7 @@ public interface FinancialOperationRepository extends JpaRepository<FinancialOpe
            "AND f.deletedAt IS NULL " +
            "ORDER BY f.transactionDate DESC")
     List<FinancialOperation> findByUserIdAndOperationType(
-        @Param("userId") String userId,
+        @Param("userId") UUID userId,
         @Param("operationType") String operationType,
         Pageable pageable
     );
@@ -85,7 +85,7 @@ public interface FinancialOperationRepository extends JpaRepository<FinancialOpe
      * Подсчёт активных операций пользователя
      */
     @Query("SELECT COUNT(f) FROM FinancialOperation f WHERE f.userId = :userId AND f.deletedAt IS NULL")
-    long countByUserIdAndNotDeleted(@Param("userId") String userId);
+    long countByUserIdAndNotDeleted(@Param("userId") UUID userId);
 
     /**
      * Найти последнюю операцию пользователя
@@ -95,13 +95,13 @@ public interface FinancialOperationRepository extends JpaRepository<FinancialOpe
     @Query("SELECT f FROM FinancialOperation f WHERE f.userId = :userId " +
            "AND f.deletedAt IS NULL " +
            "ORDER BY f.createdAt DESC")
-    List<FinancialOperation> findLatestByUserId(@Param("userId") String userId, Pageable pageable);
+    List<FinancialOperation> findLatestByUserId(@Param("userId") UUID userId, Pageable pageable);
 
     /**
      * Найти все операции пользователя (не удалённые), sorted by transaction date
      */
     @Query("SELECT f FROM FinancialOperation f WHERE f.userId = :userId AND f.deletedAt IS NULL ORDER BY f.transactionDate DESC")
-    List<FinancialOperation> findByUserIdOrderByTransactionDateDesc(@Param("userId") String userId);
+    List<FinancialOperation> findByUserIdOrderByTransactionDateDesc(@Param("userId") UUID userId);
 }
 
 

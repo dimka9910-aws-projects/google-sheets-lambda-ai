@@ -10,6 +10,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.ai.chat.messages.SystemMessage;
 import org.springframework.ai.chat.messages.UserMessage;
 import org.springframework.ai.chat.model.ChatModel;
+import org.springframework.ai.chat.model.ChatResponse;
 import org.springframework.ai.chat.prompt.Prompt;
 import org.springframework.ai.openai.OpenAiChatOptions;
 import org.springframework.stereotype.Component;
@@ -57,9 +58,6 @@ public class MainAgent {
     
     public record Response(
             MainAgentResponse result,
-            long latencyMs,
-            int tokensUsed,
-            int reasoningTokens,
             String errorMessage
     ) {
         public boolean isSuccess() {
@@ -519,8 +517,6 @@ public class MainAgent {
     // ═══════════════════════════════════════════════════════════════════════════
 
     public Response process(Request request) {
-        long start = System.currentTimeMillis();
-        
         try {
             // Build system and user messages
             String systemPrompt = buildSystemPrompt(request.userContext(), request.tags());
@@ -536,20 +532,20 @@ public class MainAgent {
                             new UserMessage(userPrompt)
                     ),
                     OpenAiChatOptions.builder()
-                            .withModel(MODEL)
-                            .withMaxCompletionTokens(MAX_COMPLETION_TOKENS)
-                            .withTemperature(0.7)
+                            .model(MODEL)
+                            .maxCompletionTokens(MAX_COMPLETION_TOKENS)
+                            .temperature(0.7)
                             .build()
             );
             
-            // Call LLM via Spring AI
-            org.springframework.ai.chat.model.ChatResponse chatResponse = chatModel.call(prompt);
+            // Call LLM via Spring AI (observability handled automatically)
+            ChatResponse chatResponse = chatModel.call(prompt);
             
-            String content = chatResponse.getResult().getOutput().getContent();
-            log.info("AI response: {}", truncate(content, 400));
+            String content = chatResponse.getResult().getOutput().getText();  
+            log.debug("AI response: {}", truncate(content, 400));
             
-            // Parse response (using existing parser)
-            return parseResponse(chatResponse, start);
+            // Parse response
+            return parseResponse(chatResponse);
             
         } catch (Exception e) {
             log.error("MainAgent error: {}", e.getMessage(), e);
@@ -558,8 +554,6 @@ public class MainAgent {
                             .actions(List.of())
                             .response("Sorry, please try again.")
                             .build(),
-                    System.currentTimeMillis() - start,
-                    0, 0,
                     e.getMessage()
             );
         }
@@ -621,27 +615,17 @@ public class MainAgent {
     // PARSE RESPONSE
     // ═══════════════════════════════════════════════════════════════════════════
 
-    private Response parseResponse(org.springframework.ai.chat.model.ChatResponse chatResponse, long startTime) {
+    private Response parseResponse(ChatResponse chatResponse) {
         try {
-            String content = chatResponse.getResult().getOutput().getContent();
+            String content = chatResponse.getResult().getOutput().getText();  
             String cleanJson = cleanJsonResponse(content);
             MainAgentResponse result = objectMapper.readValue(cleanJson, MainAgentResponse.class);
             
-            long latency = System.currentTimeMillis() - startTime;
-            int totalTokens = chatResponse.getMetadata().getUsage().getTotalTokens().intValue();
-            
-            // Reasoning tokens (for reasoning models like o1-mini/gpt-5-mini)
-            // Spring AI M4 doesn't expose detailed token breakdown yet
-            // Will be properly supported in future Spring AI versions
-            int reasoningTokens = 0;
-            
-            log.info("✅ Parsed: {} actions, response='{}' ({}ms, {} tokens)", 
+            log.info("✅ Parsed: {} actions, response='{}'", 
                     result.getActions().size(), 
-                    truncate(result.getResponse(), 50),
-                    latency, 
-                    totalTokens);
+                    truncate(result.getResponse(), 50));
             
-            return new Response(result, latency, totalTokens, reasoningTokens, null);
+            return new Response(result, null);
             
         } catch (Exception e) {
             log.error("❌ Parse error: {}", e.getMessage(), e);
@@ -650,9 +634,6 @@ public class MainAgent {
                             .actions(List.of())
                             .response("Sorry, please try again.")
                             .build(),
-                    System.currentTimeMillis() - startTime,
-                    0,
-                    0,
                     "Parse error: " + e.getMessage()
             );
         }

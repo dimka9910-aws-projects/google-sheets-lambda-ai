@@ -26,23 +26,28 @@ public class FinancialOperationMapper {
     /**
      * Convert EXPENSE to database entity.
      * Amount is stored as negative value.
+     * 
+     * @param action Financial action DTO
+     * @param userId User UUID (FK to users.id)
+     * @param accountId Account UUID (FK to accounts.id)
+     * @param fundId Fund UUID (FK to funds.id)
      */
-    public FinancialOperation toExpenseEntity(FinancialAction action, String userId) {
+    public FinancialOperation toExpenseEntity(FinancialAction action, UUID userId, UUID accountId, UUID fundId) {
         FinancialOperation entity = new FinancialOperation();
         entity.setId(UUID.randomUUID());
         entity.setUserId(userId);
         entity.setOperationType("EXPENSE");
         entity.setAmount(BigDecimal.valueOf(action.getAmount()).negate()); // NEGATIVE for expenses
         entity.setCurrency(action.getCurrency());
-        entity.setAccount(action.getAccount());
-        entity.setFund(action.getFund());
+        entity.setAccountId(accountId);
+        entity.setFundId(fundId);
         entity.setTransactionDate(parseDate(action.getDate()));
         entity.setDescription(buildDescription(action));
         entity.setCreatedAt(LocalDateTime.now());
         entity.setUpdatedAt(LocalDateTime.now());
         
-        log.debug("Mapped EXPENSE: amount={}, account={}, fund={}", 
-            entity.getAmount(), entity.getAccount(), entity.getFund());
+        log.debug("Mapped EXPENSE: amount={}, accountId={}, fundId={}", 
+            entity.getAmount(), entity.getAccountId(), entity.getFundId());
         
         return entity;
     }
@@ -50,23 +55,28 @@ public class FinancialOperationMapper {
     /**
      * Convert INCOME to database entity.
      * Amount is stored as positive value.
+     * 
+     * @param action Financial action DTO
+     * @param userId User UUID (FK to users.id)
+     * @param accountId Account UUID (FK to accounts.id)
+     * @param fundId Fund UUID (FK to funds.id)
      */
-    public FinancialOperation toIncomeEntity(FinancialAction action, String userId) {
+    public FinancialOperation toIncomeEntity(FinancialAction action, UUID userId, UUID accountId, UUID fundId) {
         FinancialOperation entity = new FinancialOperation();
         entity.setId(UUID.randomUUID());
         entity.setUserId(userId);
         entity.setOperationType("INCOME");
         entity.setAmount(BigDecimal.valueOf(action.getAmount())); // POSITIVE for income
         entity.setCurrency(action.getCurrency());
-        entity.setAccount(action.getAccount());
-        entity.setFund(action.getFund());
+        entity.setAccountId(accountId);
+        entity.setFundId(fundId);
         entity.setTransactionDate(parseDate(action.getDate()));
         entity.setDescription(buildDescription(action));
         entity.setCreatedAt(LocalDateTime.now());
         entity.setUpdatedAt(LocalDateTime.now());
         
-        log.debug("Mapped INCOME: amount={}, account={}, fund={}", 
-            entity.getAmount(), entity.getAccount(), entity.getFund());
+        log.debug("Mapped INCOME: amount={}, accountId={}, fundId={}", 
+            entity.getAmount(), entity.getAccountId(), entity.getFundId());
         
         return entity;
     }
@@ -75,8 +85,15 @@ public class FinancialOperationMapper {
      * Convert TRANSFER to two linked database entities.
      * Returns array: [debit_record, credit_record]
      * Both records share the same link_id.
+     * 
+     * @param action Financial action DTO
+     * @param userId User UUID (FK to users.id)
+     * @param sourceAccountId Source account UUID (FK to accounts.id)
+     * @param targetAccountId Target account UUID (FK to accounts.id)
+     * @param fundId Fund UUID (FK to funds.id) - optional, can be null
      */
-    public FinancialOperation[] toTransferEntities(FinancialAction action, String userId) {
+    public FinancialOperation[] toTransferEntities(FinancialAction action, UUID userId, 
+                                                    UUID sourceAccountId, UUID targetAccountId, UUID fundId) {
         UUID linkId = UUID.randomUUID();
         LocalDateTime transactionDate = parseDate(action.getDate());
         String description = buildDescription(action);
@@ -90,8 +107,8 @@ public class FinancialOperationMapper {
         debit.setOperationType("TRANSFER");
         debit.setAmount(amount.negate()); // NEGATIVE (money OUT)
         debit.setCurrency(action.getCurrency());
-        debit.setAccount(action.getAccount()); // Source account
-        debit.setFund(action.getFund());
+        debit.setAccountId(sourceAccountId); // Source account FK
+        debit.setFundId(fundId);
         debit.setTransactionDate(transactionDate);
         debit.setDescription(description + " (from)");
         debit.setLinkId(linkId);
@@ -105,8 +122,8 @@ public class FinancialOperationMapper {
         credit.setOperationType("TRANSFER");
         credit.setAmount(amount); // POSITIVE (money IN)
         credit.setCurrency(action.getCurrency());
-        credit.setAccount(action.getTargetAccount()); // Target account
-        credit.setFund(action.getFund()); // Same fund for now (targetFund doesn't exist yet)
+        credit.setAccountId(targetAccountId); // Target account FK
+        credit.setFundId(fundId); // Same fund
         credit.setTransactionDate(transactionDate);
         credit.setDescription(description + " (to)");
         credit.setLinkId(linkId);
@@ -114,7 +131,7 @@ public class FinancialOperationMapper {
         credit.setUpdatedAt(now);
 
         log.debug("Mapped TRANSFER: amount={}, from={} to={}, link_id={}", 
-            action.getAmount(), action.getAccount(), action.getTargetAccount(), linkId);
+            action.getAmount(), sourceAccountId, targetAccountId, linkId);
 
         return new FinancialOperation[] { debit, credit };
     }

@@ -52,6 +52,11 @@ spring:
           model: gpt-4o
           temperature: 0.7
           max-tokens: 2000
+        # Enable centralized observability (auto-logs latency, tokens, errors)
+        observations:
+          enabled: true
+          include-prompt: false  # Don't log full prompts (save memory/logs)
+          include-completion: false  # Don't log full responses (save memory/logs)
       # Retry configuration for resilience
       retry:
         max-attempts: 3
@@ -66,5 +71,6 @@ logging:
     root: INFO
     com.github.dimka9910.sheets.ai: DEBUG
     org.springframework: WARN
+    org.springframework.ai.chat.observation: DEBUG  # Spring AI automatic observability
     org.hibernate: WARN
     liquibase: INFO

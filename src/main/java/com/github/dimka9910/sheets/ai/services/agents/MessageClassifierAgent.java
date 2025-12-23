@@ -5,6 +5,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.ai.chat.messages.SystemMessage;
 import org.springframework.ai.chat.messages.UserMessage;
 import org.springframework.ai.chat.model.ChatModel;
+import org.springframework.ai.chat.model.ChatResponse;
 import org.springframework.ai.chat.prompt.Prompt;
 import org.springframework.ai.converter.BeanOutputConverter;
 import org.springframework.ai.openai.OpenAiChatOptions;
@@ -47,8 +48,6 @@ public class MessageClassifierAgent {
     public record Response(
             Set<Tag> tags,
             String rawJson,
-            long latencyMs,
-            int tokensUsed,
             String errorMessage
     ) {
         public boolean isSuccess() {
@@ -172,8 +171,6 @@ public class MessageClassifierAgent {
     // ═══════════════════════════════════════════════════════════════════════════
     
     public Response process(Request request) {
-        long start = System.currentTimeMillis();
-        
         try {
             // Build system + user messages
             String systemPrompt = buildSystemPrompt();
@@ -190,36 +187,31 @@ public class MessageClassifierAgent {
                             new UserMessage(userPrompt)
                     ),
                     OpenAiChatOptions.builder()
-                            .withModel(MODEL)
-                            .withMaxTokens(MAX_TOKENS)
-                            .withTemperature(0.3)  // Lower temperature for classification
+                            .model(MODEL)
+                            .maxTokens(MAX_TOKENS)
+                            .temperature(0.3)  // Lower temperature for classification
                             .build()
             );
             
-            // Call LLM via Spring AI
-            org.springframework.ai.chat.model.ChatResponse chatResponse = chatModel.call(prompt);
+            // Call LLM via Spring AI (observability handled automatically)
+            ChatResponse chatResponse = chatModel.call(prompt);
             
             // Parse structured output
-            String content = chatResponse.getResult().getOutput().getContent();
+            String content = chatResponse.getResult().getOutput().getText();
             ClassificationResult result = outputConverter.convert(content);
             
             // Convert to Set<Tag>
             Set<Tag> tags = parseTags(result.tags());
             
-            long latency = System.currentTimeMillis() - start;
-            int tokensUsed = chatResponse.getMetadata().getUsage().getTotalTokens().intValue();
+            log.info("✅ Classification: tags={}", tags);
             
-            log.info("✅ Classification: tags={} ({}ms, {} tokens)", tags, latency, tokensUsed);
-            
-            return new Response(tags, content, latency, tokensUsed, null);
+            return new Response(tags, content, null);
             
         } catch (Exception e) {
             log.error("❌ Classification error: {}", e.getMessage(), e);
             return new Response(
                     Set.of(Tag.FINANCIAL),  // Safe fallback
                     "{\"error\":\"" + e.getMessage() + "\"}",
-                    System.currentTimeMillis() - start,
-                    0,
                     e.getMessage()
             );
         }

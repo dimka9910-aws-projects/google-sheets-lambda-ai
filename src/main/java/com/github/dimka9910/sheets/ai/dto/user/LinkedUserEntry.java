@@ -4,24 +4,29 @@ import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
-import software.amazon.awssdk.enhanced.dynamodb.mapper.annotations.DynamoDbBean;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.UUID;
 
 /**
  * Linked user entry for shared finances.
- * Stored in UserEntity.linkedUsers in DynamoDB.
+ * Now stored in PostgreSQL linked_users table.
  */
 @Data
 @Builder
 @NoArgsConstructor
 @AllArgsConstructor
-@DynamoDbBean
 public class LinkedUserEntry {
     
     /**
-     * System user name (e.g., "KIKI", "DIMA") — used to load their UserEntity.
+     * UUID of target user (PostgreSQL).
+     * Used to load target user's data.
+     */
+    private UUID targetUserId;
+    
+    /**
+     * System user name (e.g., "KIKI", "DIMA") — resolved from targetUserId.
      */
     private String userName;
     

@@ -1,73 +1,93 @@
 package com.github.dimka9910.sheets.ai.services;
 
-import com.github.dimka9910.sheets.ai.dto.user.AccountEntry;
-import com.github.dimka9910.sheets.ai.dto.user.FundEntry;
-import com.github.dimka9910.sheets.ai.dto.user.LinkedUserEntry;
-import com.github.dimka9910.sheets.ai.dto.user.UserEntity;
-import com.github.dimka9910.sheets.ai.repository.UserEntityRepository;
+import com.github.dimka9910.sheets.ai.db.entity.*;
+import com.github.dimka9910.sheets.ai.db.mapper.UserEntityMapper;
+import com.github.dimka9910.sheets.ai.db.repository.*;
+import com.github.dimka9910.sheets.ai.dto.user.*;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
-import java.util.List;
-import java.util.Optional;
+import java.util.*;
+import java.util.stream.Collectors;
 
 /**
- * Spring Service for managing user context.
- * Reads/writes to DynamoDB via UserEntityRepository.
- * Uses Spring DI.
- * 
- * Primary key: userName (e.g., "DIMA", "KIKI")
- * GSI: telegramId (for lookup from Telegram)
+ * Spring Service for managing user context with PostgreSQL (JPA).
+ * Replaces DynamoDB implementation.
  */
 @Slf4j
 @Service
 @RequiredArgsConstructor
 public class UserEntityService {
 
-    private final UserEntityRepository repository;
+    private final UserJpaRepository userRepository;
+    private final AccountJpaRepository accountRepository;
+    private final FundJpaRepository fundRepository;
+    private final LinkedUserJpaRepository linkedUserRepository;
+    private final ChatMessageJpaRepository chatMessageRepository;
+    private final UserEntityMapper mapper;
 
     // ═══════════════════════════════════════════════════════════════════════════
     // GET CONTEXT
     // ═══════════════════════════════════════════════════════════════════════════
 
     /**
-     * Get context by userName (primary key).
+     * Get context by userName (system identifier).
      * Returns empty context if not found.
+     * Loads CORE data (user, accounts, funds) + chat history.
+     * 
+     * Использует JOIN FETCH для accounts/funds → 2 queries вместо 4!
      */
+    @Transactional(readOnly = true)
     public UserEntity getByUserName(String userName) {
         log.info("Getting context for userName: {}", userName);
         
-        Optional<UserEntity> contextOpt = repository.getByUserName(userName);
+        // JOIN FETCH: загружает user + accounts + funds за ОДИН запрос
+        Optional<UserJpaEntity> userOpt = userRepository.findByUsernameWithAccountsAndFunds(userName);
         
-        if (contextOpt.isPresent()) {
-            log.debug("Found context for userName: {}", userName);
-            return contextOpt.get();
+        if (userOpt.isEmpty()) {
+            log.info("User {} not found, returning empty context", userName);
+            return UserEntity.builder()
+                    .userName(userName)
+                    .build();
         }
+
+        UserEntity dto = loadCoreContext(userOpt.get());
+        loadChatHistory(dto, 10);  // Load last 10 messages (отдельный запрос)
         
-        log.info("User {} not found, returning empty context", userName);
-        return UserEntity.builder()
-                .userName(userName)
-                .build();
+        return dto;
     }
 
     /**
-     * Get context by Telegram ID (GSI).
-     * Returns Optional.empty() if not found (user needs to be created).
+     * Get context by Telegram ID.
+     * Returns Optional.empty() if not found.
+     * Loads CORE data (user, accounts, funds) + chat history.
+     * 
+     * Использует JOIN FETCH для accounts/funds → 2 queries вместо 4!
      */
+    @Transactional(readOnly = true)
     public Optional<UserEntity> getByTelegramId(String telegramId) {
         log.info("Getting context for telegramId: {}", telegramId);
-        return repository.getByTelegramId(telegramId);
+        
+        // JOIN FETCH: загружает user + accounts + funds за ОДИН запрос
+        Optional<UserJpaEntity> userOpt = userRepository.findByTelegramIdWithAccountsAndFunds(telegramId);
+        
+        if (userOpt.isEmpty()) {
+            return Optional.empty();
+        }
+
+        UserEntity dto = loadCoreContext(userOpt.get());
+        loadChatHistory(dto, 10);  // Load last 10 messages (отдельный запрос)
+        
+        return Optional.of(dto);
     }
 
     /**
      * Resolve user context from Telegram ID with loaded linked users.
-     * 
-     * This is the main method for resolving user context from incoming Telegram messages.
-     * 
-     * @param telegramId Telegram user ID
-     * @return Optional<UserEntity> with loaded linked users, or empty if not found
+     * Loads CORE data + chat history + linked users + linked users' full contexts.
      */
+    @Transactional(readOnly = true)
     public Optional<UserEntity> resolveWithLinkedUsers(String telegramId) {
         if (telegramId == null || telegramId.isBlank()) {
             log.warn("Cannot resolve: telegramId is null or blank");
@@ -86,18 +106,118 @@ public class UserEntityService {
         String userName = userContext.getUserName();
         log.info("Resolved telegramId={} → userName={}", telegramId, userName);
 
-        // Load linked users' contexts
-        loadLinkedUserContexts(userContext);
+        // Load linked users with their full contexts
+        loadLinkedUsersWithContexts(userContext);
 
         return Optional.of(userContext);
     }
 
     /**
-     * Save user context to DynamoDB.
+     * Save user context to PostgreSQL.
      */
+    @Transactional
     public void saveContext(UserEntity context) {
         log.info("Saving context for userName: {}", context.getUserName());
-        repository.save(context);
+        
+        // 1. Find or create user
+        UserJpaEntity userJpa = userRepository.findByUsername(context.getUserName())
+                .orElseGet(() -> {
+                    UserJpaEntity newUser = mapper.toJpaUser(context);
+                    return userRepository.save(newUser);
+                });
+
+        // Update user fields
+        userJpa.setTelegramId(context.getTelegramId());
+        userJpa.setDisplayName(context.getDisplayName());
+        userJpa.setPreferredLanguage(context.getPreferredLanguage());
+        userJpa.setDefaultCurrency(context.getDefaultCurrency());
+        
+        // Update AI context (custom instructions, pending actions)
+        Map<String, Object> aiContext = new HashMap<>();
+        if (context.getCustomInstructions() != null && !context.getCustomInstructions().isEmpty()) {
+            aiContext.put("customInstructions", context.getCustomInstructions());
+        }
+        if (context.getPendingActions() != null && !context.getPendingActions().isEmpty()) {
+            aiContext.put("pendingActions", context.getPendingActions());
+        }
+        userJpa.setAiContext(aiContext);
+
+        userRepository.save(userJpa);
+        UUID userId = userJpa.getId();
+
+        // 2. Save accounts (delete old + insert new)
+        accountRepository.deleteByUserId(userId);
+        if (context.getAccounts() != null) {
+            for (AccountEntry accountDto : context.getAccounts()) {
+                AccountJpaEntity accountJpa = mapper.toJpaAccount(accountDto, userId);
+                accountJpa = accountRepository.save(accountJpa);
+                
+                // Update default account ID if this is the default
+                if (context.getDefaultAccount() != null && 
+                    context.getDefaultAccount().equals(accountDto.getAccountId())) {
+                    userJpa.setDefaultAccountId(accountJpa.getId());
+                }
+            }
+        }
+
+        // 3. Save funds (delete old + insert new)
+        fundRepository.deleteByUserId(userId);
+        if (context.getFunds() != null) {
+            for (FundEntry fundDto : context.getFunds()) {
+                FundJpaEntity fundJpa = mapper.toJpaFund(fundDto, userId);
+                fundJpa = fundRepository.save(fundJpa);
+                
+                // Update default fund ID if this is the default
+                if (context.getDefaultFund() != null && 
+                    context.getDefaultFund().equals(fundDto.getFundId())) {
+                    userJpa.setDefaultFundId(fundJpa.getId());
+                }
+            }
+        }
+
+        // 4. Save linked users (delete old + insert new)
+        linkedUserRepository.deleteByOwnerUserId(userId);
+        if (context.getLinkedUsers() != null) {
+            for (LinkedUserEntry linkedDto : context.getLinkedUsers()) {
+                // Resolve target user ID from userName
+                UUID targetUserId = linkedDto.getTargetUserId();
+                if (targetUserId == null && linkedDto.getUserName() != null) {
+                    targetUserId = userRepository.findByUsername(linkedDto.getUserName())
+                            .map(UserJpaEntity::getId)
+                            .orElse(null);
+                }
+                
+                if (targetUserId != null) {
+                    LinkedUserJpaEntity linkedJpa = mapper.toJpaLinkedUser(linkedDto, userId, targetUserId);
+                    linkedUserRepository.save(linkedJpa);
+                }
+            }
+        }
+
+        // 5. Save conversation history (append new messages)
+        if (context.getConversationHistory() != null) {
+            // Get existing message count
+            int existingCount = chatMessageRepository.findLastNMessages(userId, 1000).size();
+            int newCount = context.getConversationHistory().size();
+            
+            // Only save new messages (if count increased)
+            if (newCount > existingCount) {
+                List<ConversationMessage> newMessages = context.getConversationHistory()
+                        .subList(existingCount, newCount);
+                
+                for (ConversationMessage msgDto : newMessages) {
+                    ChatMessageJpaEntity msgJpa = mapper.toJpaChatMessage(msgDto, userId);
+                    chatMessageRepository.save(msgJpa);
+                }
+                
+                log.debug("Saved {} new chat messages", newMessages.size());
+            }
+        }
+
+        // Save user again to update default FK references
+        userRepository.save(userJpa);
+        
+        log.info("✅ Saved context for userName: {}", context.getUserName());
     }
 
     // ═══════════════════════════════════════════════════════════════════════════
@@ -107,89 +227,131 @@ public class UserEntityService {
     /**
      * Delete user by userName.
      */
+    @Transactional
     public void deleteUser(String userName) {
-        repository.delete(userName);
-        log.info("Deleted user {}", userName);
+        userRepository.findByUsername(userName).ifPresent(user -> {
+            userRepository.delete(user);
+            log.info("Deleted user {}", userName);
+        });
     }
 
+    // ═══════════════════════════════════════════════════════════════════════════
+    // PRIVATE HELPERS
+    // ═══════════════════════════════════════════════════════════════════════════
+
     /**
-     * Get context summary as text (for SHOW_SETTINGS).
+     * Load CORE user context: user + accounts + funds.
+     * Chat messages и linked users загружаются отдельно по требованию.
+     * 
+     * ВАЖНО: userJpa должен быть загружен через findByUsernameWithAccountsAndFunds(),
+     * иначе будут отдельные queries для accounts/funds.
      */
-    public String getContextSummary(String userName) {
-        UserEntity context = getByUserName(userName);
-        StringBuilder sb = new StringBuilder();
+    private UserEntity loadCoreContext(UserJpaEntity userJpa) {
+        // Accounts и funds УЖЕ загружены через JOIN FETCH (если использовали правильный метод)
+        // или загружаем сейчас (если userJpa пришел без них)
+        List<AccountJpaEntity> accounts = userJpa.getAccounts();
+        List<FundJpaEntity> funds = userJpa.getFunds();
         
-        sb.append("👤 ").append(context.getUserName());
-        if (context.getDisplayName() != null && !context.getDisplayName().equals(context.getUserName())) {
-            sb.append(" (").append(context.getDisplayName()).append(")");
-        }
-        sb.append("\n\n");
-        
-        sb.append("💱 Default currency: ").append(orNotSet(context.getDefaultCurrency())).append("\n");
-        sb.append("💳 Default account: ").append(orNotSet(context.getDefaultAccount())).append("\n");
-        sb.append("📂 Default fund: ").append(orNotSet(context.getDefaultFund())).append("\n\n");
-        
-        List<AccountEntry> accounts = context.getAccounts();
-        if (accounts != null && !accounts.isEmpty()) {
-            String accountsList = accounts.stream()
-                    .map(a -> a.getAccountId() + (a.getDisplayName() != null ? " (" + a.getDisplayName() + ")" : ""))
-                    .collect(java.util.stream.Collectors.joining(", "));
-            sb.append("💳 Accounts: ").append(accountsList).append("\n");
+        // Если не загружены (старый код), грузим отдельно
+        if (accounts.isEmpty() && funds.isEmpty()) {
+            UUID userId = userJpa.getId();
+            accounts = accountRepository.findByUserId(userId);
+            funds = fundRepository.findByUserId(userId);
         }
         
-        List<FundEntry> funds = context.getFunds();
-        if (funds != null && !funds.isEmpty()) {
-            String fundsList = funds.stream()
-                    .map(f -> f.getFundId() + (f.getDisplayName() != null ? " (" + f.getDisplayName() + ")" : ""))
-                    .collect(java.util.stream.Collectors.joining(", "));
-            sb.append("📂 Funds: ").append(fundsList).append("\n");
-        }
+        // Map to DTO (без chat messages и linked users)
+        UserEntity dto = mapper.toDto(userJpa, accounts, funds, List.of(), List.of());
         
-        var linkedUsers = context.getLinkedUsers();
-        if (linkedUsers != null && !linkedUsers.isEmpty()) {
-            String linkedNames = linkedUsers.stream()
-                    .map(u -> u.getName() + " (" + u.getUserName() + ")")
-                    .collect(java.util.stream.Collectors.joining(", "));
-            sb.append("👥 Linked: ").append(linkedNames).append("\n");
-        }
-        
-        List<String> instructions = context.getCustomInstructions();
-        if (instructions != null && !instructions.isEmpty()) {
-            sb.append("\n📋 Instructions:\n");
-            for (int i = 0; i < instructions.size(); i++) {
-                sb.append("  [").append(i).append("] ").append(instructions.get(i)).append("\n");
-            }
-        }
-        
-        return sb.toString();
+        return dto;
     }
     
     /**
-     * Load linked users' full contexts (accounts, funds, etc.)
+     * Load chat history for user (отдельный запрос).
      */
-    private void loadLinkedUserContexts(UserEntity userContext) {
-        List<LinkedUserEntry> linkedUsers = userContext.getLinkedUsers();
-        if (linkedUsers == null || linkedUsers.isEmpty()) {
-            return;
-        }
-
-        for (LinkedUserEntry linkedUser : linkedUsers) {
-            String linkedUserName = linkedUser.getUserName();
-            if (linkedUserName != null && !linkedUserName.equals(userContext.getUserName())) {
-                try {
-                    UserEntity linkedContext = getByUserName(linkedUserName);
-                    if (linkedContext != null && linkedContext.getUserName() != null) {
-                        userContext.addLinkedUserEntity(linkedUserName, linkedContext);
-                        log.debug("Loaded linked user context: {}", linkedUserName);
-                    }
-                } catch (Exception e) {
-                    log.warn("Failed to load linked user context: {}", linkedUserName, e);
-                }
-            }
+    private void loadChatHistory(UserEntity userContext, int limit) {
+        UUID userId = userRepository.findByUsername(userContext.getUserName())
+                .map(UserJpaEntity::getId)
+                .orElse(null);
+        
+        if (userId != null) {
+            List<ChatMessageJpaEntity> chatMessages = chatMessageRepository.findLastNMessages(userId, limit);
+            Collections.reverse(chatMessages);
+            
+            List<ConversationMessage> messages = chatMessages.stream()
+                    .map(jpa -> ConversationMessage.builder()
+                            .role(jpa.getRole().name())
+                            .content(jpa.getContent())
+                            .wasClarification(jpa.getWasClarification())
+                            .relatedOperationIds(
+                                jpa.getRelatedOperationIds() != null 
+                                    ? Arrays.asList(jpa.getRelatedOperationIds()) 
+                                    : null
+                            )
+                            .build())
+                    .collect(Collectors.toList());
+            
+            userContext.setConversationHistory(messages);
         }
     }
     
-    private String orNotSet(String value) {
-        return value != null ? value : "not set";
+    /**
+     * Load linked users with full contexts.
+     * Делает всё за один раз: metadata + full contexts.
+     */
+    private void loadLinkedUsersWithContexts(UserEntity userContext) {
+        UUID userId = userRepository.findByUsername(userContext.getUserName())
+                .map(UserJpaEntity::getId)
+                .orElse(null);
+        
+        if (userId == null) return;
+        
+        // 1. Load linked_users metadata
+        List<LinkedUserJpaEntity> linkedUsers = linkedUserRepository.findByOwnerUserId(userId);
+        if (linkedUsers.isEmpty()) return;
+        
+        // 2. Batch resolve target user names
+        List<UUID> targetUserIds = linkedUsers.stream()
+                .map(LinkedUserJpaEntity::getTargetUserId)
+                .distinct()
+                .collect(Collectors.toList());
+        
+        Map<UUID, UserJpaEntity> targetUsersMap = userRepository.findAllById(targetUserIds).stream()
+                .collect(Collectors.toMap(UserJpaEntity::getId, u -> u));
+        
+        // 3. Build LinkedUserEntry + load full contexts
+        List<LinkedUserEntry> linkedEntries = new ArrayList<>();
+        
+        for (LinkedUserJpaEntity linkedJpa : linkedUsers) {
+            UUID targetId = linkedJpa.getTargetUserId();
+            UserJpaEntity targetUser = targetUsersMap.get(targetId);
+            
+            if (targetUser == null) continue;
+            
+            // Build metadata entry
+            LinkedUserEntry entry = LinkedUserEntry.builder()
+                    .targetUserId(targetId)
+                    .userName(targetUser.getUsername())
+                    .displayName(linkedJpa.getDisplayName() != null 
+                        ? linkedJpa.getDisplayName() 
+                        : targetUser.getDisplayName())
+                    .aliases(linkedJpa.getAliases() != null 
+                        ? Arrays.asList(linkedJpa.getAliases()) 
+                        : List.of())
+                    .build();
+            linkedEntries.add(entry);
+            
+            // Load full context (accounts, funds, etc.)
+            try {
+                UserEntity linkedContext = loadCoreContext(targetUser);
+                loadChatHistory(linkedContext, 10);
+                userContext.addLinkedUserEntity(targetUser.getUsername(), linkedContext);
+                log.debug("Loaded linked user full context: {}", targetUser.getUsername());
+            } catch (Exception e) {
+                log.warn("Failed to load linked user context: {}", targetUser.getUsername(), e);
+            }
+        }
+        
+        userContext.setLinkedUsers(linkedEntries);
     }
 }
+

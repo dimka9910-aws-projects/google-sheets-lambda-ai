@@ -5,31 +5,25 @@ import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
-import software.amazon.awssdk.enhanced.dynamodb.mapper.annotations.DynamoDbAttribute;
-import software.amazon.awssdk.enhanced.dynamodb.mapper.annotations.DynamoDbBean;
-import software.amazon.awssdk.enhanced.dynamodb.mapper.annotations.DynamoDbPartitionKey;
-import software.amazon.awssdk.enhanced.dynamodb.mapper.annotations.DynamoDbSecondaryPartitionKey;
-import software.amazon.awssdk.enhanced.dynamodb.mapper.annotations.DynamoDbIgnore;
 
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
+import java.time.Instant;
+import java.util.*;
 
 /**
- * User context - settings, accounts, funds, custom instructions.
- * Stored in DynamoDB table finance-tracker-users-{env}
+ * User context DTO - settings, accounts, funds, custom instructions.
+ * Now sourced from PostgreSQL (users, accounts, funds, linked_users, chat_messages tables).
  * 
- * Primary Key: userName (e.g., "DIMA", "KIKI")
- * GSI: telegramId (for lookup from Telegram)
+ * Primary identifier: userName (e.g., "DIMA", "KIKI")
  */
 @Data
 @Builder
 @NoArgsConstructor
 @AllArgsConstructor
-@DynamoDbBean
 public class UserEntity {
 
+    // Internal UUID from PostgreSQL (users.id)
+    private UUID id;
+    
     // Primary identifier - system user name (e.g., "DIMA", "KIKI")
     private String userName;
     
@@ -38,6 +32,9 @@ public class UserEntity {
     
     // Display name (for UI, can be different from userName)
     private String displayName;
+    
+    // Created timestamp
+    private Instant createdAt;
     
     // Accounts (with IDs, display names, and aliases)
     @Builder.Default
@@ -76,19 +73,8 @@ public class UserEntity {
     private String preferredLanguage;
     
     // ═══════════════════════════════════════════════════════════════════════════
-    // DynamoDB KEYS
+    // CORE FIELDS (Lombok generates getters/setters)
     // ═══════════════════════════════════════════════════════════════════════════
-    
-    @DynamoDbPartitionKey
-    @DynamoDbAttribute("userId")  // Maps to existing DynamoDB attribute "userId"
-    public String getUserName() {
-        return userName;
-    }
-    
-    @DynamoDbSecondaryPartitionKey(indexNames = "telegramId-index")
-    public String getTelegramId() {
-        return telegramId;
-    }
     
     // ═══════════════════════════════════════════════════════════════════════════
     // INSTRUCTIONS
@@ -141,12 +127,11 @@ public class UserEntity {
     /**
      * Find account by ID or alias
      */
-    public AccountEntry findAccount(String reference) {
-        if (accounts == null || reference == null) return null;
+    public Optional<AccountEntry> findAccountByAlias(String reference) {
+        if (accounts == null || reference == null) return Optional.empty();
         return accounts.stream()
                 .filter(a -> a.matches(reference))
-                .findFirst()
-                .orElse(null);
+                .findFirst();
     }
     
     public void addFund(FundEntry fund) {
@@ -173,12 +158,11 @@ public class UserEntity {
     /**
      * Find fund by ID or alias
      */
-    public FundEntry findFund(String reference) {
-        if (funds == null || reference == null) return null;
+    public Optional<FundEntry> findFundByAlias(String reference) {
+        if (funds == null || reference == null) return Optional.empty();
         return funds.stream()
                 .filter(f -> f.matches(reference))
-                .findFirst()
-                .orElse(null);
+                .findFirst();
     }
     
     // ═══════════════════════════════════════════════════════════════════════════
@@ -250,10 +234,9 @@ public class UserEntity {
     // ════════════════════════════════════════════════════════════════════════════
     
     // ═══════════════════════════════════════════════════════════════════════════
-    // LINKED USER CONTEXTS (transient)
+    // LINKED USER CONTEXTS (transient - not persisted)
     // ═══════════════════════════════════════════════════════════════════════════
     
-    @DynamoDbIgnore
     public Map<String, UserEntity> getLinkedUserEntitys() {
         return linkedUserEntitys;
     }

@@ -249,23 +249,21 @@ public class MainAgentResultHandler {
             // }
         }
         
-        String userId = userContext.getUserName();
-        
         try {
             // Save to database based on operation type
             switch (action.getOperationType()) {
                 case EXPENSE -> {
-                    financialOperationService.get().saveExpense(action, userId);
+                    financialOperationService.get().saveExpense(action, userContext);
                     log.info("✅ EXPENSE saved to database: {} {} {}", 
                         action.getAmount(), action.getCurrency(), action.getAccount());
                 }
                 case INCOME -> {
-                    financialOperationService.get().saveIncome(action, userId);
+                    financialOperationService.get().saveIncome(action, userContext);
                     log.info("✅ INCOME saved to database: {} {} {}", 
                         action.getAmount(), action.getCurrency(), action.getAccount());
                 }
                 case TRANSFER -> {
-                    financialOperationService.get().saveTransfer(action, userId);
+                    financialOperationService.get().saveTransfer(action, userContext);
                     log.info("✅ TRANSFER saved to database: {} {} {} → {}", 
                         action.getAmount(), action.getCurrency(), action.getAccount(), action.getTargetAccount());
                 }

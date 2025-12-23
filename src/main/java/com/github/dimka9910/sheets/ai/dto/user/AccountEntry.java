@@ -4,14 +4,14 @@ import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
-import software.amazon.awssdk.enhanced.dynamodb.mapper.annotations.DynamoDbBean;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.UUID;
 
 /**
  * Account entry for user's financial accounts.
- * Stored in UserEntity.accounts in DynamoDB.
+ * Now stored in PostgreSQL accounts table.
  * 
  * Examples:
  * - accountId: "CARD_DIMA_VISA_RAIF"
@@ -22,8 +22,12 @@ import java.util.List;
 @Builder
 @NoArgsConstructor
 @AllArgsConstructor
-@DynamoDbBean
 public class AccountEntry {
+    
+    /**
+     * Internal UUID from PostgreSQL (accounts.id)
+     */
+    private UUID id;
     
     /**
      * Unique account identifier (e.g., "CARD_DIMA_VISA_RAIF", "CASH_USD", "REVOLUT")

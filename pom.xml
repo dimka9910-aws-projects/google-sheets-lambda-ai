@@ -32,7 +32,7 @@
         <aws-sdk.version>2.21.0</aws-sdk.version>
         <langchain4j.version>0.35.0</langchain4j.version>
         <lombok.version>1.18.36</lombok.version>
-        <spring-ai.version>1.0.0-M4</spring-ai.version>
+        <spring-ai.version>1.1.2</spring-ai.version>
     </properties>
 
     <!-- Dependency Management for Spring AI -->
@@ -79,12 +79,6 @@
             <artifactId>spring-cloud-aws-starter-sqs</artifactId>
             <version>${spring-cloud-aws.version}</version>
         </dependency>
-        
-        <dependency>
-            <groupId>io.awspring.cloud</groupId>
-            <artifactId>spring-cloud-aws-starter-dynamodb</artifactId>
-            <version>${spring-cloud-aws.version}</version>
-        </dependency>
 
         <!-- AWS Lambda Java -->
         <dependency>
@@ -110,6 +104,13 @@
         <dependency>
             <groupId>org.liquibase</groupId>
             <artifactId>liquibase-core</artifactId>
+        </dependency>
+
+        <!-- Hypersistence Utils for JSONB and Array support in PostgreSQL -->
+        <dependency>
+            <groupId>io.hypersistence</groupId>
+            <artifactId>hypersistence-utils-hibernate-63</artifactId>
+            <version>3.7.3</version>
         </dependency>
 
         <!-- CRaC for AWS Lambda SnapStart (Coordinated Restore at Checkpoint) -->
@@ -164,9 +165,12 @@
         <!-- Spring AI OpenAI Integration -->
         <dependency>
             <groupId>org.springframework.ai</groupId>
-            <artifactId>spring-ai-openai-spring-boot-starter</artifactId>
+            <artifactId>spring-ai-openai</artifactId>
+            <version>2.0.0-M1</version>
         </dependency>
     </dependencies>
+
+
 
     <!-- Spring AI Milestone Repository -->
     <repositories>

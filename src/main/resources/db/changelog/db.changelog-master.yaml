@@ -3,5 +3,11 @@ databaseChangeLog:
       file: db/changelog/migrations/001-create-financial-operations.yaml
   - include:
       file: db/changelog/migrations/002-remove-link-fk-constraint.yaml
+  - include:
+      file: db/changelog/migrations/003-create-user-schema.yaml
+  - include:
+      file: db/changelog/migrations/004-add-related-operations-to-chat-messages.yaml
+  - include:
+      file: db/changelog/migrations/005-refactor-financial-operations.yaml
 
 

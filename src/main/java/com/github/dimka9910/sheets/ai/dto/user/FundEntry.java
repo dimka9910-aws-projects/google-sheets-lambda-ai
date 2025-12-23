@@ -4,14 +4,14 @@ import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
-import software.amazon.awssdk.enhanced.dynamodb.mapper.annotations.DynamoDbBean;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.UUID;
 
 /**
  * Fund/category entry for expense categorization.
- * Stored in UserEntity.funds in DynamoDB.
+ * Now stored in PostgreSQL funds table.
  * 
  * Examples:
  * - fundId: "FOOD"
@@ -22,8 +22,12 @@ import java.util.List;
 @Builder
 @NoArgsConstructor
 @AllArgsConstructor
-@DynamoDbBean
 public class FundEntry {
+    
+    /**
+     * Internal UUID from PostgreSQL (funds.id)
+     */
+    private UUID id;
     
     /**
      * Unique fund identifier (e.g., "FOOD", "TRANSPORT", "ENTERTAINMENT")

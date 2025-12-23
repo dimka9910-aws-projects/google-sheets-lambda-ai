@@ -66,9 +66,8 @@ public class Orchestrator {
             var agentResponse = mainAgent.process(agentRequest);
             MainAgentResponse result = agentResponse.result();
             
-            log.info("Parsed: {} actions, pending={} ({}ms, {} tokens)", 
-                    result.getActions().size(), result.hasPendingClarifications(),
-                    agentResponse.latencyMs(), agentResponse.tokensUsed());
+            log.info("Parsed: {} actions, pending={}", 
+                    result.getActions().size(), result.hasPendingClarifications());
             
             // Step 3: Handle result
             return mainAgentResultHandler.handle(request, result, userContext);
@@ -92,10 +91,8 @@ public class Orchestrator {
         // Classify message tags
         var classifierResponse = classifierAgent.classify(message, previousBotMessage);
         
-        log.info("ClassifierAgent: tags={} ({}ms, {} tokens)", 
-                classifierResponse.tags(), 
-                classifierResponse.latencyMs(), 
-                classifierResponse.tokensUsed());
+        log.info("ClassifierAgent: tags={}", 
+                classifierResponse.tags());
         
         Set<Tag> tags = classifierResponse.tags();
         
@@ -134,19 +131,7 @@ public class Orchestrator {
         boolean hasFunds = userContext.getFunds() != null && !userContext.getFunds().isEmpty();
         
         StringBuilder sb = new StringBuilder();
-        sb.append("⚙️ Before I can help you track expenses, please set up:\n\n");
-        
-        if (!hasAccounts) {
-            sb.append("📋 **Accounts** - where your money is stored\n");
-            sb.append("   Example: \"add account CARD\" or \"add account CASH\"\n\n");
-        }
-        
-        if (!hasFunds) {
-            sb.append("📂 **Funds/Categories** - how you categorize expenses\n");
-            sb.append("   Example: \"add fund FOOD\" or \"add fund TRANSPORT\"\n\n");
-        }
-        
-        sb.append("After setup, you can start tracking: \"coffee 200\" ☕");
+        sb.append("⚙️User is not fully configured\n\n");
         
         return ChatResponse.builder()
                 .chatId(request.getResponseChatId())

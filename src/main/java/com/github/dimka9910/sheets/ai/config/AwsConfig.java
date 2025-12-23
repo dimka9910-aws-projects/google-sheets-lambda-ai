@@ -5,9 +5,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
-import software.amazon.awssdk.enhanced.dynamodb.DynamoDbEnhancedClient;
 import software.amazon.awssdk.regions.Region;
-import software.amazon.awssdk.services.dynamodb.DynamoDbClient;
 import software.amazon.awssdk.services.sqs.SqsClient;
 
 import java.net.http.HttpClient;
@@ -36,22 +34,6 @@ public class AwsConfig {
         log.info("🔌 Initializing HttpClient for LLM API calls");
         return HttpClient.newBuilder()
                 .connectTimeout(Duration.ofSeconds(60))
-                .build();
-    }
-
-    @Bean
-    public DynamoDbClient dynamoDbClient() {
-        log.info("🔌 Initializing DynamoDB client for region: {}", awsRegion);
-        return DynamoDbClient.builder()
-                .region(Region.of(awsRegion))
-                .build();
-    }
-
-    @Bean
-    public DynamoDbEnhancedClient dynamoDbEnhancedClient(DynamoDbClient dynamoDbClient) {
-        log.info("🔌 Initializing DynamoDB Enhanced client");
-        return DynamoDbEnhancedClient.builder()
-                .dynamoDbClient(dynamoDbClient)
                 .build();
     }
 

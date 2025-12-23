@@ -5,19 +5,17 @@ import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
-import software.amazon.awssdk.enhanced.dynamodb.mapper.annotations.DynamoDbBean;
 
 import java.util.Set;
 
 /**
  * Сообщение в диалоге.
- * Используется для хранения истории в DynamoDB и передачи между сервисами.
+ * DTO for passing messages between services.
  */
 @Data
 @Builder
 @NoArgsConstructor
 @AllArgsConstructor
-@DynamoDbBean
 public class Message {
     
     /**

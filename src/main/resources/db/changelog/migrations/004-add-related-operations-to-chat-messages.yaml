@@ -1,0 +1,22 @@
+databaseChangeLog:
+  - changeSet:
+      id: 004-add-related-operations-to-chat-messages
+      author: dimka9910
+      changes:
+        - addColumn:
+            tableName: chat_messages
+            columns:
+              - column:
+                  name: related_operation_ids
+                  type: uuid[]
+                  defaultValue: '{}'
+                  remarks: "Array of UUIDs referencing financial_operations.id - tracks which operations were created by this message"
+        
+        - createIndex:
+            indexName: idx_chat_messages_related_ops
+            tableName: chat_messages
+            columns:
+              - column:
+                  name: related_operation_ids
+            remarks: "GIN index for fast lookups by operation ID (useful for 'show details' or 'undo' commands)"
+

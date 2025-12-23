@@ -41,10 +41,10 @@ public class FinancialOperation {
     private UUID id;
 
     /**
-     * User identifier (currently userName from UserEntity)
+     * User ID (FK to users.id)
      */
-    @Column(name = "user_id", nullable = false, length = 100)
-    private String userId;
+    @Column(name = "user_id", nullable = false)
+    private UUID userId;
 
     /**
      * Operation type: EXPENSE, INCOME, INTERNAL_TRANSFER, TRANSFER, EXCHANGE
@@ -53,16 +53,16 @@ public class FinancialOperation {
     private String operationType;
 
     /**
-     * Account name (for expenses/transfers)
+     * Account ID (FK to accounts.id)
      */
-    @Column(name = "account", length = 100)
-    private String account;
+    @Column(name = "account_id")
+    private UUID accountId;
 
     /**
-     * Fund/category name (for expenses/income)
+     * Fund ID (FK to funds.id)
      */
-    @Column(name = "fund", length = 100)
-    private String fund;
+    @Column(name = "fund_id")
+    private UUID fundId;
 
     /**
      * Amount in currency units (DECIMAL(32, 18) for crypto support)

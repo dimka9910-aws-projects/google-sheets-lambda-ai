@@ -1,0 +1,156 @@
+databaseChangeLog:
+  - changeSet:
+      id: 005-refactor-financial-operations
+      author: dimka9910
+      comment: "Refactor financial_operations to use UUIDs and Foreign Keys instead of VARCHAR external IDs"
+      changes:
+        # Drop old table (no data to preserve)
+        - dropTable:
+            tableName: financial_operations
+        
+        # Create new table with proper FK constraints
+        - createTable:
+            tableName: financial_operations
+            columns:
+              - column:
+                  name: id
+                  type: UUID
+                  defaultValueComputed: gen_random_uuid()
+                  constraints:
+                    primaryKey: true
+                    nullable: false
+              
+              # FK to users (UUID instead of VARCHAR username)
+              - column:
+                  name: user_id
+                  type: UUID
+                  constraints:
+                    nullable: false
+                    foreignKeyName: fk_financial_operations_user
+                    references: users(id)
+                    onDelete: CASCADE
+              
+              - column:
+                  name: operation_type
+                  type: VARCHAR(20)
+                  constraints:
+                    nullable: false
+              
+              # FK to accounts (UUID instead of VARCHAR external_id)
+              - column:
+                  name: account_id
+                  type: UUID
+                  constraints:
+                    foreignKeyName: fk_financial_operations_account
+                    references: accounts(id)
+                    onDelete: SET NULL
+              
+              # FK to funds (UUID instead of VARCHAR external_id)
+              - column:
+                  name: fund_id
+                  type: UUID
+                  constraints:
+                    foreignKeyName: fk_financial_operations_fund
+                    references: funds(id)
+                    onDelete: SET NULL
+              
+              - column:
+                  name: amount
+                  type: DECIMAL(32, 18)
+                  constraints:
+                    nullable: false
+              
+              - column:
+                  name: currency
+                  type: VARCHAR(10)
+                  constraints:
+                    nullable: false
+              
+              - column:
+                  name: transaction_date
+                  type: TIMESTAMP
+                  constraints:
+                    nullable: false
+              
+              - column:
+                  name: description
+                  type: TEXT
+              
+              # Link ID for paired operations (TRANSFER creates 2 records with same link_id)
+              # NO FK constraint (records are created in same transaction)
+              - column:
+                  name: link_id
+                  type: UUID
+              
+              - column:
+                  name: created_at
+                  type: TIMESTAMP
+                  defaultValueComputed: NOW()
+                  constraints:
+                    nullable: false
+              
+              - column:
+                  name: updated_at
+                  type: TIMESTAMP
+                  defaultValueComputed: NOW()
+                  constraints:
+                    nullable: false
+              
+              - column:
+                  name: deleted_at
+                  type: TIMESTAMP
+        
+        # Indexes for fast lookups
+        - createIndex:
+            indexName: idx_fin_ops_user_id
+            tableName: financial_operations
+            columns:
+              - column:
+                  name: user_id
+        
+        - createIndex:
+            indexName: idx_fin_ops_account_id
+            tableName: financial_operations
+            columns:
+              - column:
+                  name: account_id
+        
+        - createIndex:
+            indexName: idx_fin_ops_fund_id
+            tableName: financial_operations
+            columns:
+              - column:
+                  name: fund_id
+        
+        - createIndex:
+            indexName: idx_fin_ops_operation_type
+            tableName: financial_operations
+            columns:
+              - column:
+                  name: operation_type
+        
+        - createIndex:
+            indexName: idx_fin_ops_transaction_date
+            tableName: financial_operations
+            columns:
+              - column:
+                  name: transaction_date
+        
+        - createIndex:
+            indexName: idx_fin_ops_deleted_at
+            tableName: financial_operations
+            columns:
+              - column:
+                  name: deleted_at
+        
+        - createIndex:
+            indexName: idx_fin_ops_link_id
+            tableName: financial_operations
+            columns:
+              - column:
+                  name: link_id
+      
+      rollback:
+        - dropTable:
+            tableName: financial_operations
+

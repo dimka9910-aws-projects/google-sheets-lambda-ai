@@ -4,6 +4,9 @@ import com.github.dimka9910.sheets.ai.db.entity.FinancialOperation;
 import com.github.dimka9910.sheets.ai.db.mapper.FinancialOperationMapper;
 import com.github.dimka9910.sheets.ai.db.repository.FinancialOperationRepository;
 import com.github.dimka9910.sheets.ai.dto.actions.FinancialAction;
+import com.github.dimka9910.sheets.ai.dto.user.AccountEntry;
+import com.github.dimka9910.sheets.ai.dto.user.FundEntry;
+import com.github.dimka9910.sheets.ai.dto.user.UserEntity;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
@@ -11,6 +14,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 
 /**
@@ -51,26 +55,36 @@ public class FinancialOperationService {
      * Amount is stored as negative value.
      * 
      * @param action Financial action from AI
-     * @param userId User ID
+     * @param userContext User context with accounts/funds
      * @return Created entity
      */
     @Transactional
-    public FinancialOperation saveExpense(FinancialAction action, String userId) {
+    public FinancialOperation saveExpense(FinancialAction action, UserEntity userContext) {
         log.info("💰 Saving EXPENSE: amount={}, currency={}, account={}, fund={}", 
             action.getAmount(), action.getCurrency(), action.getAccount(), action.getFund());
         
-        FinancialOperation entity = mapper.toExpenseEntity(action, userId);
+        // Resolve external IDs → UUIDs
+        UUID userId = userContext.getId();
+        UUID accountId = resolveAccountId(action.getAccount(), userContext);
+        UUID fundId = resolveFundId(action.getFund(), userContext);
+        
+        if (userId == null) {
+            throw new IllegalStateException("User ID is null - user not persisted?");
+        }
+        
+        FinancialOperation entity = mapper.toExpenseEntity(action, userId, accountId, fundId);
         
         // DRY_RUN mode - only log, don't save to DB
         if (dryRun) {
-            log.info("[DRY_RUN] Would save EXPENSE: id={}, amount={}, currency={}, account={}", 
-                entity.getId(), entity.getAmount(), entity.getCurrency(), entity.getAccount());
+            log.info("[DRY_RUN] Would save EXPENSE: id={}, amount={}, currency={}, accountId={}, fundId={}", 
+                entity.getId(), entity.getAmount(), entity.getCurrency(), entity.getAccountId(), entity.getFundId());
             return entity;
         }
         
         FinancialOperation saved = repository.save(entity);
         
-        log.info("✅ EXPENSE saved: id={}, amount={}", saved.getId(), saved.getAmount());
+        log.info("✅ EXPENSE saved: id={}, amount={}, accountId={}, fundId={}", 
+            saved.getId(), saved.getAmount(), saved.getAccountId(), saved.getFundId());
         return saved;
     }
 
@@ -79,26 +93,36 @@ public class FinancialOperationService {
      * Amount is stored as positive value.
      * 
      * @param action Financial action from AI
-     * @param userId User ID
+     * @param userContext User context with accounts/funds
      * @return Created entity
      */
     @Transactional
-    public FinancialOperation saveIncome(FinancialAction action, String userId) {
+    public FinancialOperation saveIncome(FinancialAction action, UserEntity userContext) {
         log.info("💰 Saving INCOME: amount={}, currency={}, account={}, fund={}", 
             action.getAmount(), action.getCurrency(), action.getAccount(), action.getFund());
         
-        FinancialOperation entity = mapper.toIncomeEntity(action, userId);
+        // Resolve external IDs → UUIDs
+        UUID userId = userContext.getId();
+        UUID accountId = resolveAccountId(action.getAccount(), userContext);
+        UUID fundId = resolveFundId(action.getFund(), userContext);
+        
+        if (userId == null) {
+            throw new IllegalStateException("User ID is null - user not persisted?");
+        }
+        
+        FinancialOperation entity = mapper.toIncomeEntity(action, userId, accountId, fundId);
         
         // DRY_RUN mode - only log, don't save to DB
         if (dryRun) {
-            log.info("[DRY_RUN] Would save INCOME: id={}, amount={}, currency={}, account={}", 
-                entity.getId(), entity.getAmount(), entity.getCurrency(), entity.getAccount());
+            log.info("[DRY_RUN] Would save INCOME: id={}, amount={}, currency={}, accountId={}, fundId={}", 
+                entity.getId(), entity.getAmount(), entity.getCurrency(), entity.getAccountId(), entity.getFundId());
             return entity;
         }
         
         FinancialOperation saved = repository.save(entity);
         
-        log.info("✅ INCOME saved: id={}, amount={}", saved.getId(), saved.getAmount());
+        log.info("✅ INCOME saved: id={}, amount={}, accountId={}, fundId={}", 
+            saved.getId(), saved.getAmount(), saved.getAccountId(), saved.getFundId());
         return saved;
     }
 
@@ -110,30 +134,46 @@ public class FinancialOperationService {
      * Both share the same link_id.
      * 
      * @param action Financial action from AI
-     * @param userId User ID
+     * @param userContext User context with accounts/funds
      * @return List of created entities [debit, credit]
      */
     @Transactional
-    public List<FinancialOperation> saveTransfer(FinancialAction action, String userId) {
+    public List<FinancialOperation> saveTransfer(FinancialAction action, UserEntity userContext) {
         log.info("💰 Saving TRANSFER: amount={}, currency={}, from={} to={}", 
             action.getAmount(), action.getCurrency(), action.getAccount(), action.getTargetAccount());
         
-        FinancialOperation[] entities = mapper.toTransferEntities(action, userId);
+        // Resolve external IDs → UUIDs
+        UUID userId = userContext.getId();
+        UUID sourceAccountId = resolveAccountId(action.getAccount(), userContext);
+        UUID targetAccountId = resolveAccountId(action.getTargetAccount(), userContext);
+        UUID fundId = resolveFundId(action.getFund(), userContext); // Can be null
+        
+        if (userId == null) {
+            throw new IllegalStateException("User ID is null - user not persisted?");
+        }
+        if (sourceAccountId == null) {
+            throw new IllegalArgumentException("Source account not found: " + action.getAccount());
+        }
+        if (targetAccountId == null) {
+            throw new IllegalArgumentException("Target account not found: " + action.getTargetAccount());
+        }
+        
+        FinancialOperation[] entities = mapper.toTransferEntities(action, userId, sourceAccountId, targetAccountId, fundId);
         FinancialOperation debit = entities[0];
         FinancialOperation credit = entities[1];
         
         // DRY_RUN mode - only log, don't save to DB
         if (dryRun) {
             log.info("[DRY_RUN] Would save TRANSFER: link_id={}, from={} to={}, amount={}", 
-                debit.getLinkId(), action.getAccount(), action.getTargetAccount(), action.getAmount());
+                debit.getLinkId(), sourceAccountId, targetAccountId, action.getAmount());
             return List.of(debit, credit);
         }
         
         FinancialOperation savedDebit = repository.save(debit);
         FinancialOperation savedCredit = repository.save(credit);
         
-        log.info("✅ TRANSFER saved: link_id={}, debit_id={}, credit_id={}", 
-            savedDebit.getLinkId(), savedDebit.getId(), savedCredit.getId());
+        log.info("✅ TRANSFER saved: link_id={}, debit_id={}, credit_id={}, from={} to={}", 
+            savedDebit.getLinkId(), savedDebit.getId(), savedCredit.getId(), sourceAccountId, targetAccountId);
         
         return List.of(savedDebit, savedCredit);
     }
@@ -141,11 +181,11 @@ public class FinancialOperationService {
     /**
      * Find all operations for a user.
      * 
-     * @param userId User ID
+     * @param userId User UUID
      * @return List of financial operations
      */
     @Transactional(readOnly = true)
-    public List<FinancialOperation> findByUserId(String userId) {
+    public List<FinancialOperation> findByUserId(UUID userId) {
         log.debug("📊 Finding operations for user: {}", userId);
         return repository.findByUserIdOrderByTransactionDateDesc(userId);
     }
@@ -174,6 +214,36 @@ public class FinancialOperationService {
             repository.save(op);
             log.info("✅ Operation soft deleted: {}", id);
         });
+    }
+    
+    // ═══════════════════════════════════════════════════════════════════════════
+    // PRIVATE HELPERS
+    // ═══════════════════════════════════════════════════════════════════════════
+    
+    /**
+     * Resolve account external ID (or alias) to UUID.
+     * Returns null if not found.
+     */
+    private UUID resolveAccountId(String accountReference, UserEntity userContext) {
+        if (accountReference == null || accountReference.isBlank()) {
+            return null;
+        }
+        
+        Optional<AccountEntry> account = userContext.findAccountByAlias(accountReference);
+        return account.map(AccountEntry::getId).orElse(null);
+    }
+    
+    /**
+     * Resolve fund external ID (or alias) to UUID.
+     * Returns null if not found.
+     */
+    private UUID resolveFundId(String fundReference, UserEntity userContext) {
+        if (fundReference == null || fundReference.isBlank()) {
+            return null;
+        }
+        
+        Optional<FundEntry> fund = userContext.findFundByAlias(fundReference);
+        return fund.map(FundEntry::getId).orElse(null);
     }
 }
 

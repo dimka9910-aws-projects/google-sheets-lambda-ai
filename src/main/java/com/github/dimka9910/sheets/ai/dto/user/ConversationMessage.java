@@ -4,17 +4,18 @@ import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
-import software.amazon.awssdk.enhanced.dynamodb.mapper.annotations.DynamoDbBean;
+
+import java.util.List;
+import java.util.UUID;
 
 /**
  * Одно сообщение в истории диалога.
- * Хранится в DynamoDB как вложенный объект в UserEntity.
+ * Now stored in PostgreSQL chat_messages table.
  */
 @Data
 @Builder
 @NoArgsConstructor
 @AllArgsConstructor
-@DynamoDbBean
 public class ConversationMessage {
     
     private String role;      // "user" | "assistant"
@@ -24,6 +25,9 @@ public class ConversationMessage {
     // Флаг что это был уточняющий вопрос
     private Boolean wasClarification;
     
+    // UUID операций созданных этим сообщением (для аудита и отмены)
+    private List<UUID> relatedOperationIds;
+    
     public static ConversationMessage userMessage(String content) {
         return ConversationMessage.builder()
                 .role("user")
@@ -31,11 +35,6 @@ public class ConversationMessage {
                 .timestamp(System.currentTimeMillis())
                 .wasClarification(false)
                 .build();
-    }
-    
-    // Getter для DynamoDB (Boolean вместо boolean для nullable)
-    public Boolean getWasClarification() {
-        return wasClarification != null ? wasClarification : false;
     }
 }
 

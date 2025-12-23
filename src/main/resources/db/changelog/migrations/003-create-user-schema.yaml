@@ -1,0 +1,295 @@
+databaseChangeLog:
+  - changeSet:
+      id: 003-create-user-schema
+      author: dimka9910
+      changes:
+        # 1. Create users table (without FK to accounts/funds yet)
+        - createTable:
+            tableName: users
+            columns:
+              - column:
+                  name: id
+                  type: uuid
+                  defaultValueComputed: gen_random_uuid()
+                  constraints:
+                    primaryKey: true
+                    nullable: false
+              - column:
+                  name: username
+                  type: varchar(255)
+                  constraints:
+                    nullable: false
+                    unique: true
+              - column:
+                  name: telegram_id
+                  type: varchar(50)
+                  constraints:
+                    unique: true
+              - column:
+                  name: display_name
+                  type: varchar(255)
+              - column:
+                  name: preferred_language
+                  type: varchar(5)
+              - column:
+                  name: default_currency
+                  type: varchar(10)
+              - column:
+                  name: ai_context
+                  type: jsonb
+                  defaultValue: '{}'
+              - column:
+                  name: created_at
+                  type: timestamp
+                  defaultValueComputed: NOW()
+              - column:
+                  name: default_account_id
+                  type: uuid
+              - column:
+                  name: default_fund_id
+                  type: uuid
+
+        # 2. Create accounts table
+        - createTable:
+            tableName: accounts
+            columns:
+              - column:
+                  name: id
+                  type: uuid
+                  defaultValueComputed: gen_random_uuid()
+                  constraints:
+                    primaryKey: true
+                    nullable: false
+              - column:
+                  name: user_id
+                  type: uuid
+                  constraints:
+                    nullable: false
+              - column:
+                  name: external_id
+                  type: varchar(255)
+                  constraints:
+                    nullable: false
+              - column:
+                  name: display_name
+                  type: varchar(255)
+              - column:
+                  name: aliases
+                  type: text[]
+                  defaultValue: '{}'
+              - column:
+                  name: created_at
+                  type: timestamp
+                  defaultValueComputed: NOW()
+
+        - addForeignKeyConstraint:
+            baseTableName: accounts
+            baseColumnNames: user_id
+            constraintName: fk_accounts_user
+            referencedTableName: users
+            referencedColumnNames: id
+            onDelete: CASCADE
+
+        - addUniqueConstraint:
+            tableName: accounts
+            columnNames: user_id, external_id
+            constraintName: uk_accounts_user_external
+
+        - createIndex:
+            indexName: idx_accounts_user_id
+            tableName: accounts
+            columns:
+              - column:
+                  name: user_id
+
+        # 3. Create funds table
+        - createTable:
+            tableName: funds
+            columns:
+              - column:
+                  name: id
+                  type: uuid
+                  defaultValueComputed: gen_random_uuid()
+                  constraints:
+                    primaryKey: true
+                    nullable: false
+              - column:
+                  name: user_id
+                  type: uuid
+                  constraints:
+                    nullable: false
+              - column:
+                  name: external_id
+                  type: varchar(255)
+                  constraints:
+                    nullable: false
+              - column:
+                  name: display_name
+                  type: varchar(255)
+              - column:
+                  name: aliases
+                  type: text[]
+                  defaultValue: '{}'
+              - column:
+                  name: created_at
+                  type: timestamp
+                  defaultValueComputed: NOW()
+
+        - addForeignKeyConstraint:
+            baseTableName: funds
+            baseColumnNames: user_id
+            constraintName: fk_funds_user
+            referencedTableName: users
+            referencedColumnNames: id
+            onDelete: CASCADE
+
+        - addUniqueConstraint:
+            tableName: funds
+            columnNames: user_id, external_id
+            constraintName: uk_funds_user_external
+
+        - createIndex:
+            indexName: idx_funds_user_id
+            tableName: funds
+            columns:
+              - column:
+                  name: user_id
+
+        # 4. Add FK from users to accounts/funds (circular dependency resolved)
+        - addForeignKeyConstraint:
+            baseTableName: users
+            baseColumnNames: default_account_id
+            constraintName: fk_users_default_account
+            referencedTableName: accounts
+            referencedColumnNames: id
+            onDelete: SET NULL
+
+        - addForeignKeyConstraint:
+            baseTableName: users
+            baseColumnNames: default_fund_id
+            constraintName: fk_users_default_fund
+            referencedTableName: funds
+            referencedColumnNames: id
+            onDelete: SET NULL
+
+        # 5. Create linked_users table
+        - createTable:
+            tableName: linked_users
+            columns:
+              - column:
+                  name: id
+                  type: uuid
+                  defaultValueComputed: gen_random_uuid()
+                  constraints:
+                    primaryKey: true
+                    nullable: false
+              - column:
+                  name: owner_user_id
+                  type: uuid
+                  constraints:
+                    nullable: false
+              - column:
+                  name: target_user_id
+                  type: uuid
+                  constraints:
+                    nullable: false
+              - column:
+                  name: display_name
+                  type: varchar(255)
+              - column:
+                  name: aliases
+                  type: text[]
+                  defaultValue: '{}'
+              - column:
+                  name: created_at
+                  type: timestamp
+                  defaultValueComputed: NOW()
+
+        - addForeignKeyConstraint:
+            baseTableName: linked_users
+            baseColumnNames: owner_user_id
+            constraintName: fk_linked_users_owner
+            referencedTableName: users
+            referencedColumnNames: id
+            onDelete: CASCADE
+
+        - addForeignKeyConstraint:
+            baseTableName: linked_users
+            baseColumnNames: target_user_id
+            constraintName: fk_linked_users_target
+            referencedTableName: users
+            referencedColumnNames: id
+            onDelete: CASCADE
+
+        - addUniqueConstraint:
+            tableName: linked_users
+            columnNames: owner_user_id, target_user_id
+            constraintName: uk_linked_users_owner_target
+
+        - createIndex:
+            indexName: idx_linked_users_owner
+            tableName: linked_users
+            columns:
+              - column:
+                  name: owner_user_id
+
+        - createIndex:
+            indexName: idx_linked_users_target
+            tableName: linked_users
+            columns:
+              - column:
+                  name: target_user_id
+
+        # 6. Create chat_messages table
+        - createTable:
+            tableName: chat_messages
+            columns:
+              - column:
+                  name: id
+                  type: uuid
+                  defaultValueComputed: gen_random_uuid()
+                  constraints:
+                    primaryKey: true
+                    nullable: false
+              - column:
+                  name: user_id
+                  type: uuid
+                  constraints:
+                    nullable: false
+              - column:
+                  name: role
+                  type: varchar(20)
+                  constraints:
+                    nullable: false
+              - column:
+                  name: content
+                  type: text
+                  constraints:
+                    nullable: false
+              - column:
+                  name: was_clarification
+                  type: boolean
+                  defaultValueBoolean: false
+              - column:
+                  name: created_at
+                  type: timestamp
+                  defaultValueComputed: NOW()
+
+        - addForeignKeyConstraint:
+            baseTableName: chat_messages
+            baseColumnNames: user_id
+            constraintName: fk_chat_messages_user
+            referencedTableName: users
+            referencedColumnNames: id
+            onDelete: CASCADE
+
+        - createIndex:
+            indexName: idx_chat_messages_user_date
+            tableName: chat_messages
+            columns:
+              - column:
+                  name: user_id
+              - column:
+                  name: created_at
+                  descending: true
+
