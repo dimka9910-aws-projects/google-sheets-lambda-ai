@@ -39,10 +39,12 @@ Resources:
   # Main Lambda - processes Telegram messages from SQS
   TelegramSQSHandler:
     Type: AWS::Serverless::Function
+    Metadata:
+      BuildMethod: makefile
     Properties:
       FunctionName: !Sub telegram-sqs-handler-${Environment}
       Handler: com.github.dimka9910.sheets.ai.SQSHandler::handleRequest
-      CodeUri: target/GoogleSheetAIFunction-1.0-SNAPSHOT.jar
+      CodeUri: .
       Description: Spring Boot Lambda - processes Telegram requests from SQS, parses with AI, sends responses
       # SnapStart for faster cold starts (Java 17+)
       SnapStart:
