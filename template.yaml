@@ -42,7 +42,7 @@ Resources:
     Properties:
       FunctionName: !Sub telegram-sqs-handler-${Environment}
       Handler: com.github.dimka9910.sheets.ai.SQSHandler::handleRequest
-      CodeUri: .
+      CodeUri: target/GoogleSheetAIFunction-1.0-SNAPSHOT.jar
       Description: Spring Boot Lambda - processes Telegram requests from SQS, parses with AI, sends responses
       # SnapStart for faster cold starts (Java 17+)
       SnapStart:
@@ -54,14 +54,11 @@ Resources:
           OPENAI_API_KEY: !Ref OpenAIApiKey
           DATABASE_URL: !Ref DatabaseUrl
           SHEETS_QUEUE_URL: !Ref SheetsQueueUrl
-          USERS_TABLE_NAME: !Ref UsersTable
           DRY_RUN: !Ref DryRun
           RESPONSE_QUEUE_URL: !Ref ResponsesQueue
           # Spring Cloud Function configuration
           SPRING_CLOUD_FUNCTION_DEFINITION: sqsMessageHandler
       Policies:
-        - DynamoDBCrudPolicy:
-            TableName: !Ref UsersTable
         - Statement:
             - Effect: Allow
               Action:
@@ -83,33 +80,6 @@ Resources:
             MaximumBatchingWindowInSeconds: 0  # Process immediately
             FunctionResponseTypes:
               - ReportBatchItemFailures  # Enable partial batch failure reporting
-
-  # ═══════════════════════════════════════════════════════════════════════════
-  # DYNAMODB
-  # ═══════════════════════════════════════════════════════════════════════════
-  UsersTable:
-    Type: AWS::DynamoDB::Table
-    Properties:
-      TableName: !Sub finance-tracker-users-${Environment}
-      AttributeDefinitions:
-        - AttributeName: userId
-          AttributeType: S
-        - AttributeName: telegramId
-          AttributeType: S
-      KeySchema:
-        - AttributeName: userId
-          KeyType: HASH
-      GlobalSecondaryIndexes:
-        - IndexName: telegramId-index
-          KeySchema:
-            - AttributeName: telegramId
-              KeyType: HASH
-          Projection:
-            ProjectionType: ALL
-      BillingMode: PAY_PER_REQUEST
-      Tags:
-        - Key: Project
-          Value: finance-tracker
 
   # ═══════════════════════════════════════════════════════════════════════════
   # SQS QUEUES
@@ -144,14 +114,6 @@ Resources:
       ReceiveMessageWaitTimeSeconds: 0  # Short polling
 
 Outputs:
-  UsersTableName:
-    Description: DynamoDB table for user contexts
-    Value: !Ref UsersTable
-  
-  UsersTableArn:
-    Description: ARN of DynamoDB table
-    Value: !GetAtt UsersTable.Arn
-  
   RequestsQueueUrl:
     Description: URL of SQS queue for incoming Telegram requests
     Value: !Ref RequestsQueue
