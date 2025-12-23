@@ -39,8 +39,6 @@ Resources:
   # Main Lambda - processes Telegram messages from SQS
   TelegramSQSHandler:
     Type: AWS::Serverless::Function
-    Metadata:
-      BuildMethod: makefile
     Properties:
       FunctionName: !Sub telegram-sqs-handler-${Environment}
       Handler: com.github.dimka9910.sheets.ai.SQSHandler::handleRequest
