@@ -4,7 +4,6 @@ import com.github.dimka9910.sheets.ai.dto.actions.FinancialAction;
 import com.github.dimka9910.sheets.ai.dto.actions.MainAgentResponse;
 import com.github.dimka9910.sheets.ai.dto.user.UserEntity;
 import com.github.dimka9910.sheets.ai.services.UserContextToPromptMapper;
-import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.ai.chat.messages.SystemMessage;
 import org.springframework.ai.chat.messages.UserMessage;
@@ -29,7 +28,6 @@ import java.util.Objects;
  */
 @Slf4j
 @Component
-@RequiredArgsConstructor
 public class SimpleExpenseAgent {
     
     private static final String MODEL = "gpt-4o-mini";
@@ -37,6 +35,16 @@ public class SimpleExpenseAgent {
     
     private final ChatModel chatModel;
     private final UserContextToPromptMapper contextMapper;
+    
+    // Cache converter to avoid reflection overhead on each call
+    private final BeanOutputConverter<MainAgentResponse> outputConverter;
+    
+    public SimpleExpenseAgent(ChatModel chatModel, UserContextToPromptMapper contextMapper) {
+        this.chatModel = chatModel;
+        this.contextMapper = contextMapper;
+        // Initialize converter once (expensive reflection operation)
+        this.outputConverter = new BeanOutputConverter<>(MainAgentResponse.class);
+    }
     
     // ═══════════════════════════════════════════════════════════════════════════
     // REQUEST / RESPONSE
@@ -66,15 +74,15 @@ public class SimpleExpenseAgent {
             String systemPrompt = buildSystemPrompt(userContext);
             String userPrompt = "User message: " + message;
             
-            // Create BeanOutputConverter for MainAgentResponse
-            // This will automatically generate JSON schema and validate output
-            BeanOutputConverter<MainAgentResponse> outputConverter = new BeanOutputConverter<>(MainAgentResponse.class);
+            // Get JSON schema from cached converter (no reflection overhead)
             String jsonSchema = outputConverter.getFormat();
             
             // Append JSON schema to system prompt
             systemPrompt += "\n\n## Response Format\nReturn JSON following this schema:\n" + jsonSchema;
             
             // Create Spring AI Prompt
+            // Note: responseFormat (JSON_OBJECT mode) not available in Spring AI 1.1.2
+            // But BeanOutputConverter + explicit schema in prompt is reliable enough
             @SuppressWarnings("null")
             Prompt prompt = new Prompt(
                     List.of(
@@ -84,7 +92,7 @@ public class SimpleExpenseAgent {
                     OpenAiChatOptions.builder()
                             .model(MODEL)
                             .maxTokens(MAX_TOKENS)
-                            .temperature(0.0)  // Deterministic
+                            .temperature(0.0)  // Deterministic for consistent parsing
                             .build()
             );
             
@@ -155,24 +163,12 @@ public class SimpleExpenseAgent {
             You are a lightweight expense parser for a personal finance bot.
             Parse simple expense messages (amount + optional item/category/account).
             
-            ## Your Task
-            Return MainAgentResponse with actions array and response text.
-            
-            ## Action Types:
-            1. **FINANCIAL** (type: "FINANCIAL") - when amount is clear
-               - operationType: "EXPENSE"
-               - amount, currency, account, fund, comment
-               - Use null for fields that should use defaults
-            
-            2. **PENDING_CLARIFICATION** (type: "PENDING_CLARIFICATION") - when amount is missing
-               - context: description of what's missing
-            
             ## Rules
-            - If amount is CLEAR → return FINANCIAL action
-            - If amount is MISSING/UNCLEAR → return PENDING_CLARIFICATION action
-            - Fields can be null → defaults will be applied (currency, account, fund)
-            - Try to infer fund (category) from comment
-            - response = friendly message to user in their language
+            - If amount is CLEAR → create FINANCIAL action (type: "FINANCIAL", operationType: "EXPENSE")
+            - If amount is MISSING/UNCLEAR → create PENDING_CLARIFICATION action (type: "PENDING_CLARIFICATION")
+            - Use null for fields that should use defaults (currency, account, fund)
+            - Try to infer fund (category) from comment (FOOD, TRANSPORT, etc.)
+            - Generate friendly response message in user's language
             
             ## User Context
             Default currency: {currency}
@@ -189,60 +185,13 @@ public class SimpleExpenseAgent {
             
             ## Examples
             
-            ### Example 1: Clear expense
-            Input: "coffee 200"
-            Output:
-            ```json
-            {
-              "actions": [
-                {
-                  "type": "FINANCIAL",
-                  "operationType": "EXPENSE",
-                  "amount": 200.0,
-                  "currency": null,
-                  "account": null,
-                  "fund": "FOOD",
-                  "comment": "coffee"
-                }
-              ],
-              "response": "Recorded: coffee 200 RSD (FOOD)"
-            }
-            ```
+            "coffee 200" → FINANCIAL: amount=200, fund="FOOD", comment="coffee"
+            "taxi 500 RSD" → FINANCIAL: amount=500, currency="RSD", fund="TRANSPORT"
+            "3000 cash" → FINANCIAL: amount=3000, account="CASH"
+            "200 from card A" → FINANCIAL: amount=200, account="CARD_A"
             
-            ### Example 2: Missing amount
-            Input: "coffee"
-            Output:
-            ```json
-            {
-              "actions": [
-                {
-                  "type": "PENDING_CLARIFICATION",
-                  "context": "User wants to record expense. Need: amount. Original message: coffee"
-                }
-              ],
-              "response": "How much did the coffee cost?"
-            }
-            ```
-            
-            ### Example 3: With account
-            Input: "200 from card A"
-            Output:
-            ```json
-            {
-              "actions": [
-                {
-                  "type": "FINANCIAL",
-                  "operationType": "EXPENSE",
-                  "amount": 200.0,
-                  "currency": null,
-                  "account": "CARD_A",
-                  "fund": null,
-                  "comment": null
-                }
-              ],
-              "response": "Recorded: 200 RSD from CARD_A"
-            }
-            ```
+            "coffee" → PENDING_CLARIFICATION: context="Need amount for coffee"
+            "купил" → PENDING_CLARIFICATION: context="Need amount and item details"
             """;
     
     private String buildSystemPrompt(UserEntity context) {
