@@ -84,24 +84,24 @@ public class MessageClassifierAgent {
             
             **SIMPLE_EXPENSE** - Single straightforward expense
             - One amount + optional item name
-            - Examples: "кофе 200", "такси 500", "продукты 3000", "200"
+            - Examples: "coffee 200", "taxi 500", "groceries 3000", "200"
             - NO person names, NO transfers between accounts
             
             **INTERNAL_TRANSFER** - Transfer between user's OWN accounts
-            - Keywords: перевод, transfer, move, снял (withdrew), пополнил (topped up)
+            - Keywords: transfer, move, withdraw, deposit, top up (any language)
             - From/to user's accounts (not to other people)
-            - Examples: "перевод 1000 с визы на кеш", "снял 500 с карты"
+            - Examples: "transfer 1000 from card A to cash", "withdrew 500 from card"
             
             **THIRD_PARTY_ACTION** - Involves another person (linked user)
-            - Mentions person by name or relationship (Ксюша, девушка, girlfriend, wife)
+            - Mentions person by name or relationship (Sarah, girlfriend, wife, partner)
             - Paying FOR someone, receiving FROM someone, transfers to/from people
-            - Examples: "Ксюше 200", "за девушку 1500", "от Димы 500"
+            - Examples: "to Sarah 200", "for girlfriend 1500", "from partner 500"
             
             **SIMPLE_CUSTOM_INSTRUCTION** - Remember/alias instructions
             - User wants to save a setting, alias, or custom instruction
-            - Keywords: запомни (remember), btw, by the way, just so you know
-            - Setting aliases: "Ксюша = KIKI", "райф = visa raiffeisen"
-            - Examples: "запомни что Ксюша это KIKI", "райф это моя основная карта"
+            - Keywords: remember, btw, by the way, just so you know (any language)
+            - Setting aliases: "Sarah = USER_X", "card nickname = bank account"
+            - Examples: "remember that Sarah is USER_X", "main card is account Y"
             
             **COMPLEX_ACTION** - Everything else (default fallback)
             - Multiple operations in one message
