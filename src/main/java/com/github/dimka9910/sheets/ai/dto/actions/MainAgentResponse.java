@@ -1,6 +1,7 @@
 package com.github.dimka9910.sheets.ai.dto.actions;
 
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
+import com.fasterxml.jackson.annotation.JsonPropertyDescription;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
@@ -51,6 +52,7 @@ public class MainAgentResponse {
      * List of actions to perform.
      * Can be empty for pure conversational responses.
      */
+    @JsonPropertyDescription("List of actions to perform. Can include FINANCIAL (expenses/income/transfers), UTILS (settings commands), or PENDING_CLARIFICATION (questions to user). Empty array for pure conversational responses.")
     @Builder.Default
     private List<AgentAction> actions = new ArrayList<>();
     
@@ -58,6 +60,7 @@ public class MainAgentResponse {
      * Message to show user.
      * Model generates this based on what it understood and what actions it created.
      */
+    @JsonPropertyDescription("Human-readable message to show the user. Should be a friendly confirmation (for successful actions), a clarifying question (for PENDING_CLARIFICATION), or a conversational response. Use the same language as the user's input.")
     private String response;
     
     // ═══════════════════════════════════════════════════════════════════════════
