@@ -2,6 +2,7 @@ package com.github.dimka9910.sheets.ai.services.agents;
 
 import com.github.dimka9910.sheets.ai.dto.actions.FinancialAction;
 import com.github.dimka9910.sheets.ai.dto.actions.FinancialAction.OperationType;
+import com.github.dimka9910.sheets.ai.dto.actions.MainAgentResponse;
 import com.github.dimka9910.sheets.ai.dto.telegram.TelegramChatRequest;
 import com.github.dimka9910.sheets.ai.dto.telegram.TelegramChatResponse;
 import com.github.dimka9910.sheets.ai.dto.user.FundEntry;
@@ -107,8 +108,7 @@ public class SimpleExpenseAgent {
                     .build();
             
             // Use MainAgentResultHandler to save and build response
-            com.github.dimka9910.sheets.ai.dto.actions.MainAgentResponse agentResponse = 
-                    com.github.dimka9910.sheets.ai.dto.actions.MainAgentResponse.builder()
+            MainAgentResponse agentResponse = MainAgentResponse.builder()
                             .actions(List.of(action))
                             .response("Recorded expense: " + result.amount() + " " + result.currency() + 
                                     " (" + (result.fund() != null ? result.fund() : userContext.getDefaultFund()) + ")")
