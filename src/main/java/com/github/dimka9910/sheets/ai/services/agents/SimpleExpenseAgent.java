@@ -3,6 +3,7 @@ package com.github.dimka9910.sheets.ai.services.agents;
 import com.github.dimka9910.sheets.ai.dto.actions.FinancialAction;
 import com.github.dimka9910.sheets.ai.dto.actions.FinancialAction.OperationType;
 import com.github.dimka9910.sheets.ai.dto.actions.MainAgentResponse;
+import com.github.dimka9910.sheets.ai.dto.actions.PendingClarificationAction;
 import com.github.dimka9910.sheets.ai.dto.telegram.TelegramChatRequest;
 import com.github.dimka9910.sheets.ai.dto.telegram.TelegramChatResponse;
 import com.github.dimka9910.sheets.ai.dto.user.AccountEntry;
@@ -55,7 +56,9 @@ public class SimpleExpenseAgent {
             String currency,
             String account,
             String fund,
-            String comment
+            String comment,
+            Boolean needsClarification,
+            String clarificationQuestion
     ) {}
     
     // ═══════════════════════════════════════════════════════════════════════════
@@ -96,6 +99,27 @@ public class SimpleExpenseAgent {
             
             // Parse structured output
             ExpenseResult result = outputConverter.convert(content);
+            
+            // Check if clarification is needed
+            if (Boolean.TRUE.equals(result.needsClarification())) {
+                String question = result.clarificationQuestion() != null ? 
+                        result.clarificationQuestion() : 
+                        "Please provide more details about this expense";
+                
+                log.info("⚠️ Clarification needed: {}", question);
+                
+                // Create pending clarification action
+                PendingClarificationAction clarification = PendingClarificationAction.builder()
+                        .context("simple_expense: " + message)
+                        .build();
+                
+                MainAgentResponse agentResponse = MainAgentResponse.builder()
+                        .actions(List.of(clarification))
+                        .response(question)
+                        .build();
+                
+                return resultHandler.handle(chatRequest, agentResponse, userContext);
+            }
             
             log.info("✅ Parsed expense: {} {} {} {}", result.amount(), result.currency(), result.account(), result.fund());
             
@@ -147,6 +171,11 @@ public class SimpleExpenseAgent {
                 - If account not specified → use default
                 - If fund not specified → try to infer from comment OR use default
                 - comment = item name or description
+                
+                ## Clarifications
+                - If AMOUNT is missing or unclear → set needsClarification=true and ask for amount
+                - If message is too vague to parse → set needsClarification=true and ask for details
+                - DO NOT ask for clarification if you can use defaults (currency, account, fund)
                 
                 ## User Context
                 """);
@@ -201,10 +230,17 @@ public class SimpleExpenseAgent {
         sb.append("""
                 
                 ## Examples
-                "coffee 200" → amount: 200, currency: (default), account: (default), fund: FOOD, comment: "coffee"
-                "taxi 500 RSD" → amount: 500, currency: RSD, account: (default), fund: TRANSPORT, comment: "taxi"
-                "3000 cash" → amount: 3000, currency: (default), account: CASH, fund: (default), comment: null
-                "200 from card A" → amount: 200, currency: (default), account: CARD_A, fund: (default), comment: null
+                
+                ### Normal parsing:
+                "coffee 200" → amount: 200, currency: (default), account: (default), fund: FOOD, comment: "coffee", needsClarification: false
+                "taxi 500 RSD" → amount: 500, currency: RSD, account: (default), fund: TRANSPORT, comment: "taxi", needsClarification: false
+                "3000 cash" → amount: 3000, currency: (default), account: CASH, fund: (default), comment: null, needsClarification: false
+                "200 from card A" → amount: 200, currency: (default), account: CARD_A, fund: (default), comment: null, needsClarification: false
+                
+                ### Clarification needed:
+                "coffee" → needsClarification: true, clarificationQuestion: "How much did the coffee cost?"
+                "купил" → needsClarification: true, clarificationQuestion: "What did you buy and how much did it cost?"
+                "something" → needsClarification: true, clarificationQuestion: "Please specify the amount for this expense"
                 """);
         
         return sb.toString();
