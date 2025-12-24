@@ -5,6 +5,7 @@ import com.github.dimka9910.sheets.ai.dto.actions.FinancialAction.OperationType;
 import com.github.dimka9910.sheets.ai.dto.actions.MainAgentResponse;
 import com.github.dimka9910.sheets.ai.dto.telegram.TelegramChatRequest;
 import com.github.dimka9910.sheets.ai.dto.telegram.TelegramChatResponse;
+import com.github.dimka9910.sheets.ai.dto.user.AccountEntry;
 import com.github.dimka9910.sheets.ai.dto.user.FundEntry;
 import com.github.dimka9910.sheets.ai.dto.user.UserEntity;
 import com.github.dimka9910.sheets.ai.services.MainAgentResultHandler;
@@ -52,6 +53,7 @@ public class SimpleExpenseAgent {
     public record ExpenseResult(
             Double amount,
             String currency,
+            String account,
             String fund,
             String comment
     ) {}
@@ -95,14 +97,14 @@ public class SimpleExpenseAgent {
             // Parse structured output
             ExpenseResult result = outputConverter.convert(content);
             
-            log.info("✅ Parsed expense: {} {} {}", result.amount(), result.currency(), result.fund());
+            log.info("✅ Parsed expense: {} {} {} {}", result.amount(), result.currency(), result.account(), result.fund());
             
             // Convert to FinancialAction
             FinancialAction action = FinancialAction.builder()
                     .operationType(OperationType.EXPENSE)
                     .amount(result.amount())
                     .currency(result.currency() != null ? result.currency() : userContext.getDefaultCurrency())
-                    .account(userContext.getDefaultAccount())  // Always use default for simple expense
+                    .account(result.account() != null ? result.account() : userContext.getDefaultAccount())
                     .fund(result.fund() != null ? result.fund() : userContext.getDefaultFund())
                     .comment(result.comment())
                     .build();
@@ -135,13 +137,14 @@ public class SimpleExpenseAgent {
         
         sb.append("""
                 You are a lightweight expense parser for a personal finance bot.
-                Parse simple expense messages (amount + optional item/category).
+                Parse simple expense messages (amount + optional item/category/account).
                 
                 ## Task
-                Extract: amount, currency, fund (category), comment
+                Extract: amount, currency, account, fund (category), comment
                 
                 ## Rules
                 - If currency not specified → use default
+                - If account not specified → use default
                 - If fund not specified → try to infer from comment OR use default
                 - comment = item name or description
                 
@@ -151,8 +154,26 @@ public class SimpleExpenseAgent {
         // Default currency
         sb.append("Default currency: ").append(context.getDefaultCurrency()).append("\n");
         
+        // Default account
+        sb.append("Default account: ").append(context.getDefaultAccount()).append("\n");
+        
+        // Available accounts with aliases
+        sb.append("\nAvailable accounts:\n");
+        if (context.getAccounts() != null && !context.getAccounts().isEmpty()) {
+            for (var account : context.getAccounts()) {
+                sb.append("- ").append(account.getAccountId());
+                if (account.getDisplayName() != null) {
+                    sb.append(" (").append(account.getDisplayName()).append(")");
+                }
+                if (account.getAliases() != null && !account.getAliases().isEmpty()) {
+                    sb.append(" [aliases: ").append(String.join(", ", account.getAliases())).append("]");
+                }
+                sb.append("\n");
+            }
+        }
+        
         // Default fund
-        sb.append("Default fund: ").append(context.getDefaultFund()).append("\n");
+        sb.append("\nDefault fund: ").append(context.getDefaultFund()).append("\n");
         
         // Available funds with aliases
         sb.append("\nAvailable funds:\n");
@@ -172,9 +193,10 @@ public class SimpleExpenseAgent {
         sb.append("""
                 
                 ## Examples
-                "coffee 200" → amount: 200, currency: (default), fund: FOOD, comment: "coffee"
-                "taxi 500 RSD" → amount: 500, currency: RSD, fund: TRANSPORT, comment: "taxi"
-                "3000" → amount: 3000, currency: (default), fund: (default), comment: null
+                "coffee 200" → amount: 200, currency: (default), account: (default), fund: FOOD, comment: "coffee"
+                "taxi 500 RSD" → amount: 500, currency: RSD, account: (default), fund: TRANSPORT, comment: "taxi"
+                "3000 cash" → amount: 3000, currency: (default), account: CASH, fund: (default), comment: null
+                "200 from card A" → amount: 200, currency: (default), account: CARD_A, fund: (default), comment: null
                 """);
         
         return sb.toString();
