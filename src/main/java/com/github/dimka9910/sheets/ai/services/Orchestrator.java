@@ -7,6 +7,9 @@ import com.github.dimka9910.sheets.ai.dto.user.UserEntity;
 import com.github.dimka9910.sheets.ai.services.agents.MainAgent;
 import com.github.dimka9910.sheets.ai.services.agents.MessageClassifierAgent;
 import com.github.dimka9910.sheets.ai.services.agents.MessageClassifierAgent.Category;
+import com.github.dimka9910.sheets.ai.services.handlers.SimpleExpenseHandler;
+import com.github.dimka9910.sheets.ai.services.handlers.InternalTransferHandler;
+import com.github.dimka9910.sheets.ai.services.handlers.ThirdPartyHandler;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -29,6 +32,9 @@ import org.springframework.stereotype.Service;
 public class Orchestrator {
     
     private final MessageClassifierAgent classifierAgent;
+    private final SimpleExpenseHandler simpleExpenseHandler;
+    private final InternalTransferHandler internalTransferHandler;
+    private final ThirdPartyHandler thirdPartyHandler;
     private final MainAgent mainAgent;
     private final MainAgentResultHandler mainAgentResultHandler;
     
@@ -57,24 +63,22 @@ public class Orchestrator {
             log.info("Classification: category={}", category);
             
             // Step 2: Route to appropriate handler
-            // TODO: Implement simple handlers
-            // For now, everything goes to MainAgent (legacy behavior)
-            switch (category) {
-                case SIMPLE_EXPENSE:
-                    log.info("TODO: Route to SimpleExpenseHandler");
-                    // Fall through to MainAgent for now
-                case INTERNAL_TRANSFER:
-                    log.info("TODO: Route to InternalTransferHandler");
-                    // Fall through to MainAgent for now
-                case THIRD_PARTY_ACTION:
-                    log.info("TODO: Route to ThirdPartyHandler");
-                    // Fall through to MainAgent for now
-                case SIMPLE_CUSTOM_INSTRUCTION:
-                    log.info("TODO: Route to CustomInstructionAgent");
-                    // Fall through to MainAgent for now
-                case COMPLEX_ACTION:
-                default:
-                    // MainAgent handles complex actions with full context
+            return switch (category) {
+                case SIMPLE_EXPENSE -> {
+                    log.info("→ Routing to SimpleExpenseHandler");
+                    yield simpleExpenseHandler.process(request, userContext);
+                }
+                case INTERNAL_TRANSFER -> {
+                    log.info("→ Routing to InternalTransferHandler");
+                    yield internalTransferHandler.process(request, userContext);
+                }
+                case THIRD_PARTY_ACTION -> {
+                    log.info("→ Routing to ThirdPartyHandler");
+                    yield thirdPartyHandler.process(request, userContext);
+                }
+                case SIMPLE_CUSTOM_INSTRUCTION -> {
+                    // TODO: CustomInstructionAgent needs refactoring to match handler interface
+                    log.info("→ Routing to MainAgent (SIMPLE_CUSTOM_INSTRUCTION not yet implemented)");
                     var agentRequest = new MainAgent.Request(message, userContext, category);
                     var agentResponse = mainAgent.process(agentRequest);
                     MainAgentResponse result = agentResponse.result();
@@ -82,9 +86,21 @@ public class Orchestrator {
                     log.info("Parsed: {} actions, pending={}", 
                             result.getActions().size(), result.hasPendingClarifications());
                     
-                    // Step 3: Handle result
-                    return mainAgentResultHandler.handle(request, result, userContext);
-            }
+                    yield mainAgentResultHandler.handle(request, result, userContext);
+                }
+                case COMPLEX_ACTION -> {
+                    // MainAgent handles complex actions with full context
+                    log.info("→ Routing to MainAgent (COMPLEX_ACTION)");
+                    var agentRequest = new MainAgent.Request(message, userContext, category);
+                    var agentResponse = mainAgent.process(agentRequest);
+                    MainAgentResponse result = agentResponse.result();
+                    
+                    log.info("Parsed: {} actions, pending={}", 
+                            result.getActions().size(), result.hasPendingClarifications());
+                    
+                    yield mainAgentResultHandler.handle(request, result, userContext);
+                }
+            };
             
         } catch (Exception e) {
             log.error("Orchestration failed: {}", e.getMessage(), e);
