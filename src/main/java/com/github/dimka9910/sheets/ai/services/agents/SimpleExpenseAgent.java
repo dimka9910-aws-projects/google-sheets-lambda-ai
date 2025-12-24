@@ -1,26 +1,25 @@
 package com.github.dimka9910.sheets.ai.services.agents;
 
 import com.github.dimka9910.sheets.ai.dto.actions.FinancialAction;
-import com.github.dimka9910.sheets.ai.dto.actions.FinancialAction.OperationType;
 import com.github.dimka9910.sheets.ai.dto.actions.MainAgentResponse;
-import com.github.dimka9910.sheets.ai.dto.actions.PendingClarificationAction;
 import com.github.dimka9910.sheets.ai.dto.user.UserEntity;
 import com.github.dimka9910.sheets.ai.services.UserContextToPromptMapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.ai.chat.messages.SystemMessage;
 import org.springframework.ai.chat.messages.UserMessage;
 import org.springframework.ai.chat.model.ChatModel;
 import org.springframework.ai.chat.model.ChatResponse;
 import org.springframework.ai.chat.prompt.Prompt;
 import org.springframework.ai.chat.prompt.PromptTemplate;
-import org.springframework.ai.converter.BeanOutputConverter;
 import org.springframework.ai.openai.OpenAiChatOptions;
 import org.springframework.stereotype.Component;
 
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 
 /**
  * Lightweight handler for SIMPLE_EXPENSE category.
@@ -34,10 +33,11 @@ import java.util.Map;
 public class SimpleExpenseAgent {
     
     private static final String MODEL = "gpt-4o-mini";
-    private static final int MAX_TOKENS = 300;
+    private static final int MAX_TOKENS = 500;
     
     private final ChatModel chatModel;
     private final UserContextToPromptMapper contextMapper;
+    private final ObjectMapper objectMapper;
     
     // ═══════════════════════════════════════════════════════════════════════════
     // REQUEST / RESPONSE
@@ -48,17 +48,6 @@ public class SimpleExpenseAgent {
             UserEntity userContext
     ) {}
     
-    /**
-     * DTO for structured output parsing.
-     */
-    public record ExpenseResult(
-            Double amount,
-            String currency,
-            String account,
-            String fund,
-            String comment
-    ) {}
-    
     // ═══════════════════════════════════════════════════════════════════════════
     // PROCESS
     // ═══════════════════════════════════════════════════════════════════════════
@@ -66,17 +55,20 @@ public class SimpleExpenseAgent {
     public MainAgentResponse process(String message, UserEntity userContext) {
         log.info("🔷 SimpleExpenseAgent processing: \"{}\"", message);
         
+        if (message == null || message.isBlank()) {
+            return MainAgentResponse.builder()
+                    .actions(List.of())
+                    .response("Error: Empty message")
+                    .build();
+        }
+        
         try {
             // Build prompt
             String systemPrompt = buildSystemPrompt(userContext);
             String userPrompt = "User message: " + message;
             
-            // Create converter for structured output
-            BeanOutputConverter<ExpenseResult> outputConverter = new BeanOutputConverter<>(ExpenseResult.class);
-            String format = outputConverter.getFormat();
-            systemPrompt += "\n\n## Response Format\nReturn JSON following this schema:\n" + format;
-            
             // Create Spring AI Prompt
+            @SuppressWarnings("null")
             Prompt prompt = new Prompt(
                     List.of(
                             new SystemMessage(systemPrompt),
@@ -101,47 +93,17 @@ public class SimpleExpenseAgent {
                         .build();
             }
             
-            // Parse structured output
-            ExpenseResult result = outputConverter.convert(content);
+            // Parse MainAgentResponse directly using ObjectMapper
+            // ObjectMapper already configured with @JsonSubTypes for polymorphic deserialization
+            MainAgentResponse result = objectMapper.readValue(content, MainAgentResponse.class);
             
-            // Validate: SimpleExpenseAgent can only handle messages with clear amount
-            if (result.amount() == null) {
-                log.warn("⚠️ Message too vague for SimpleExpenseAgent (missing amount): \"{}\"", message);
-                
-                // Return PendingClarificationAction (like MainAgent does)
-                PendingClarificationAction clarification = PendingClarificationAction.builder()
-                        .context("User wants to record expense. Need: amount. Original message: " + message)
-                        .build();
-                
-                return MainAgentResponse.builder()
-                        .actions(List.of(clarification))
-                        .response("How much did that cost?")
-                        .build();
-            }
+            // Apply defaults if needed (currency, account, fund)
+            applyDefaults(result, userContext);
             
-            log.info("✅ Parsed expense: {} {} {} {}", result.amount(), result.currency(), result.account(), result.fund());
+            log.info("✅ SimpleExpenseAgent result: {} actions, pending={}", 
+                    result.getActions().size(), result.hasPendingClarifications());
             
-            // Convert to FinancialAction
-            String currency = result.currency() != null ? result.currency() : userContext.getDefaultCurrency();
-            String account = result.account() != null ? result.account() : 
-                    (userContext.getDefaultAccount() != null ? userContext.getDefaultAccount().getAccountId() : null);
-            String fund = result.fund() != null ? result.fund() : 
-                    (userContext.getDefaultFund() != null ? userContext.getDefaultFund().getFundId() : null);
-            
-            FinancialAction action = FinancialAction.builder()
-                    .operationType(OperationType.EXPENSE)
-                    .amount(result.amount())
-                    .currency(currency)
-                    .account(account)
-                    .fund(fund)
-                    .comment(result.comment())
-                    .build();
-            
-            // Return MainAgentResponse with action
-            return MainAgentResponse.builder()
-                    .actions(List.of(action))
-                    .response("Recorded expense: " + result.amount() + " " + currency + " (" + fund + ")")
-                    .build();
+            return result;
             
         } catch (Exception e) {
             log.error("❌ SimpleExpenseAgent error: {}", e.getMessage(), e);
@@ -149,6 +111,32 @@ public class SimpleExpenseAgent {
                     .actions(List.of())
                     .response("Error processing expense: " + e.getMessage())
                     .build();
+        }
+    }
+    
+    /**
+     * Apply user defaults to FinancialActions if fields are null.
+     */
+    private void applyDefaults(MainAgentResponse response, UserEntity userContext) {
+        if (response.getActions() == null) return;
+        
+        for (var action : response.getActions()) {
+            if (action instanceof FinancialAction financial) {
+                // Apply default currency
+                if (financial.getCurrency() == null) {
+                    financial.setCurrency(userContext.getDefaultCurrency());
+                }
+                
+                // Apply default account
+                if (financial.getAccount() == null && userContext.getDefaultAccount() != null) {
+                    financial.setAccount(userContext.getDefaultAccount().getAccountId());
+                }
+                
+                // Apply default fund
+                if (financial.getFund() == null && userContext.getDefaultFund() != null) {
+                    financial.setFund(userContext.getDefaultFund().getFundId());
+                }
+            }
         }
     }
     
@@ -160,57 +148,135 @@ public class SimpleExpenseAgent {
             You are a lightweight expense parser for a personal finance bot.
             Parse simple expense messages (amount + optional item/category/account).
             
-            ## Task
-            Extract: amount, currency, account, fund (category), comment
+            ## Response Format
+            Return JSON in this EXACT format:
+            
+            ```json
+            {
+              "actions": [/* array of actions, see below */],
+              "response": "Human-readable message to show user"
+            }
+            ```
+            
+            ## Action Types
+            
+            ### 1. FINANCIAL (when amount is clear):
+            ```json
+            {
+              "type": "FINANCIAL",
+              "operationType": "EXPENSE",
+              "amount": 200.0,
+              "currency": "RSD",  // or null to use default
+              "account": "CARD_DIMA_VISA_RAIF",  // or null to use default
+              "fund": "FOOD",  // category, or null to use default
+              "comment": "coffee"  // optional description
+            }
+            ```
+            
+            ### 2. PENDING_CLARIFICATION (when amount is missing/unclear):
+            ```json
+            {
+              "type": "PENDING_CLARIFICATION",
+              "context": "User wants to record expense. Need: amount. Original message: coffee"
+            }
+            ```
             
             ## Rules
-            - amount is MANDATORY - if missing or unclear, return amount=null
-            - If currency not specified → use default (set to null in response)
-            - If account not specified → use default (set to null in response)
-            - If fund not specified → try to infer from comment OR use default (set to null in response)
-            - comment = item name or description
+            - If amount is CLEAR → return FINANCIAL action
+            - If amount is MISSING/UNCLEAR → return PENDING_CLARIFICATION action
+            - Fields can be null → defaults will be applied (currency, account, fund)
+            - Try to infer fund (category) from comment
+            - response = friendly message to user in their language
             
             ## User Context
             Default currency: {currency}
             Default account: {defaultAccount}
+            Default fund: {defaultFund}
             
             Available accounts:
             {accounts}
             
-            Default fund: {defaultFund}
-            
-            {customInstructions}
-            
             Available funds:
             {funds}
             
+            {customInstructions}
+            
             ## Examples
             
-            ### Valid simple expenses (with clear amount):
-            "coffee 200" → amount: 200, currency: null, account: null, fund: "FOOD", comment: "coffee"
-            "taxi 500 RSD" → amount: 500, currency: "RSD", account: null, fund: "TRANSPORT", comment: "taxi"
-            "3000 cash" → amount: 3000, currency: null, account: "CASH", fund: null, comment: null
-            "200 from card A" → amount: 200, currency: null, account: "CARD_A", fund: null, comment: null
+            ### Example 1: Clear expense
+            Input: "coffee 200"
+            Output:
+            ```json
+            {
+              "actions": [
+                {
+                  "type": "FINANCIAL",
+                  "operationType": "EXPENSE",
+                  "amount": 200.0,
+                  "currency": null,
+                  "account": null,
+                  "fund": "FOOD",
+                  "comment": "coffee"
+                }
+              ],
+              "response": "Recorded: coffee 200 RSD (FOOD)"
+            }
+            ```
             
-            ### Invalid (no clear amount - return amount=null):
-            "coffee" → amount: null, currency: null, account: null, fund: null, comment: "coffee"
-            "купил" → amount: null, currency: null, account: null, fund: null, comment: null
-            "something" → amount: null, currency: null, account: null, fund: null, comment: "something"
+            ### Example 2: Missing amount
+            Input: "coffee"
+            Output:
+            ```json
+            {
+              "actions": [
+                {
+                  "type": "PENDING_CLARIFICATION",
+                  "context": "User wants to record expense. Need: amount. Original message: coffee"
+                }
+              ],
+              "response": "How much did the coffee cost?"
+            }
+            ```
+            
+            ### Example 3: With account
+            Input: "200 from card A"
+            Output:
+            ```json
+            {
+              "actions": [
+                {
+                  "type": "FINANCIAL",
+                  "operationType": "EXPENSE",
+                  "amount": 200.0,
+                  "currency": null,
+                  "account": "CARD_A",
+                  "fund": null,
+                  "comment": null
+                }
+              ],
+              "response": "Recorded: 200 RSD from CARD_A"
+            }
+            ```
             """;
     
     private String buildSystemPrompt(UserEntity context) {
         Map<String, Object> params = new HashMap<>();
-        params.put("currency", context.getDefaultCurrency());
+        params.put("currency", context.getDefaultCurrency() != null ? context.getDefaultCurrency() : "RSD");
         params.put("defaultAccount", context.getDefaultAccount() != null ? 
                 context.getDefaultAccount().getAccountId() : "not set");
         params.put("defaultFund", context.getDefaultFund() != null ? 
                 context.getDefaultFund().getFundId() : "not set");
-        params.put("accounts", contextMapper.formatAccountsList(context.getAccounts()));
-        params.put("funds", contextMapper.formatFundsList(context.getFunds()));
-        params.put("customInstructions", contextMapper.formatCustomInstructionsSection(context.getCustomInstructions()));
+        
+        String accountsList = contextMapper.formatAccountsList(context.getAccounts());
+        String fundsList = contextMapper.formatFundsList(context.getFunds());
+        String customInstructions = contextMapper.formatCustomInstructionsSection(context.getCustomInstructions());
+        
+        params.put("accounts", accountsList != null ? accountsList : "(No accounts)");
+        params.put("funds", fundsList != null ? fundsList : "(No funds)");
+        params.put("customInstructions", customInstructions != null ? customInstructions : "");
         
         PromptTemplate template = new PromptTemplate(PROMPT_TEMPLATE);
-        return template.render(params);
+        return Objects.requireNonNull(template.render(params), "Prompt template render returned null");
     }
 }
 
