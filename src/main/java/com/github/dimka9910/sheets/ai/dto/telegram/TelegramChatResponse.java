@@ -6,20 +6,20 @@ import lombok.Data;
 import lombok.NoArgsConstructor;
 
 /**
- * Ответ для отправки обратно в Telegram
+ * Response to send back to Telegram bot.
  */
 @Data
 @Builder
 @NoArgsConstructor
 @AllArgsConstructor
-public class ChatResponse {
+public class TelegramChatResponse {
     
     private String chatId;
     private String message;
     private boolean success;
     
     /**
-     * Количество успешно записанных операций
+     * Count of successfully recorded operations
      */
     private int operationsCount;
 }

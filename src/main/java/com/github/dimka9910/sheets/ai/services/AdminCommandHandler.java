@@ -1,7 +1,7 @@
 package com.github.dimka9910.sheets.ai.services;
 
-import com.github.dimka9910.sheets.ai.dto.telegram.ChatRequest;
-import com.github.dimka9910.sheets.ai.dto.telegram.ChatResponse;
+import com.github.dimka9910.sheets.ai.dto.telegram.TelegramChatRequest;
+import com.github.dimka9910.sheets.ai.dto.telegram.TelegramChatResponse;
 import com.github.dimka9910.sheets.ai.dto.user.UserEntity;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -20,9 +20,9 @@ public class AdminCommandHandler {
 
     /**
      * Try to handle admin command.
-     * @return ChatResponse if handled, null if not an admin command
+     * @return TelegramChatResponse if handled, null if not an admin command
      */
-    public ChatResponse handle(ChatRequest request, String message, UserEntity userContext) {
+    public TelegramChatResponse handle(TelegramChatRequest request, String message, UserEntity userContext) {
         if (!message.startsWith("/")) {
             return null;
         }
@@ -33,7 +33,7 @@ public class AdminCommandHandler {
         
         // /info — show available commands
         if (msgLower.equals("/info") || msgLower.equals("/help") || msgLower.equals("/commands")) {
-            return ChatResponse.builder()
+            return TelegramChatResponse.builder()
                     .chatId(chatId)
                     .success(true)
                     .message(INFO_MESSAGE)
@@ -46,7 +46,7 @@ public class AdminCommandHandler {
                 userContextService.deleteUser(userName);
                 log.info("[ADMIN] User {} deleted by /reset command", userName);
             }
-            return ChatResponse.builder()
+            return TelegramChatResponse.builder()
                     .chatId(chatId)
                     .success(true)
                     .message("🗑️ User deleted. Send any message to start fresh!")
@@ -57,7 +57,7 @@ public class AdminCommandHandler {
         if (msgLower.startsWith("/note")) {
             String note = message.substring(5).trim();
             log.warn("[USER_FEEDBACK] user={} note={}", userName, note);
-            return ChatResponse.builder()
+            return TelegramChatResponse.builder()
                     .chatId(chatId)
                     .success(true)
                     .message("📝 Noted! (saved to logs for developer)")

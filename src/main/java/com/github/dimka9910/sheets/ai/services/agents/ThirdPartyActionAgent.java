@@ -2,7 +2,8 @@ package com.github.dimka9910.sheets.ai.services.agents;
 
 import com.github.dimka9910.sheets.ai.dto.actions.FinancialAction;
 import com.github.dimka9910.sheets.ai.dto.actions.FinancialAction.OperationType;
-import com.github.dimka9910.sheets.ai.dto.telegram.ChatRequest;
+import com.github.dimka9910.sheets.ai.dto.telegram.TelegramChatRequest;
+import com.github.dimka9910.sheets.ai.dto.telegram.TelegramChatResponse;
 import com.github.dimka9910.sheets.ai.dto.user.LinkedUserEntry;
 import com.github.dimka9910.sheets.ai.dto.user.UserEntity;
 import com.github.dimka9910.sheets.ai.services.MainAgentResultHandler;
@@ -54,7 +55,7 @@ public class ThirdPartyActionAgent {
     // PROCESS
     // ═══════════════════════════════════════════════════════════════════════════
     
-    public com.github.dimka9910.sheets.ai.dto.telegram.ChatResponse process(ChatRequest chatRequest, UserEntity userContext) {
+    public TelegramChatResponse process(TelegramChatRequest chatRequest, UserEntity userContext) {
         String message = chatRequest.getMessage();
         
         log.info("🔷 ThirdPartyHandler processing: \"{}\"", message);
@@ -119,7 +120,7 @@ public class ThirdPartyActionAgent {
             
         } catch (Exception e) {
             log.error("❌ ThirdPartyHandler error: {}", e.getMessage(), e);
-            return com.github.dimka9910.sheets.ai.dto.telegram.ChatResponse.builder()
+            return TelegramChatResponse.builder()
                     .chatId(chatRequest.getResponseChatId())
                     .success(false)
                     .message("Error processing third-party action: " + e.getMessage())

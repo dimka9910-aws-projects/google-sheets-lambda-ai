@@ -49,15 +49,7 @@ public class MessageClassifierAgent {
             Category category,
             String rawJson,
             String errorMessage
-    ) {
-        public boolean isSuccess() {
-            return errorMessage == null;
-        }
-        
-        public boolean needsFullContext() {
-            return category == Category.COMPLEX_ACTION;
-        }
-    }
+    ) {}
     
     /**
      * Message categories (ONLY ONE per message).
@@ -124,7 +116,6 @@ public class MessageClassifierAgent {
             
             ## Rules
             - Return ONLY ONE category
-            - If message matches SIMPLE_* category → use it (faster processing)
             - If unclear or doesn't fit simple patterns → COMPLEX_ACTION
             - When in doubt → COMPLEX_ACTION (safe default)
             """;
@@ -208,8 +199,19 @@ public class MessageClassifierAgent {
     /**
      * Convenience method for direct call.
      */
-    public Response classify(String message, boolean hasLinkedUsers) {
-        return process(new Request(message, hasLinkedUsers));
+    public Category classify(String message, boolean hasLinkedUsers) {
+
+      var classifierResponse = process(new Request(message, hasLinkedUsers));
+
+      if (classifierResponse.errorMessage() != null) {
+        log.error("Classification failed: {}", classifierResponse.errorMessage());
+        return Category.COMPLEX_ACTION; // Safe fallback
+      }
+
+      Category category = classifierResponse.category();
+      log.info("ClassifierAgent: category={} (hasLinkedUsers={})", category, hasLinkedUsers);
+
+      return category;
     }
     
     // ═══════════════════════════════════════════════════════════════════════════
@@ -256,4 +258,5 @@ public class MessageClassifierAgent {
             return Category.COMPLEX_ACTION;  // Safe fallback
         }
     }
+
 }

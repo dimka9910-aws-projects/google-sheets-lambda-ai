@@ -2,7 +2,7 @@ package com.github.dimka9910.sheets.ai.services;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.github.dimka9910.sheets.ai.dto.telegram.ChatResponse;
+import com.github.dimka9910.sheets.ai.dto.telegram.TelegramChatResponse;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
@@ -40,7 +40,7 @@ public class SQSPublisher {
     /**
      * Send response to Telegram bot via SQS response queue.
      */
-    public void sendResponse(ChatResponse response) {
+    public void sendResponse(TelegramChatResponse response) {
         if (responseQueueUrl == null || responseQueueUrl.isBlank()) {
             log.error("❌ Cannot send response: RESPONSE_QUEUE_URL is not set");
             return;

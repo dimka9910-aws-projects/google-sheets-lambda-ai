@@ -1,8 +1,8 @@
 package com.github.dimka9910.sheets.ai.services;
 
 import com.github.dimka9910.sheets.ai.dto.actions.MainAgentResponse;
-import com.github.dimka9910.sheets.ai.dto.telegram.ChatRequest;
-import com.github.dimka9910.sheets.ai.dto.telegram.ChatResponse;
+import com.github.dimka9910.sheets.ai.dto.telegram.TelegramChatRequest;
+import com.github.dimka9910.sheets.ai.dto.telegram.TelegramChatResponse;
 import com.github.dimka9910.sheets.ai.dto.user.UserEntity;
 import com.github.dimka9910.sheets.ai.services.agents.MainAgent;
 import com.github.dimka9910.sheets.ai.services.agents.MessageClassifierAgent;
@@ -43,9 +43,9 @@ public class Orchestrator {
     // ═══════════════════════════════════════════════════════════════════════════
     
     /**
-     * Full processing: validate → classify → route → handle → ChatResponse
+     * Full processing: validate → classify → route → handle → TelegramChatResponse
      */
-    public ChatResponse process(ChatRequest request, UserEntity userContext) {
+    public TelegramChatResponse process(TelegramChatRequest request, UserEntity userContext) {
         String message = request.getMessage();
         
         log.info("=== ORCHESTRATOR ===");
@@ -59,8 +59,8 @@ public class Orchestrator {
             
             // Step 1: Classify into ONE category
             boolean hasLinkedUsers = userContext.getLinkedUsers() != null && !userContext.getLinkedUsers().isEmpty();
-            Category category = classify(message, hasLinkedUsers);
-            
+            Category category = classifierAgent.classify(message, hasLinkedUsers);
+
             log.info("Classification: category={}", category);
             
             // Step 2: Route to appropriate handler
@@ -105,34 +105,14 @@ public class Orchestrator {
             
         } catch (Exception e) {
             log.error("Orchestration failed: {}", e.getMessage(), e);
-            return ChatResponse.builder()
+            return TelegramChatResponse.builder()
                     .chatId(request.getResponseChatId())
                     .success(false)
                     .message("Error: " + e.getMessage())
                     .build();
         }
     }
-    
-    // ═══════════════════════════════════════════════════════════════════════════
-    // CLASSIFICATION
-    // ═══════════════════════════════════════════════════════════════════════════
-    
-    private Category classify(String message, boolean hasLinkedUsers) {
-        // Classify message into ONE category
-        // Available categories dynamically adapt based on user context (e.g., has linked users)
-        var classifierResponse = classifierAgent.classify(message, hasLinkedUsers);
-        
-        if (!classifierResponse.isSuccess()) {
-            log.error("Classification failed: {}", classifierResponse.errorMessage());
-            return Category.COMPLEX_ACTION; // Safe fallback
-        }
-        
-        Category category = classifierResponse.category();
-        log.info("ClassifierAgent: category={} (hasLinkedUsers={})", category, hasLinkedUsers);
-        
-        return category;
-    }
-    
+
     // ═══════════════════════════════════════════════════════════════════════════
     // VALIDATION
     // ═══════════════════════════════════════════════════════════════════════════
@@ -149,7 +129,7 @@ public class Orchestrator {
     /**
      * Build response for user missing setup.
      */
-    private ChatResponse buildSetupRequiredResponse(ChatRequest request, UserEntity userContext) {
+    private TelegramChatResponse buildSetupRequiredResponse(TelegramChatRequest request, UserEntity userContext) {
         log.info("User {} missing setup", userContext.getUserName());
         
         boolean hasAccounts = userContext.getAccounts() != null && !userContext.getAccounts().isEmpty();
@@ -158,7 +138,7 @@ public class Orchestrator {
         StringBuilder sb = new StringBuilder();
         sb.append("⚙️User is not fully configured\n\n");
         
-        return ChatResponse.builder()
+        return TelegramChatResponse.builder()
                 .chatId(request.getResponseChatId())
                 .success(true)
                 .message(sb.toString())

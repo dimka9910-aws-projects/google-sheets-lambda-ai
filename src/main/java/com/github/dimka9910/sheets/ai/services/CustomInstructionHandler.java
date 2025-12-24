@@ -1,7 +1,7 @@
 package com.github.dimka9910.sheets.ai.services;
 
-import com.github.dimka9910.sheets.ai.dto.telegram.ChatRequest;
-import com.github.dimka9910.sheets.ai.dto.telegram.ChatResponse;
+import com.github.dimka9910.sheets.ai.dto.telegram.TelegramChatRequest;
+import com.github.dimka9910.sheets.ai.dto.telegram.TelegramChatResponse;
 import com.github.dimka9910.sheets.ai.dto.actions.*;
 import com.github.dimka9910.sheets.ai.dto.user.AccountEntry;
 import com.github.dimka9910.sheets.ai.dto.user.ConversationMessage;
@@ -43,7 +43,7 @@ public class CustomInstructionHandler {
      * 3. Save updated UserEntity
      * 4. If clarification needed → send SECOND message via SQS
      */
-    public void processAsync(List<String> instructions, UserEntity userEntity, ChatRequest request) {
+    public void processAsync(List<String> instructions, UserEntity userEntity, TelegramChatRequest request) {
         log.info("Processing {} custom instructions asynchronously: {}", instructions.size(), instructions);
         
         try {
@@ -176,7 +176,7 @@ public class CustomInstructionHandler {
      * Model generates the question text itself, we just send it as-is.
      */
     private void sendClarificationMessage(List<AskClarificationAction> clarifications, 
-                                          UserEntity userEntity, ChatRequest request) {
+                                          UserEntity userEntity, TelegramChatRequest request) {
         // Model already generated the question text - use it as-is
         StringBuilder clarificationMsg = new StringBuilder();
         
@@ -218,7 +218,7 @@ public class CustomInstructionHandler {
         userEntityService.saveContext(userEntity);
         
         // Send SECOND message via SQS
-        ChatResponse clarificationResponse = ChatResponse.builder()
+        TelegramChatResponse clarificationResponse = TelegramChatResponse.builder()
                 .chatId(request.getResponseChatId())
                 .success(true)
                 .message(clarificationMsg.toString())

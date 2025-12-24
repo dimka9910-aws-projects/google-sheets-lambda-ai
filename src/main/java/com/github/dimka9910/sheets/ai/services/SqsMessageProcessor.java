@@ -1,7 +1,7 @@
 package com.github.dimka9910.sheets.ai.services;
 
-import com.github.dimka9910.sheets.ai.dto.telegram.ChatRequest;
-import com.github.dimka9910.sheets.ai.dto.telegram.ChatResponse;
+import com.github.dimka9910.sheets.ai.dto.telegram.TelegramChatRequest;
+import com.github.dimka9910.sheets.ai.dto.telegram.TelegramChatResponse;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -30,7 +30,7 @@ public class SqsMessageProcessor {
     /**
      * Process chat command - main entry point.
      */
-    public ChatResponse processCommand(ChatRequest request) {
+    public TelegramChatResponse processCommand(TelegramChatRequest request) {
         String telegramUserId = request.getTelegramUserId();
         String message = request.getMessage() != null ? request.getMessage().trim() : "";
         
@@ -45,14 +45,14 @@ public class SqsMessageProcessor {
         var userContext = userContextOpt.get();
 
         // 2. Check admin commands
-        ChatResponse adminResponse = adminHandler.handle(request, message, userContext);
+        TelegramChatResponse adminResponse = adminHandler.handle(request, message, userContext);
         if (adminResponse != null) {
             sqsPublisher.sendResponse(adminResponse);
             return adminResponse;
         }
 
         // 3. Orchestrate (classify → parse → handle)
-        ChatResponse response = orchestrator.process(request, userContext);
+        TelegramChatResponse response = orchestrator.process(request, userContext);
         sqsPublisher.sendResponse(response);
         return response;
     }
@@ -60,8 +60,8 @@ public class SqsMessageProcessor {
     /**
      * Send error response to user.
      */
-    private ChatResponse sendErrorResponse(ChatRequest request, String errorMessage) {
-        ChatResponse response = ChatResponse.builder()
+    private TelegramChatResponse sendErrorResponse(TelegramChatRequest request, String errorMessage) {
+        TelegramChatResponse response = TelegramChatResponse.builder()
                 .chatId(request.getResponseChatId())
                 .success(false)
                 .message(errorMessage)

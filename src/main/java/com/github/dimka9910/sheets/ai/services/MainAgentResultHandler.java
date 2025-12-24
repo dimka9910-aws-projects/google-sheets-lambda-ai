@@ -2,8 +2,8 @@ package com.github.dimka9910.sheets.ai.services;
 
 import com.github.dimka9910.sheets.ai.db.service.FinancialOperationService;
 import com.github.dimka9910.sheets.ai.dto.actions.*;
-import com.github.dimka9910.sheets.ai.dto.telegram.ChatRequest;
-import com.github.dimka9910.sheets.ai.dto.telegram.ChatResponse;
+import com.github.dimka9910.sheets.ai.dto.telegram.TelegramChatRequest;
+import com.github.dimka9910.sheets.ai.dto.telegram.TelegramChatResponse;
 import com.github.dimka9910.sheets.ai.dto.user.ConversationMessage;
 import com.github.dimka9910.sheets.ai.dto.user.UserEntity;
 import jakarta.annotation.PostConstruct;
@@ -22,7 +22,7 @@ import java.util.Optional;
  * - Execute settings actions (add account, undo, etc.)
  * - Save financial actions to PostgreSQL database
  * - Manage pending clarifications in UserEntity
- * - Build ChatResponse with model's response message
+ * - Build TelegramChatResponse with model's response message
  */
 @Slf4j
 @Service
@@ -44,12 +44,12 @@ public class MainAgentResultHandler {
     }
 
     /**
-     * Process MainAgentResponse and return ChatResponse.
+     * Process MainAgentResponse and return TelegramChatResponse.
      * 
      * NOTE: CUSTOM_INSTRUCTION actions are processed asynchronously.
      * If CustomInstructionAgent needs clarification, it will send a SECOND message to user.
      */
-    public ChatResponse handle(ChatRequest request, MainAgentResponse agentResponse, UserEntity userContext) {
+    public TelegramChatResponse handle(TelegramChatRequest request, MainAgentResponse agentResponse, UserEntity userContext) {
         String chatId = request.getResponseChatId();
         String message = request.getMessage();
         
@@ -132,7 +132,7 @@ public class MainAgentResultHandler {
             }
         }
         
-        return ChatResponse.builder()
+        return TelegramChatResponse.builder()
                 .chatId(chatId)
                 .success(isSuccess)
                 .message(agentResponse.getResponse())
@@ -144,7 +144,7 @@ public class MainAgentResultHandler {
     // SETTINGS ACTIONS
     // ═══════════════════════════════════════════════════════════════════════════
 
-    private void handleUtilsAction(UtilsAction action, UserEntity userContext, ChatRequest request) {
+    private void handleUtilsAction(UtilsAction action, UserEntity userContext, TelegramChatRequest request) {
         UtilsAction.Command command = action.getCommand();
         String value = action.getValue();
         

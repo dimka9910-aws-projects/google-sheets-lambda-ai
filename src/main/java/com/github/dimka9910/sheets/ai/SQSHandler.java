@@ -4,7 +4,7 @@ import com.amazonaws.services.lambda.runtime.Context;
 import com.amazonaws.services.lambda.runtime.RequestHandler;
 import com.amazonaws.services.lambda.runtime.events.SQSEvent;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.github.dimka9910.sheets.ai.dto.telegram.ChatRequest;
+import com.github.dimka9910.sheets.ai.dto.telegram.TelegramChatRequest;
 import com.github.dimka9910.sheets.ai.services.SqsMessageProcessor;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -44,7 +44,7 @@ public class SQSHandler implements RequestHandler<SQSEvent, Void> {
                 String body = message.getBody();
                 log.debug("📨 Processing message: {}", body);
                 
-                ChatRequest request = objectMapper.readValue(body, ChatRequest.class);
+                TelegramChatRequest request = objectMapper.readValue(body, TelegramChatRequest.class);
                 
                 // Process command (response sent via SQS inside)
                 sqsMessageProcessor.processCommand(request);

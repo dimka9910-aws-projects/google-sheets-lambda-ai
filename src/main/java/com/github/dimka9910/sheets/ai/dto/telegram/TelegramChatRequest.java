@@ -17,7 +17,7 @@ import lombok.NoArgsConstructor;
 @Builder
 @NoArgsConstructor
 @AllArgsConstructor
-public class ChatRequest {
+public class TelegramChatRequest {
     
     // Telegram fields (used when request comes from Telegram)
     // JsonAlias for backward compatibility with Telegram Bot sending old field names
@@ -45,3 +45,4 @@ public class ChatRequest {
         return telegramUserId;
     }
 }
+
