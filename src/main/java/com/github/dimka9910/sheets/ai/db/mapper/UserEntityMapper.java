@@ -44,30 +44,32 @@ public class UserEntityMapper {
                 .preferredLanguage(userJpa.getPreferredLanguage())
                 .defaultCurrency(userJpa.getDefaultCurrency());
 
-        // Convert default account/fund IDs to external IDs
+        // Convert accounts first (needed for defaultAccount resolution)
+        List<AccountEntry> accountEntries = accounts.stream()
+                .map(this::toAccountEntry)
+                .collect(Collectors.toList());
+        builder.accounts(accountEntries);
+
+        // Convert funds first (needed for defaultFund resolution)
+        List<FundEntry> fundEntries = funds.stream()
+                .map(this::toFundEntry)
+                .collect(Collectors.toList());
+        builder.funds(fundEntries);
+
+        // Set default account/fund as objects (not just IDs)
         if (userJpa.getDefaultAccountId() != null) {
-            accounts.stream()
+            accountEntries.stream()
                     .filter(a -> a.getId().equals(userJpa.getDefaultAccountId()))
                     .findFirst()
-                    .ifPresent(a -> builder.defaultAccount(a.getExternalId()));
+                    .ifPresent(builder::defaultAccount);
         }
 
         if (userJpa.getDefaultFundId() != null) {
-            funds.stream()
+            fundEntries.stream()
                     .filter(f -> f.getId().equals(userJpa.getDefaultFundId()))
                     .findFirst()
-                    .ifPresent(f -> builder.defaultFund(f.getExternalId()));
+                    .ifPresent(builder::defaultFund);
         }
-
-        // Convert accounts
-        builder.accounts(accounts.stream()
-                .map(this::toAccountEntry)
-                .collect(Collectors.toList()));
-
-        // Convert funds
-        builder.funds(funds.stream()
-                .map(this::toFundEntry)
-                .collect(Collectors.toList()));
 
         // Convert linked users (just metadata, not full contexts yet)
         builder.linkedUsers(linkedUsers.stream()

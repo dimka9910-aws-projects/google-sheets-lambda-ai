@@ -127,7 +127,7 @@ public class UserEntityService {
                 
                 // Update default account ID if this is the default
                 if (context.getDefaultAccount() != null && 
-                    context.getDefaultAccount().equals(accountDto.getAccountId())) {
+                    context.getDefaultAccount().getAccountId().equals(accountDto.getAccountId())) {
                     userJpa.setDefaultAccountId(accountJpa.getId());
                 }
             }
@@ -142,7 +142,7 @@ public class UserEntityService {
                 
                 // Update default fund ID if this is the default
                 if (context.getDefaultFund() != null && 
-                    context.getDefaultFund().equals(fundDto.getFundId())) {
+                    context.getDefaultFund().getFundId().equals(fundDto.getFundId())) {
                     userJpa.setDefaultFundId(fundJpa.getId());
                 }
             }

@@ -11,7 +11,6 @@ import org.springframework.stereotype.Component;
 
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
 import java.util.stream.Collectors;
 
 /**
@@ -51,9 +50,9 @@ public class UserContextToPromptMapper {
         }
         
         // Always show defaults, accounts, and funds
-        appendDefaults(ctx, context);
-        appendAccounts(ctx, context);
-        appendFunds(ctx, context);
+        ctx.append(formatDefaultsSection(context));
+        ctx.append(formatAccountsSection(context));
+        ctx.append(formatFundsSection(context));
         
         // Show linked users with their accounts if available
         // For COMPLEX_ACTION, we always include them (don't know if needed yet)
@@ -78,32 +77,6 @@ public class UserContextToPromptMapper {
     // PRIVATE HELPERS
     // ═══════════════════════════════════════════════════════════════════════════
 
-    private void appendDefaults(StringBuilder ctx, UserEntity context) {
-        ctx.append("\n## Defaults:\n");
-        ctx.append("- Currency: ").append(orNotSet(context.getDefaultCurrency())).append("\n");
-        ctx.append("- Account: ").append(orNotSet(context.getDefaultAccount())).append("\n");
-        ctx.append("- Fund: ").append(orNotSet(context.getDefaultFund())).append("\n");
-    }
-
-    private void appendAccounts(StringBuilder ctx, UserEntity context) {
-        List<AccountEntry> accounts = context.getAccounts();
-        if (accounts != null && !accounts.isEmpty()) {
-            String accountsList = accounts.stream()
-                    .map(this::formatAccountEntry)
-                    .collect(Collectors.joining(", "));
-            ctx.append("\n## Accounts: ").append(accountsList).append("\n");
-        }
-    }
-
-    private void appendFunds(StringBuilder ctx, UserEntity context) {
-        List<FundEntry> funds = context.getFunds();
-        if (funds != null && !funds.isEmpty()) {
-            String fundsList = funds.stream()
-                    .map(this::formatFundEntry)
-                    .collect(Collectors.joining(", "));
-            ctx.append("## Funds: ").append(fundsList).append("\n");
-        }
-    }
 
     private void appendLinkedUsers(StringBuilder ctx, UserEntity context) {
         List<LinkedUserEntry> linkedUsers = context.getLinkedUsers();
@@ -119,18 +92,18 @@ public class UserContextToPromptMapper {
                 ctx.append(" [aliases: ").append(String.join(", ", linkedUser.getAliases())).append("]");
             }
             
-            // Show their accounts if available
+            ctx.append("\n");
+            
+            // Show their accounts if available (indented)
             if (linkedContexts != null && linkedContexts.containsKey(linkedUser.getName())) {
                 UserEntity linked = linkedContexts.get(linkedUser.getName());
                 List<AccountEntry> linkedAccounts = linked.getAccounts();
                 if (linkedAccounts != null && !linkedAccounts.isEmpty()) {
-                    String accountsList = linkedAccounts.stream()
-                            .map(this::formatAccountEntry)
-                            .collect(Collectors.joining(", "));
-                    ctx.append(" — accounts: ").append(accountsList);
+                    for (AccountEntry account : linkedAccounts) {
+                        ctx.append("  - ").append(formatAccountEntry(account)).append("\n");
+                    }
                 }
             }
-            ctx.append("\n");
         }
     }
 
@@ -196,6 +169,83 @@ public class UserContextToPromptMapper {
 
     private String orNotSet(String value) {
         return value != null ? value : "not set";
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // PUBLIC FORMATTERS (for use in lightweight agents)
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    /**
+     * Format accounts list as multi-line text for prompts.
+     * Each account on a new line with "- " prefix.
+     */
+    public String formatAccountsList(List<AccountEntry> accounts) {
+        if (accounts == null || accounts.isEmpty()) {
+            return "(No accounts configured)";
+        }
+
+        return accounts.stream()
+                .map(account -> "- " + formatAccountEntry(account))
+                .collect(Collectors.joining("\n"));
+    }
+
+    /**
+     * Format funds list as multi-line text for prompts.
+     * Each fund on a new line with "- " prefix.
+     */
+    public String formatFundsList(List<FundEntry> funds) {
+        if (funds == null || funds.isEmpty()) {
+            return "(No funds configured)";
+        }
+
+        return funds.stream()
+                .map(fund -> "- " + formatFundEntry(fund))
+                .collect(Collectors.joining("\n"));
+    }
+
+    /**
+     * Format custom instructions as a section for prompts.
+     * Returns empty string if no instructions.
+     */
+    public String formatCustomInstructionsSection(List<String> instructions) {
+        if (instructions == null || instructions.isEmpty()) {
+            return "";
+        }
+
+        StringBuilder sb = new StringBuilder("## Custom User Instructions\n");
+        for (String instruction : instructions) {
+            sb.append("- ").append(instruction).append("\n");
+        }
+        return sb.toString();
+    }
+
+    /**
+     * Format defaults section as a complete prompt section.
+     */
+    public String formatDefaultsSection(UserEntity context) {
+        StringBuilder sb = new StringBuilder("\n## Defaults\n");
+        sb.append("Currency: ").append(orNotSet(context.getDefaultCurrency())).append("\n");
+        sb.append("Account: ").append(
+                context.getDefaultAccount() != null ? context.getDefaultAccount().getAccountId() : "not set"
+        ).append("\n");
+        sb.append("Fund: ").append(
+                context.getDefaultFund() != null ? context.getDefaultFund().getFundId() : "not set"
+        ).append("\n");
+        return sb.toString();
+    }
+
+    /**
+     * Format accounts section as a complete prompt section.
+     */
+    public String formatAccountsSection(UserEntity context) {
+        return "\n## Accounts\n" + formatAccountsList(context.getAccounts()) + "\n";
+    }
+
+    /**
+     * Format funds section as a complete prompt section.
+     */
+    public String formatFundsSection(UserEntity context) {
+        return "\n## Funds\n" + formatFundsList(context.getFunds()) + "\n";
     }
 }
 

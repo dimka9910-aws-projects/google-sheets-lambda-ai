@@ -35,20 +35,21 @@ public class UserEntity {
     
     // Created timestamp
     private Instant createdAt;
-    
-    // Accounts (with IDs, display names, and aliases)
+
+    // Defaults
+    private AccountEntry defaultAccount;  // Now an object (not just ID string)
+    private FundEntry defaultFund;        // Now an object (not just ID string)
+
+    private String defaultCurrency;
+
+  // Accounts (with IDs, display names, and aliases)
     @Builder.Default
     private List<AccountEntry> accounts = new ArrayList<>();
     
     // Funds/categories (with IDs, display names, and aliases)
     @Builder.Default
     private List<FundEntry> funds = new ArrayList<>();
-    
-    // Defaults
-    private String defaultAccount;
-    private String defaultCurrency;
-    private String defaultFund;
-    
+
     // Linked users (for shared finances)
     @Builder.Default
     private List<LinkedUserEntry> linkedUsers = new ArrayList<>();
@@ -229,10 +230,7 @@ public class UserEntity {
         return pendingActions != null && !pendingActions.isEmpty();
     }
     
-    // ════════════════════════════════════════════════════════════════════════════
-    // NOTE: UNDO feature removed - никогда не работал в legacy коде
-    // ════════════════════════════════════════════════════════════════════════════
-    
+
     // ═══════════════════════════════════════════════════════════════════════════
     // LINKED USER CONTEXTS (transient - not persisted)
     // ═══════════════════════════════════════════════════════════════════════════
@@ -240,10 +238,7 @@ public class UserEntity {
     public Map<String, UserEntity> getLinkedUserEntitys() {
         return linkedUserEntitys;
     }
-    
-    public void setLinkedUserEntitys(Map<String, UserEntity> linkedUserEntitys) {
-        this.linkedUserEntitys = linkedUserEntitys;
-    }
+
     
     public void addLinkedUserEntity(String linkedUserName, UserEntity context) {
         if (linkedUserEntitys == null) {

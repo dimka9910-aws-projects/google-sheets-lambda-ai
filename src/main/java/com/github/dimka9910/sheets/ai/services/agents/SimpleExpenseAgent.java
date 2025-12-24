@@ -10,17 +10,22 @@ import com.github.dimka9910.sheets.ai.dto.user.AccountEntry;
 import com.github.dimka9910.sheets.ai.dto.user.FundEntry;
 import com.github.dimka9910.sheets.ai.dto.user.UserEntity;
 import com.github.dimka9910.sheets.ai.services.MainAgentResultHandler;
+import com.github.dimka9910.sheets.ai.services.UserContextToPromptMapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.ai.chat.messages.SystemMessage;
 import org.springframework.ai.chat.messages.UserMessage;
 import org.springframework.ai.chat.model.ChatModel;
+import org.springframework.ai.chat.model.ChatResponse;
 import org.springframework.ai.chat.prompt.Prompt;
+import org.springframework.ai.chat.prompt.PromptTemplate;
 import org.springframework.ai.converter.BeanOutputConverter;
 import org.springframework.ai.openai.OpenAiChatOptions;
 import org.springframework.stereotype.Component;
 
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 /**
  * Lightweight handler for SIMPLE_EXPENSE category.
@@ -38,6 +43,7 @@ public class SimpleExpenseAgent {
     
     private final ChatModel chatModel;
     private final MainAgentResultHandler resultHandler;
+    private final UserContextToPromptMapper contextMapper;
     
     // ═══════════════════════════════════════════════════════════════════════════
     // REQUEST / RESPONSE
@@ -94,7 +100,7 @@ public class SimpleExpenseAgent {
             );
             
             // Call LLM
-            org.springframework.ai.chat.model.ChatResponse chatResponse = chatModel.call(prompt);
+            ChatResponse chatResponse = chatModel.call(prompt);
             String content = chatResponse.getResult().getOutput().getText();
             
             // Parse structured output
@@ -124,20 +130,25 @@ public class SimpleExpenseAgent {
             log.info("✅ Parsed expense: {} {} {} {}", result.amount(), result.currency(), result.account(), result.fund());
             
             // Convert to FinancialAction
+            String currency = result.currency() != null ? result.currency() : userContext.getDefaultCurrency();
+            String account = result.account() != null ? result.account() : 
+                    (userContext.getDefaultAccount() != null ? userContext.getDefaultAccount().getAccountId() : null);
+            String fund = result.fund() != null ? result.fund() : 
+                    (userContext.getDefaultFund() != null ? userContext.getDefaultFund().getFundId() : null);
+            
             FinancialAction action = FinancialAction.builder()
                     .operationType(OperationType.EXPENSE)
                     .amount(result.amount())
-                    .currency(result.currency() != null ? result.currency() : userContext.getDefaultCurrency())
-                    .account(result.account() != null ? result.account() : userContext.getDefaultAccount())
-                    .fund(result.fund() != null ? result.fund() : userContext.getDefaultFund())
+                    .currency(currency)
+                    .account(account)
+                    .fund(fund)
                     .comment(result.comment())
                     .build();
             
             // Use MainAgentResultHandler to save and build response
             MainAgentResponse agentResponse = MainAgentResponse.builder()
                             .actions(List.of(action))
-                            .response("Recorded expense: " + result.amount() + " " + result.currency() + 
-                                    " (" + (result.fund() != null ? result.fund() : userContext.getDefaultFund()) + ")")
+                            .response("Recorded expense: " + result.amount() + " " + currency + " (" + fund + ")")
                             .build();
             
             return resultHandler.handle(chatRequest, agentResponse, userContext);
@@ -156,94 +167,65 @@ public class SimpleExpenseAgent {
     // BUILD PROMPT
     // ═══════════════════════════════════════════════════════════════════════════
     
+    private static final String PROMPT_TEMPLATE = """
+            You are a lightweight expense parser for a personal finance bot.
+            Parse simple expense messages (amount + optional item/category/account).
+            
+            ## Task
+            Extract: amount, currency, account, fund (category), comment
+            
+            ## Rules
+            - If currency not specified → use default
+            - If account not specified → use default
+            - If fund not specified → try to infer from comment OR use default
+            - comment = item name or description
+            
+            ## Clarifications
+            - If AMOUNT is missing or unclear → set needsClarification=true and ask for amount
+            - If message is too vague to parse → set needsClarification=true and ask for details
+            - DO NOT ask for clarification if you can use defaults (currency, account, fund)
+            
+            ## User Context
+            Default currency: {currency}
+            Default account: {defaultAccount}
+            
+            Available accounts:
+            {accounts}
+            
+            Default fund: {defaultFund}
+            
+            {customInstructions}
+            
+            Available funds:
+            {funds}
+            
+            ## Examples
+            
+            ### Normal parsing:
+            "coffee 200" → amount: 200, currency: (default), account: (default), fund: FOOD, comment: "coffee", needsClarification: false
+            "taxi 500 RSD" → amount: 500, currency: RSD, account: (default), fund: TRANSPORT, comment: "taxi", needsClarification: false
+            "3000 cash" → amount: 3000, currency: (default), account: CASH, fund: (default), comment: null, needsClarification: false
+            "200 from card A" → amount: 200, currency: (default), account: CARD_A, fund: (default), comment: null, needsClarification: false
+            
+            ### Clarification needed:
+            "coffee" → needsClarification: true, clarificationQuestion: "How much did the coffee cost?"
+            "купил" → needsClarification: true, clarificationQuestion: "What did you buy and how much did it cost?"
+            "something" → needsClarification: true, clarificationQuestion: "Please specify the amount for this expense"
+            """;
+    
     private String buildSystemPrompt(UserEntity context) {
-        StringBuilder sb = new StringBuilder();
+        Map<String, Object> params = new HashMap<>();
+        params.put("currency", context.getDefaultCurrency());
+        params.put("defaultAccount", context.getDefaultAccount() != null ? 
+                context.getDefaultAccount().getAccountId() : "not set");
+        params.put("defaultFund", context.getDefaultFund() != null ? 
+                context.getDefaultFund().getFundId() : "not set");
+        params.put("accounts", contextMapper.formatAccountsList(context.getAccounts()));
+        params.put("funds", contextMapper.formatFundsList(context.getFunds()));
+        params.put("customInstructions", contextMapper.formatCustomInstructionsSection(context.getCustomInstructions()));
         
-        sb.append("""
-                You are a lightweight expense parser for a personal finance bot.
-                Parse simple expense messages (amount + optional item/category/account).
-                
-                ## Task
-                Extract: amount, currency, account, fund (category), comment
-                
-                ## Rules
-                - If currency not specified → use default
-                - If account not specified → use default
-                - If fund not specified → try to infer from comment OR use default
-                - comment = item name or description
-                
-                ## Clarifications
-                - If AMOUNT is missing or unclear → set needsClarification=true and ask for amount
-                - If message is too vague to parse → set needsClarification=true and ask for details
-                - DO NOT ask for clarification if you can use defaults (currency, account, fund)
-                
-                ## User Context
-                """);
-        
-        // Default currency
-        sb.append("Default currency: ").append(context.getDefaultCurrency()).append("\n");
-        
-        // Default account
-        sb.append("Default account: ").append(context.getDefaultAccount()).append("\n");
-        
-        // Available accounts with aliases
-        sb.append("\nAvailable accounts:\n");
-        if (context.getAccounts() != null && !context.getAccounts().isEmpty()) {
-            for (var account : context.getAccounts()) {
-                sb.append("- ").append(account.getAccountId());
-                if (account.getDisplayName() != null) {
-                    sb.append(" (").append(account.getDisplayName()).append(")");
-                }
-                if (account.getAliases() != null && !account.getAliases().isEmpty()) {
-                    sb.append(" [aliases: ").append(String.join(", ", account.getAliases())).append("]");
-                }
-                sb.append("\n");
-            }
-        }
-        
-        // Default fund
-        sb.append("\nDefault fund: ").append(context.getDefaultFund()).append("\n");
-        
-        // Custom instructions (user's personal rules)
-        if (context.getCustomInstructions() != null && !context.getCustomInstructions().isEmpty()) {
-            sb.append("\n## Custom User Instructions\n");
-            for (String instruction : context.getCustomInstructions()) {
-                sb.append("- ").append(instruction).append("\n");
-            }
-        }
-        
-        // Available funds with aliases
-        sb.append("\nAvailable funds:\n");
-        if (context.getFunds() != null && !context.getFunds().isEmpty()) {
-            for (FundEntry fund : context.getFunds()) {
-                sb.append("- ").append(fund.getFundId());
-                if (fund.getDisplayName() != null) {
-                    sb.append(" (").append(fund.getDisplayName()).append(")");
-                }
-                if (fund.getAliases() != null && !fund.getAliases().isEmpty()) {
-                    sb.append(" [aliases: ").append(String.join(", ", fund.getAliases())).append("]");
-                }
-                sb.append("\n");
-            }
-        }
-        
-        sb.append("""
-                
-                ## Examples
-                
-                ### Normal parsing:
-                "coffee 200" → amount: 200, currency: (default), account: (default), fund: FOOD, comment: "coffee", needsClarification: false
-                "taxi 500 RSD" → amount: 500, currency: RSD, account: (default), fund: TRANSPORT, comment: "taxi", needsClarification: false
-                "3000 cash" → amount: 3000, currency: (default), account: CASH, fund: (default), comment: null, needsClarification: false
-                "200 from card A" → amount: 200, currency: (default), account: CARD_A, fund: (default), comment: null, needsClarification: false
-                
-                ### Clarification needed:
-                "coffee" → needsClarification: true, clarificationQuestion: "How much did the coffee cost?"
-                "купил" → needsClarification: true, clarificationQuestion: "What did you buy and how much did it cost?"
-                "something" → needsClarification: true, clarificationQuestion: "Please specify the amount for this expense"
-                """);
-        
-        return sb.toString();
+        PromptTemplate template = new PromptTemplate(PROMPT_TEMPLATE);
+        return template.render(params);
     }
 }
 

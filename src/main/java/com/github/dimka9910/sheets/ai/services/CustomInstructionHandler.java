@@ -153,12 +153,24 @@ public class CustomInstructionHandler {
                         log.info("Updated default currency: {}", value);
                     }
                     case "account" -> {
-                        userEntity.setDefaultAccount(value);
-                        log.info("Updated default account: {}", value);
+                        // Find account by ID or alias
+                        userEntity.findAccountByAlias(value).ifPresentOrElse(
+                                account -> {
+                                    userEntity.setDefaultAccount(account);
+                                    log.info("Updated default account: {}", account.getAccountId());
+                                },
+                                () -> log.warn("Account not found: {}", value)
+                        );
                     }
                     case "fund" -> {
-                        userEntity.setDefaultFund(value);
-                        log.info("Updated default fund: {}", value);
+                        // Find fund by ID or alias
+                        userEntity.findFundByAlias(value).ifPresentOrElse(
+                                fund -> {
+                                    userEntity.setDefaultFund(fund);
+                                    log.info("Updated default fund: {}", fund.getFundId());
+                                },
+                                () -> log.warn("Fund not found: {}", value)
+                        );
                     }
                     default -> log.warn("Unknown default type: {}", entityId);
                 }

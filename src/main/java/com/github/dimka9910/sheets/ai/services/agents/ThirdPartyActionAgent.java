@@ -13,6 +13,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.ai.chat.messages.SystemMessage;
 import org.springframework.ai.chat.messages.UserMessage;
 import org.springframework.ai.chat.model.ChatModel;
+import org.springframework.ai.chat.model.ChatResponse;
 import org.springframework.ai.chat.prompt.Prompt;
 import org.springframework.ai.converter.BeanOutputConverter;
 import org.springframework.ai.openai.OpenAiChatOptions;
@@ -85,7 +86,7 @@ public class ThirdPartyActionAgent {
             );
             
             // Call LLM
-            org.springframework.ai.chat.model.ChatResponse chatResponse = chatModel.call(prompt);
+            ChatResponse chatResponse = chatModel.call(prompt);
             String content = chatResponse.getResult().getOutput().getText();
             
             // Parse structured output
@@ -99,11 +100,14 @@ public class ThirdPartyActionAgent {
                     ? OperationType.TRANSFER 
                     : OperationType.EXPENSE;
             
+            String account = userContext.getDefaultAccount() != null ? 
+                    userContext.getDefaultAccount().getAccountId() : null;
+            
             FinancialAction action = FinancialAction.builder()
                     .operationType(opType)
                     .amount(result.amount())
                     .currency(result.currency() != null ? result.currency() : userContext.getDefaultCurrency())
-                    .account(userContext.getDefaultAccount())
+                    .account(account)
                     .targetPerson(result.targetPerson())
                     .userName(userContext.getUserName())  // Current user is sender
                     .comment(result.comment())

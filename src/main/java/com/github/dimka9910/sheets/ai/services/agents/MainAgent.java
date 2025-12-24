@@ -12,12 +12,13 @@ import org.springframework.ai.chat.messages.UserMessage;
 import org.springframework.ai.chat.model.ChatModel;
 import org.springframework.ai.chat.model.ChatResponse;
 import org.springframework.ai.chat.prompt.Prompt;
+import org.springframework.ai.chat.prompt.PromptTemplate;
 import org.springframework.ai.openai.OpenAiChatOptions;
 import org.springframework.stereotype.Component;
 
+import java.util.HashMap;
 import java.util.List;
-import java.util.Set;
-import java.util.stream.Collectors;
+import java.util.Map;
 
 /**
  * Spring Component for main AI agent - parses user commands using Spring AI + OpenAI.
@@ -91,15 +92,6 @@ public class MainAgent {
             ## Language:
             - Generate response in user's language (detect from message or defaults)
             - Store data in English (account names, fund names as provided)
-            """;
-
-    private static final String SECTION_CLASSIFICATION_META = """
-            
-            ## Pre-processing Info:
-            Before reaching you, this message was classified by a fast classifier.
-            
-            **Loaded context tags:** %s
-            **Available but NOT loaded:** %s
             """;
 
     private static final String SECTION_FINANCIAL = """
@@ -564,38 +556,48 @@ public class MainAgent {
     /**
      * Build system prompt (instructions + user context, but NOT user message).
      */
+    private static final String SYSTEM_PROMPT_TEMPLATE = """
+            {core}
+            {classificationMeta}
+            {financial}
+            {transfer}
+            {thirdParty}
+            {utils}
+            {pendingBase}
+            {pendingResolution}
+            {correction}
+            {customInstructions}
+            {responseFormat}
+            {userContext}
+            """;
+    
     private String buildSystemPrompt(UserEntity context, Category category) {
-        StringBuilder prompt = new StringBuilder();
+        Map<String, Object> params = new HashMap<>();
         
-        // SIMPLIFIED: For COMPLEX_ACTION, include all sections (backward compatibility)
-        // Simple categories will be handled by dedicated handlers (not MainAgent)
-        prompt.append(SECTION_CORE);
-        prompt.append(buildClassificationMeta(category));
+        params.put("core", SECTION_CORE);
+        params.put("classificationMeta", buildClassificationMeta(category));
+        params.put("financial", SECTION_FINANCIAL);
+        params.put("transfer", SECTION_TRANSFER);
+        params.put("thirdParty", SECTION_THIRD_PARTY);
+        params.put("utils", SECTION_UTILS);
+        params.put("pendingBase", SECTION_PENDING_BASE);
         
-        // Include all financial sections (MainAgent handles complex cases)
-        prompt.append(SECTION_FINANCIAL);
-        prompt.append(SECTION_TRANSFER);
-        prompt.append(SECTION_THIRD_PARTY);
-        prompt.append(SECTION_UTILS);
+        // Conditional sections
+        params.put("pendingResolution", 
+                context.getPendingActions() != null && !context.getPendingActions().isEmpty() 
+                        ? SECTION_PENDING_RESOLUTION : "");
         
-        // Pending clarifications
-        prompt.append(SECTION_PENDING_BASE);
-        if (context.getPendingActions() != null && !context.getPendingActions().isEmpty()) {
-            prompt.append(SECTION_PENDING_RESOLUTION);
-        }
+        params.put("correction", SECTION_CORRECTION);
         
-        // Corrections
-        prompt.append(SECTION_CORRECTION);
+        params.put("customInstructions",
+                context.getCustomInstructions() != null && !context.getCustomInstructions().isEmpty()
+                        ? SECTION_CUSTOM_INSTRUCTIONS : "");
         
-        // Custom instructions
-        if (context.getCustomInstructions() != null && !context.getCustomInstructions().isEmpty()) {
-            prompt.append(SECTION_CUSTOM_INSTRUCTIONS);
-        }
+        params.put("responseFormat", SECTION_RESPONSE_FORMAT);
+        params.put("userContext", buildUserContext(context, category));
         
-        prompt.append(SECTION_RESPONSE_FORMAT);
-        prompt.append(buildUserContext(context, category));
-        
-        return prompt.toString();
+        PromptTemplate template = new PromptTemplate(SYSTEM_PROMPT_TEMPLATE);
+        return template.render(params);
     }
 
     // ═══════════════════════════════════════════════════════════════════════════

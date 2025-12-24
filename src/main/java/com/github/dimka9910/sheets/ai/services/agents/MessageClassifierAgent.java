@@ -7,13 +7,14 @@ import org.springframework.ai.chat.messages.UserMessage;
 import org.springframework.ai.chat.model.ChatModel;
 import org.springframework.ai.chat.model.ChatResponse;
 import org.springframework.ai.chat.prompt.Prompt;
+import org.springframework.ai.chat.prompt.PromptTemplate;
 import org.springframework.ai.converter.BeanOutputConverter;
 import org.springframework.ai.openai.OpenAiChatOptions;
-import org.springframework.ai.openai.api.OpenAiApi;
 import org.springframework.stereotype.Component;
 
+import java.util.HashMap;
 import java.util.List;
-import java.util.Set;
+import java.util.Map;
 
 /**
  * Spring Component for message classification using Spring AI + OpenAI.
@@ -63,46 +64,37 @@ public class MessageClassifierAgent {
     }
 
     // ═══════════════════════════════════════════════════════════════════════════
+    // PROMPT TEMPLATE
+    // ═══════════════════════════════════════════════════════════════════════════
     
-    private static final String PROMPT_INTRO = """
+    private static final String PROMPT_TEMPLATE = """
             You are a message classifier for a personal finance bot.
             Users write in ANY language (Russian, English, Serbian, mixed, etc).
             
             ## Your Task
             Classify the message into EXACTLY ONE category.
             Choose the most specific category that matches.
-            """;
-
-    private static final String CATEGORY_SIMPLE_EXPENSE = """
+            
+            ## Categories (choose EXACTLY ONE)
+            
             **SIMPLE_EXPENSE** - Single straightforward expense
             - One amount + optional item name
             - Examples: "coffee 200", "taxi 500", "groceries 3000", "200"
             - NO person names, NO transfers between accounts
-            """;
-    
-    private static final String CATEGORY_INTERNAL_TRANSFER = """
+            
             **INTERNAL_TRANSFER** - Transfer between user's OWN accounts
             - Keywords: transfer, move, withdraw, deposit, top up (any language)
             - From/to user's accounts (not to other people)
             - Examples: "transfer 1000 from card A to cash", "withdrew 500 from card"
-            """;
-    
-    private static final String CATEGORY_THIRD_PARTY_ACTION = """
-            **THIRD_PARTY_ACTION** - Involves another person (linked user)
-            - Mentions person by name or relationship (Sarah, girlfriend, wife, partner)
-            - Paying FOR someone, receiving FROM someone, transfers to/from people
-            - Examples: "to Sarah 200", "for girlfriend 1500", "from partner 500"
-            """;
-    
-    private static final String CATEGORY_SIMPLE_CUSTOM_INSTRUCTION = """
+            
+            {thirdPartyCategory}
+            
             **SIMPLE_CUSTOM_INSTRUCTION** - Remember/alias instructions
             - User wants to save a setting, alias, or custom instruction
             - Keywords: remember, btw, by the way, just so you know (any language)
             - Setting aliases: "Sarah = USER_X", "card nickname = bank account"
             - Examples: "remember that Sarah is USER_X", "main card is account Y"
-            """;
-    
-    private static final String CATEGORY_COMPLEX_ACTION = """
+            
             **COMPLEX_ACTION** - Everything else (default fallback)
             - Multiple operations in one message
             - Questions about settings, help, show data
@@ -110,14 +102,18 @@ public class MessageClassifierAgent {
             - Math expressions, calculations
             - Unclear, ambiguous, slang
             - When in doubt → COMPLEX_ACTION
-            """;
-    
-    private static final String PROMPT_RULES = """
             
             ## Rules
             - Return ONLY ONE category
             - If unclear or doesn't fit simple patterns → COMPLEX_ACTION
             - When in doubt → COMPLEX_ACTION (safe default)
+            """;
+    
+    private static final String THIRD_PARTY_CATEGORY_TEXT = """
+            **THIRD_PARTY_ACTION** - Involves another person (linked user)
+            - Mentions person by name or relationship (Sarah, girlfriend, wife, partner)
+            - Paying FOR someone, receiving FROM someone, transfers to/from people
+            - Examples: "to Sarah 200", "for girlfriend 1500", "from partner 500"
             """;
     
     // ═══════════════════════════════════════════════════════════════════════════
@@ -219,26 +215,14 @@ public class MessageClassifierAgent {
     // ═══════════════════════════════════════════════════════════════════════════
     
     private String buildSystemPrompt(Request request) {
-        StringBuilder sb = new StringBuilder();
+        Map<String, Object> params = new HashMap<>();
         
-        sb.append(PROMPT_INTRO);
-        sb.append("\n\n## Categories (choose EXACTLY ONE)\n\n");
+        // Only include THIRD_PARTY_ACTION category if user has linked users
+        String thirdPartyCategory = request.hasLinkedUsers() ? THIRD_PARTY_CATEGORY_TEXT : "";
+        params.put("thirdPartyCategory", thirdPartyCategory);
         
-        // Always include these categories
-        sb.append(CATEGORY_SIMPLE_EXPENSE).append("\n");
-        sb.append(CATEGORY_INTERNAL_TRANSFER).append("\n");
-        
-        // Only include THIRD_PARTY_ACTION if user has linked users
-        if (request.hasLinkedUsers()) {
-            sb.append(CATEGORY_THIRD_PARTY_ACTION).append("\n");
-        }
-        
-        sb.append(CATEGORY_SIMPLE_CUSTOM_INSTRUCTION).append("\n");
-        sb.append(CATEGORY_COMPLEX_ACTION);
-        
-        sb.append(PROMPT_RULES);
-        
-        return sb.toString();
+        PromptTemplate template = new PromptTemplate(PROMPT_TEMPLATE);
+        return template.render(params);
     }
     
     private String buildUserPrompt(Request request) {

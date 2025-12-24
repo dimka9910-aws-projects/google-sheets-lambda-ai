@@ -177,13 +177,17 @@ public class MainAgentResultHandler {
             
             case SET_DEFAULT_ACCOUNT -> {
                 if (value != null && !value.isBlank()) {
-                    userContext.setDefaultAccount(value.toUpperCase());
+                    // Find account by ID or alias
+                    userContext.findAccountByAlias(value.toUpperCase())
+                            .ifPresent(userContext::setDefaultAccount);
                 }
             }
             
             case SET_DEFAULT_FUND -> {
                 if (value != null && !value.isBlank()) {
-                    userContext.setDefaultFund(value.toUpperCase());
+                    // Find fund by ID or alias
+                    userContext.findFundByAlias(value.toUpperCase())
+                            .ifPresent(userContext::setDefaultFund);
                 }
             }
             
