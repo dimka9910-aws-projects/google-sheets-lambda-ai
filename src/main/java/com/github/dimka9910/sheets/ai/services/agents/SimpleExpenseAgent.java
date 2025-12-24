@@ -4,12 +4,7 @@ import com.github.dimka9910.sheets.ai.dto.actions.FinancialAction;
 import com.github.dimka9910.sheets.ai.dto.actions.FinancialAction.OperationType;
 import com.github.dimka9910.sheets.ai.dto.actions.MainAgentResponse;
 import com.github.dimka9910.sheets.ai.dto.actions.PendingClarificationAction;
-import com.github.dimka9910.sheets.ai.dto.telegram.TelegramChatRequest;
-import com.github.dimka9910.sheets.ai.dto.telegram.TelegramChatResponse;
-import com.github.dimka9910.sheets.ai.dto.user.AccountEntry;
-import com.github.dimka9910.sheets.ai.dto.user.FundEntry;
 import com.github.dimka9910.sheets.ai.dto.user.UserEntity;
-import com.github.dimka9910.sheets.ai.services.MainAgentResultHandler;
 import com.github.dimka9910.sheets.ai.services.UserContextToPromptMapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -42,7 +37,6 @@ public class SimpleExpenseAgent {
     private static final int MAX_TOKENS = 300;
     
     private final ChatModel chatModel;
-    private final MainAgentResultHandler resultHandler;
     private final UserContextToPromptMapper contextMapper;
     
     // ═══════════════════════════════════════════════════════════════════════════
@@ -71,10 +65,8 @@ public class SimpleExpenseAgent {
     // PROCESS
     // ═══════════════════════════════════════════════════════════════════════════
     
-    public TelegramChatResponse process(TelegramChatRequest chatRequest, UserEntity userContext) {
-        String message = chatRequest.getMessage();
-        
-        log.info("🔷 SimpleExpenseHandler processing: \"{}\"", message);
+    public MainAgentResponse process(String message, UserEntity userContext) {
+        log.info("🔷 SimpleExpenseAgent processing: \"{}\"", message);
         
         try {
             // Build prompt
@@ -119,12 +111,10 @@ public class SimpleExpenseAgent {
                         .context("simple_expense: " + message)
                         .build();
                 
-                MainAgentResponse agentResponse = MainAgentResponse.builder()
+                return MainAgentResponse.builder()
                         .actions(List.of(clarification))
                         .response(question)
                         .build();
-                
-                return resultHandler.handle(chatRequest, agentResponse, userContext);
             }
             
             log.info("✅ Parsed expense: {} {} {} {}", result.amount(), result.currency(), result.account(), result.fund());
@@ -145,20 +135,17 @@ public class SimpleExpenseAgent {
                     .comment(result.comment())
                     .build();
             
-            // Use MainAgentResultHandler to save and build response
-            MainAgentResponse agentResponse = MainAgentResponse.builder()
-                            .actions(List.of(action))
-                            .response("Recorded expense: " + result.amount() + " " + currency + " (" + fund + ")")
-                            .build();
-            
-            return resultHandler.handle(chatRequest, agentResponse, userContext);
+            // Return MainAgentResponse with action
+            return MainAgentResponse.builder()
+                    .actions(List.of(action))
+                    .response("Recorded expense: " + result.amount() + " " + currency + " (" + fund + ")")
+                    .build();
             
         } catch (Exception e) {
-            log.error("❌ SimpleExpenseHandler error: {}", e.getMessage(), e);
-            return TelegramChatResponse.builder()
-                    .chatId(chatRequest.getResponseChatId())
-                    .success(false)
-                    .message("Error processing expense: " + e.getMessage())
+            log.error("❌ SimpleExpenseAgent error: {}", e.getMessage(), e);
+            return MainAgentResponse.builder()
+                    .actions(List.of())
+                    .response("Error processing expense: " + e.getMessage())
                     .build();
         }
     }

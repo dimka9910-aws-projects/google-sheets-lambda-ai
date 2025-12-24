@@ -3,11 +3,8 @@ package com.github.dimka9910.sheets.ai.services.agents;
 import com.github.dimka9910.sheets.ai.dto.actions.FinancialAction;
 import com.github.dimka9910.sheets.ai.dto.actions.FinancialAction.OperationType;
 import com.github.dimka9910.sheets.ai.dto.actions.MainAgentResponse;
-import com.github.dimka9910.sheets.ai.dto.telegram.TelegramChatRequest;
-import com.github.dimka9910.sheets.ai.dto.telegram.TelegramChatResponse;
 import com.github.dimka9910.sheets.ai.dto.user.AccountEntry;
 import com.github.dimka9910.sheets.ai.dto.user.UserEntity;
-import com.github.dimka9910.sheets.ai.services.MainAgentResultHandler;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.ai.chat.messages.SystemMessage;
@@ -36,7 +33,6 @@ public class InternalTransferAgent {
     private static final int MAX_TOKENS = 300;
     
     private final ChatModel chatModel;
-    private final MainAgentResultHandler resultHandler;
     
     // ═══════════════════════════════════════════════════════════════════════════
     // REQUEST / RESPONSE
@@ -57,8 +53,7 @@ public class InternalTransferAgent {
     // PROCESS
     // ═══════════════════════════════════════════════════════════════════════════
     
-    public TelegramChatResponse process(TelegramChatRequest chatRequest, UserEntity userContext) {
-        String message = chatRequest.getMessage();
+    public MainAgentResponse process(String message, UserEntity userContext) {
         
         log.info("🔷 InternalTransferHandler processing: \"{}\"", message);
         
@@ -105,21 +100,18 @@ public class InternalTransferAgent {
                     .comment(result.comment())
                     .build();
             
-            // Use MainAgentResultHandler to save and build response
-            MainAgentResponse agentResponse = MainAgentResponse.builder()
-                            .actions(List.of(action))
-                            .response("Recorded transfer: " + result.amount() + " " + result.currency() + 
-                                    " from " + result.fromAccount() + " to " + result.toAccount())
-                            .build();
-            
-            return resultHandler.handle(chatRequest, agentResponse, userContext);
+            // Return MainAgentResponse with action
+            return MainAgentResponse.builder()
+                    .actions(List.of(action))
+                    .response("Recorded transfer: " + result.amount() + " " + result.currency() + 
+                            " from " + result.fromAccount() + " to " + result.toAccount())
+                    .build();
             
         } catch (Exception e) {
-            log.error("❌ InternalTransferHandler error: {}", e.getMessage(), e);
-            return TelegramChatResponse.builder()
-                    .chatId(chatRequest.getResponseChatId())
-                    .success(false)
-                    .message("Error processing transfer: " + e.getMessage())
+            log.error("❌ InternalTransferAgent error: {}", e.getMessage(), e);
+            return MainAgentResponse.builder()
+                    .actions(List.of())
+                    .response("Error processing transfer: " + e.getMessage())
                     .build();
         }
     }

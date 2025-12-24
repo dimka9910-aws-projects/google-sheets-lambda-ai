@@ -63,45 +63,36 @@ public class Orchestrator {
 
             log.info("Classification: category={}", category);
             
-            // Step 2: Route to appropriate handler
-            return switch (category) {
+            // Step 2: Route to appropriate agent and handle result
+            MainAgentResponse agentResponse = switch (category) {
                 case SIMPLE_EXPENSE -> {
-                    log.info("→ Routing to SimpleExpenseHandler");
-                    yield simpleExpenseAgent.process(request, userContext);
+                    log.info("→ Routing to SimpleExpenseAgent");
+                    yield simpleExpenseAgent.process(message, userContext);
                 }
                 case INTERNAL_TRANSFER -> {
-                    log.info("→ Routing to InternalTransferHandler");
-                    yield internalTransferAgent.process(request, userContext);
+                    log.info("→ Routing to InternalTransferAgent");
+                    yield internalTransferAgent.process(message, userContext);
                 }
                 case THIRD_PARTY_ACTION -> {
-                    log.info("→ Routing to ThirdPartyHandler");
-                    yield thirdPartyActionAgent.process(request, userContext);
+                    log.info("→ Routing to ThirdPartyActionAgent");
+                    yield thirdPartyActionAgent.process(message, userContext);
                 }
                 case SIMPLE_CUSTOM_INSTRUCTION -> {
-                    // TODO: CustomInstructionAgent needs refactoring to match handler interface
-                    log.info("→ Routing to MainAgent (SIMPLE_CUSTOM_INSTRUCTION not yet implemented)");
+                    log.info("→ Routing to MainAgent (SIMPLE_CUSTOM_INSTRUCTION)");
                     var agentRequest = new MainAgent.Request(message, userContext, category);
-                    var agentResponse = mainAgent.process(agentRequest);
-                    MainAgentResponse result = agentResponse.result();
-                    
-                    log.info("Parsed: {} actions, pending={}", 
-                            result.getActions().size(), result.hasPendingClarifications());
-                    
-                    yield mainAgentResultHandler.handle(request, result, userContext);
+                    yield mainAgent.process(agentRequest).result();
                 }
                 case COMPLEX_ACTION -> {
-                    // MainAgent handles complex actions with full context
                     log.info("→ Routing to MainAgent (COMPLEX_ACTION)");
                     var agentRequest = new MainAgent.Request(message, userContext, category);
-                    var agentResponse = mainAgent.process(agentRequest);
-                    MainAgentResponse result = agentResponse.result();
-                    
-                    log.info("Parsed: {} actions, pending={}", 
-                            result.getActions().size(), result.hasPendingClarifications());
-                    
-                    yield mainAgentResultHandler.handle(request, result, userContext);
+                    yield mainAgent.process(agentRequest).result();
                 }
             };
+            
+            log.info("Agent parsed: {} actions, pending={}", 
+                    agentResponse.getActions().size(), agentResponse.hasPendingClarifications());
+            
+            return mainAgentResultHandler.handle(request, agentResponse, userContext);
             
         } catch (Exception e) {
             log.error("Orchestration failed: {}", e.getMessage(), e);
