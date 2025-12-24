@@ -6,13 +6,13 @@ import com.github.dimka9910.sheets.ai.dto.user.UserEntity;
 import com.github.dimka9910.sheets.ai.services.UserContextToPromptMapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.ai.chat.messages.SystemMessage;
 import org.springframework.ai.chat.messages.UserMessage;
 import org.springframework.ai.chat.model.ChatModel;
 import org.springframework.ai.chat.model.ChatResponse;
 import org.springframework.ai.chat.prompt.Prompt;
 import org.springframework.ai.chat.prompt.PromptTemplate;
+import org.springframework.ai.converter.BeanOutputConverter;
 import org.springframework.ai.openai.OpenAiChatOptions;
 import org.springframework.stereotype.Component;
 
@@ -37,7 +37,6 @@ public class SimpleExpenseAgent {
     
     private final ChatModel chatModel;
     private final UserContextToPromptMapper contextMapper;
-    private final ObjectMapper objectMapper;
     
     // ═══════════════════════════════════════════════════════════════════════════
     // REQUEST / RESPONSE
@@ -63,9 +62,17 @@ public class SimpleExpenseAgent {
         }
         
         try {
-            // Build prompt
+            // Build prompt with JSON schema for structured output
             String systemPrompt = buildSystemPrompt(userContext);
             String userPrompt = "User message: " + message;
+            
+            // Create BeanOutputConverter for MainAgentResponse
+            // This will automatically generate JSON schema and validate output
+            BeanOutputConverter<MainAgentResponse> outputConverter = new BeanOutputConverter<>(MainAgentResponse.class);
+            String jsonSchema = outputConverter.getFormat();
+            
+            // Append JSON schema to system prompt
+            systemPrompt += "\n\n## Response Format\nReturn JSON following this schema:\n" + jsonSchema;
             
             // Create Spring AI Prompt
             @SuppressWarnings("null")
@@ -93,9 +100,9 @@ public class SimpleExpenseAgent {
                         .build();
             }
             
-            // Parse MainAgentResponse directly using ObjectMapper
-            // ObjectMapper already configured with @JsonSubTypes for polymorphic deserialization
-            MainAgentResponse result = objectMapper.readValue(content, MainAgentResponse.class);
+            // Parse MainAgentResponse using BeanOutputConverter
+            // This handles @JsonSubTypes polymorphic deserialization automatically
+            MainAgentResponse result = outputConverter.convert(content);
             
             // Apply defaults if needed (currency, account, fund)
             applyDefaults(result, userContext);
@@ -148,38 +155,17 @@ public class SimpleExpenseAgent {
             You are a lightweight expense parser for a personal finance bot.
             Parse simple expense messages (amount + optional item/category/account).
             
-            ## Response Format
-            Return JSON in this EXACT format:
+            ## Your Task
+            Return MainAgentResponse with actions array and response text.
             
-            ```json
-            {
-              "actions": [/* array of actions, see below */],
-              "response": "Human-readable message to show user"
-            }
-            ```
+            ## Action Types:
+            1. **FINANCIAL** (type: "FINANCIAL") - when amount is clear
+               - operationType: "EXPENSE"
+               - amount, currency, account, fund, comment
+               - Use null for fields that should use defaults
             
-            ## Action Types
-            
-            ### 1. FINANCIAL (when amount is clear):
-            ```json
-            {
-              "type": "FINANCIAL",
-              "operationType": "EXPENSE",
-              "amount": 200.0,
-              "currency": "RSD",  // or null to use default
-              "account": "CARD_DIMA_VISA_RAIF",  // or null to use default
-              "fund": "FOOD",  // category, or null to use default
-              "comment": "coffee"  // optional description
-            }
-            ```
-            
-            ### 2. PENDING_CLARIFICATION (when amount is missing/unclear):
-            ```json
-            {
-              "type": "PENDING_CLARIFICATION",
-              "context": "User wants to record expense. Need: amount. Original message: coffee"
-            }
-            ```
+            2. **PENDING_CLARIFICATION** (type: "PENDING_CLARIFICATION") - when amount is missing
+               - context: description of what's missing
             
             ## Rules
             - If amount is CLEAR → return FINANCIAL action
