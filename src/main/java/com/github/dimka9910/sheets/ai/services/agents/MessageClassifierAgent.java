@@ -40,13 +40,10 @@ public class MessageClassifierAgent {
     // REQUEST / RESPONSE
     // ═══════════════════════════════════════════════════════════════════════════
     
-    public record Request(
-            String message,
-            String previousBotMessage
-    ) {}
+    public record Request(String message) {}
     
     public record Response(
-            Set<Tag> tags,
+            Category category,
             String rawJson,
             String errorMessage
     ) {
@@ -54,91 +51,74 @@ public class MessageClassifierAgent {
             return errorMessage == null;
         }
         
-        public boolean isComplex() {
-            return tags.contains(Tag.COMPLEX);
-        }
-        
-        public boolean needsLinkedUsers() {
-            return tags.contains(Tag.THIRD_PARTY) || tags.contains(Tag.TRANSFER);
+        public boolean needsFullContext() {
+            return category == Category.COMPLEX_ACTION;
         }
     }
     
-    public enum Tag {
-        FINANCIAL,      // Money transaction (expense, income)
-        UTILS,          // Utilities (settings, help, meta commands, questions)
-        OFF_TOPIC,      // Unrelated to finance
-        TRANSFER,       // Transfer between OWN accounts
-        THIRD_PARTY,    // Involves another person
-        COMPLEX         // Needs smarter model
+    /**
+     * Message categories (ONLY ONE per message).
+     */
+    public enum Category {
+        SIMPLE_EXPENSE,           // Single expense: "кофе 200", "такси 500"
+        INTERNAL_TRANSFER,        // Transfer between own accounts: "перевод 1000 с визы на кеш"
+        THIRD_PARTY_ACTION,       // Operations with linked users: "Ксюше 200", "за девушку"
+        SIMPLE_CUSTOM_INSTRUCTION, // Custom instruction: "Ксюша = KIKI", "запомни райф это виза"
+        COMPLEX_ACTION            // Everything else → MainAgent with full context
     }
-    
-    // ═══════════════════════════════════════════════════════════════════════════
-    // PROMPT PARTS
+
     // ═══════════════════════════════════════════════════════════════════════════
     
     private static final String PROMPT_INTRO = """
-            You are a context classifier for a personal finance bot.
+            You are a message classifier for a personal finance bot.
             Users write in ANY language (Russian, English, Serbian, mixed, etc).
             
             ## Your Task
-            Determine what context the main AI agent needs to process this message.
-            DO NOT process the message itself - just classify what context to load.
+            Classify the message into EXACTLY ONE category.
+            Choose the most specific category that matches.
             """;
-    
-    private static final String PROMPT_TAGS = """
+
+    private static final String PROMPT_CATEGORIES = """
             
-            ## Output: tags (array - can have multiple)
+            ## Categories (choose EXACTLY ONE)
             
-            **Primary categories:**
+            **SIMPLE_EXPENSE** - Single straightforward expense
+            - One amount + optional item name
+            - Examples: "кофе 200", "такси 500", "продукты 3000", "200"
+            - NO person names, NO transfers between accounts
             
-            **FINANCIAL** - message involves money transactions or purchase record
-            - Recording expense, income, or transfer
-            - Mentions amount, currency, account, purchase
-            - Single word that is a product/service name (coffee, taxi, lunch) = FINANCIAL
-            - User says product name meaning "I bought X" - this is FINANCIAL, not OFF_TOPIC!
+            **INTERNAL_TRANSFER** - Transfer between user's OWN accounts
+            - Keywords: перевод, transfer, move, снял (withdrew), пополнил (topped up)
+            - From/to user's accounts (not to other people)
+            - Examples: "перевод 1000 с визы на кеш", "снял 500 с карты"
             
-            **UTILS** - utilities: settings, help, meta commands, questions
-            - Setting defaults (account, currency, fund)
-            - Adding/changing custom instructions or aliases
-            - "remember", "btw", "by the way", "just so you know"
-            - Help requests, show settings, show user's configuration, funds, accounts, aliases, context, any related to user application data
-            - How to use the bot, questions about bot capabilities
-            - Questions about user's data: accounts, funds, settings
-            - "What can you do?", "How does this work?", "какие у меня фонды?", "настройки", "помощь"
+            **THIRD_PARTY_ACTION** - Involves another person (linked user)
+            - Mentions person by name or relationship (Ксюша, девушка, girlfriend, wife)
+            - Paying FOR someone, receiving FROM someone, transfers to/from people
+            - Examples: "Ксюше 200", "за девушку 1500", "от Димы 500"
             
-            **OFF_TOPIC** - message completely unrelated to finance or the bot
-            - Jokes, weather, general knowledge questions
-            - NOT questions about bot/user data - those are UTILS!
+            **SIMPLE_CUSTOM_INSTRUCTION** - Remember/alias instructions
+            - User wants to save a setting, alias, or custom instruction
+            - Keywords: запомни (remember), btw, by the way, just so you know
+            - Setting aliases: "Ксюша = KIKI", "райф = visa raiffeisen"
+            - Examples: "запомни что Ксюша это KIKI", "райф это моя основная карта"
             
-            **Financial sub-tags (add together with FINANCIAL):**
-            
-            **TRANSFER** - moving money between user's OWN accounts
-            - Keywords: transfer, move, перевод, from X to Y (where X and Y are accounts)
-            - Cash withdrawal: снял/withdrew cash from card/account
-            - Card top-up: пополнил/deposited cash to card/account
-            - Moving money between own accounts
-            
-            **THIRD_PARTY** - involves another person
-            - Mentions someone else by name or relationship
-            - Paying FOR someone, receiving FROM someone, splitting
-            - Sending/receiving money to/from another person (not own accounts)
-            - Asking for user details, settings details of some 3rd party
-            
-            **Complexity indicator:**
-            
-            **COMPLEX** - needs smarter model
-            - Multiple financial operations in one message
+            **COMPLEX_ACTION** - Everything else (default fallback)
+            - Multiple operations in one message
+            - Questions about settings, help, show data
+            - Corrections to previous transactions
             - Math expressions, calculations
-            - Corrections referencing previous transactions
-            - Ambiguous, slang, abbreviations
+            - Unclear, ambiguous, slang
+            - When in doubt → COMPLEX_ACTION
             """;
     
     private static final String PROMPT_RULES = """
             
             ## Rules
-            - Tags can be MULTIPLE: ["FINANCIAL", "TRANSFER"] or ["FINANCIAL", "THIRD_PARTY", "COMPLEX"]
-            - When in doubt about complexity → add COMPLEX (better safe)
-            - Simple single expense → just ["FINANCIAL"]
+            - Return ONLY ONE category
+            - If message matches SIMPLE_* category → use it (faster processing)
+            - If unclear or doesn't fit simple patterns → COMPLEX_ACTION
+            - When in doubt → COMPLEX_ACTION (safe default)
             """;
     
     // ═══════════════════════════════════════════════════════════════════════════
@@ -148,7 +128,7 @@ public class MessageClassifierAgent {
     /**
      * Classification result from LLM (used for structured output parsing).
      */
-    public record ClassificationResult(List<String> tags) {}
+    public record ClassificationResult(String category) {}
     
     // ═══════════════════════════════════════════════════════════════════════════
     // DEPENDENCIES (injected by Spring)
@@ -200,17 +180,17 @@ public class MessageClassifierAgent {
             String content = chatResponse.getResult().getOutput().getText();
             ClassificationResult result = outputConverter.convert(content);
             
-            // Convert to Set<Tag>
-            Set<Tag> tags = parseTags(result.tags());
+            // Convert to Category enum
+            Category category = parseCategory(result.category());
             
-            log.info("✅ Classification: tags={}", tags);
+            log.info("✅ Classification: category={}", category);
             
-            return new Response(tags, content, null);
+            return new Response(category, content, null);
             
         } catch (Exception e) {
             log.error("❌ Classification error: {}", e.getMessage(), e);
             return new Response(
-                    Set.of(Tag.FINANCIAL),  // Safe fallback
+                    Category.COMPLEX_ACTION,  // Safe fallback
                     "{\"error\":\"" + e.getMessage() + "\"}",
                     e.getMessage()
             );
@@ -220,8 +200,8 @@ public class MessageClassifierAgent {
     /**
      * Convenience method for direct call.
      */
-    public Response classify(String message, String previousBotMessage) {
-        return process(new Request(message, previousBotMessage));
+    public Response classify(String message) {
+        return process(new Request(message));
     }
     
     // ═══════════════════════════════════════════════════════════════════════════
@@ -229,48 +209,24 @@ public class MessageClassifierAgent {
     // ═══════════════════════════════════════════════════════════════════════════
     
     private String buildSystemPrompt() {
-        return PROMPT_INTRO + PROMPT_TAGS + PROMPT_RULES;
+        return PROMPT_INTRO + PROMPT_CATEGORIES + PROMPT_RULES;
     }
     
     private String buildUserPrompt(Request request) {
-        StringBuilder sb = new StringBuilder();
-        
-        // Context
-        if (request.previousBotMessage() != null && !request.previousBotMessage().isBlank()) {
-            sb.append("## Previous Bot Message\n```\n")
-              .append(request.previousBotMessage())
-              .append("\n```\n\n");
-        } else {
-            sb.append("## Previous Bot Message\nNone (new conversation)\n\n");
-        }
-        
-        sb.append("## User Message\n```\n")
-          .append(request.message())
-          .append("\n```");
-        
-        return sb.toString();
+        // Simplified: only the current message
+        return "## User Message\n```\n" + request.message() + "\n```";
     }
     
     // ═══════════════════════════════════════════════════════════════════════════
-    // PARSE TAGS (Spring AI handles JSON parsing, we just convert strings to enums)
+    // PARSE CATEGORY (Spring AI handles JSON parsing, we just convert string to enum)
     // ═══════════════════════════════════════════════════════════════════════════
     
-    private Set<Tag> parseTags(List<String> tagStrings) {
-        Set<Tag> tags = new java.util.HashSet<>();
-        
-        for (String tagStr : tagStrings) {
-            try {
-                Tag tag = Tag.valueOf(tagStr.toUpperCase().trim());
-                tags.add(tag);
-            } catch (IllegalArgumentException e) {
-                log.warn("Unknown tag '{}', ignoring", tagStr);
-            }
+    private Category parseCategory(String categoryStr) {
+        try {
+            return Category.valueOf(categoryStr.toUpperCase().trim());
+        } catch (IllegalArgumentException e) {
+            log.warn("Unknown category '{}', falling back to COMPLEX_ACTION", categoryStr);
+            return Category.COMPLEX_ACTION;  // Safe fallback
         }
-        
-        if (tags.isEmpty()) {
-            tags.add(Tag.FINANCIAL);  // Default fallback
-        }
-        
-        return tags;
     }
 }

@@ -6,7 +6,7 @@ import com.github.dimka9910.sheets.ai.dto.user.ConversationMessage;
 import com.github.dimka9910.sheets.ai.dto.user.FundEntry;
 import com.github.dimka9910.sheets.ai.dto.user.LinkedUserEntry;
 import com.github.dimka9910.sheets.ai.dto.user.UserEntity;
-import com.github.dimka9910.sheets.ai.services.agents.MessageClassifierAgent.Tag;
+import com.github.dimka9910.sheets.ai.services.agents.MessageClassifierAgent.Category;
 import org.springframework.stereotype.Component;
 
 import java.util.List;
@@ -32,10 +32,10 @@ public class UserContextToPromptMapper {
      * Build formatted user context string for LLM prompt.
      * 
      * @param context UserEntity with all user data
-     * @param tags Classification tags (e.g., THIRD_PARTY) to adapt output
+     * @param category Classification category (e.g., COMPLEX_ACTION) to adapt output
      * @return Formatted context string ready to inject into LLM prompt
      */
-    public String buildContextPrompt(UserEntity context, Set<Tag> tags) {
+    public String buildContextPrompt(UserEntity context, Category category) {
         StringBuilder ctx = new StringBuilder();
         ctx.append("\n\n### User Context ###\n");
         
@@ -55,9 +55,10 @@ public class UserContextToPromptMapper {
         appendAccounts(ctx, context);
         appendFunds(ctx, context);
         
-        // Show linked users with their accounts when THIRD_PARTY tag is present
-        // Note: THIRD_PARTY tag is only set by Orchestrator if linkedUsers list is not empty
-        if (tags.contains(Tag.THIRD_PARTY)) {
+        // Show linked users with their accounts if available
+        // For COMPLEX_ACTION, we always include them (don't know if needed yet)
+        // For simpler categories, they won't reach MainAgent anyway
+        if (context.getLinkedUsers() != null && !context.getLinkedUsers().isEmpty()) {
             appendLinkedUsers(ctx, context);
         }
         

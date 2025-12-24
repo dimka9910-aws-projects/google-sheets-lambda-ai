@@ -230,7 +230,11 @@ public class CustomInstructionAgent {
     private String buildUserPrompt(Request request) {
         StringBuilder sb = new StringBuilder();
 
-        String userContext = contextMapper.buildContextPrompt(request.userEntity(), Collections.emptySet());
+        // CustomInstructionAgent is for SIMPLE_CUSTOM_INSTRUCTION category
+        String userContext = contextMapper.buildContextPrompt(
+                request.userEntity(), 
+                MessageClassifierAgent.Category.SIMPLE_CUSTOM_INSTRUCTION
+        );
         sb.append(userContext);
         
         // Add new instructions (specific to CustomInstructionAgent)

@@ -1,12 +1,10 @@
 package com.github.dimka9910.sheets.ai.dto.user;
 
-import com.github.dimka9910.sheets.ai.services.agents.MessageClassifierAgent.Tag;
+import com.github.dimka9910.sheets.ai.services.agents.MessageClassifierAgent.Category;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
-
-import java.util.Set;
 
 /**
  * Сообщение в диалоге.
@@ -34,10 +32,10 @@ public class Message {
     private String content;
     
     /**
-     * Теги контекста из MessageClassifier.
-     * Хранятся как Set<String> для совместимости с DynamoDB.
+     * Category from MessageClassifier (one of 5 categories).
+     * Stored as String for DB compatibility.
      */
-    private Set<String> contextTags;
+    private String messageCategory;
     
     /**
      * Роль: "user" или "assistant".
@@ -70,11 +68,11 @@ public class Message {
                 .build();
     }
     
-    public static Message assistant(String messageId, String content, Set<Tag> tags) {
+    public static Message assistant(String messageId, String content, Category category) {
         return Message.builder()
                 .messageId(messageId)
                 .content(content)
-                .contextTags(tagsToStrings(tags))
+                .messageCategory(category != null ? category.name() : null)
                 .role("assistant")
                 .timestamp(System.currentTimeMillis())
                 .build();
@@ -92,13 +90,6 @@ public class Message {
     
     public boolean isResponse() {
         return responseTo != null && !responseTo.isBlank();
-    }
-    
-    private static Set<String> tagsToStrings(Set<Tag> tags) {
-        if (tags == null) return null;
-        return tags.stream()
-                .map(Enum::name)
-                .collect(java.util.stream.Collectors.toSet());
     }
 }
 

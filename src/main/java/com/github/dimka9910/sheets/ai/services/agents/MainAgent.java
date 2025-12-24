@@ -4,7 +4,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.github.dimka9910.sheets.ai.dto.actions.*;
 import com.github.dimka9910.sheets.ai.dto.user.UserEntity;
 import com.github.dimka9910.sheets.ai.services.UserContextToPromptMapper;
-import com.github.dimka9910.sheets.ai.services.agents.MessageClassifierAgent.Tag;
+import com.github.dimka9910.sheets.ai.services.agents.MessageClassifierAgent.Category;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.ai.chat.messages.SystemMessage;
@@ -53,7 +53,7 @@ public class MainAgent {
     public record Request(
             String message,
             UserEntity userContext,
-            Set<Tag> tags
+            Category category
     ) {}
     
     public record Response(
@@ -500,9 +500,7 @@ public class MainAgent {
             - Need clarification → PENDING_CLARIFICATION + helpful response
             """;
 
-    private static final Set<Tag> ALL_CONTEXT_TAGS = Set.of(
-            Tag.FINANCIAL, Tag.TRANSFER, Tag.THIRD_PARTY, Tag.UTILS
-    );
+    // REMOVED: ALL_CONTEXT_TAGS - no longer needed with simplified Category system
 
     // ═══════════════════════════════════════════════════════════════════════════
     // DEPENDENCIES (injected by Spring)
@@ -519,7 +517,7 @@ public class MainAgent {
     public Response process(Request request) {
         try {
             // Build system and user messages
-            String systemPrompt = buildSystemPrompt(request.userContext(), request.tags());
+            String systemPrompt = buildSystemPrompt(request.userContext(), request.category());
             String userPrompt = "### User Message ###\n" + request.message();
             
             log.debug("System prompt length: {} chars, User prompt length: {} chars", 
@@ -566,47 +564,36 @@ public class MainAgent {
     /**
      * Build system prompt (instructions + user context, but NOT user message).
      */
-    private String buildSystemPrompt(UserEntity context, Set<Tag> tags) {
+    private String buildSystemPrompt(UserEntity context, Category category) {
         StringBuilder prompt = new StringBuilder();
         
+        // SIMPLIFIED: For COMPLEX_ACTION, include all sections (backward compatibility)
+        // Simple categories will be handled by dedicated handlers (not MainAgent)
         prompt.append(SECTION_CORE);
-        prompt.append(buildClassificationMeta(tags));
+        prompt.append(buildClassificationMeta(category));
         
-        if (tags.contains(Tag.FINANCIAL) 
-            || tags.contains(Tag.TRANSFER) 
-            || tags.contains(Tag.THIRD_PARTY)) {
-            prompt.append(SECTION_FINANCIAL);
-        }
+        // Include all financial sections (MainAgent handles complex cases)
+        prompt.append(SECTION_FINANCIAL);
+        prompt.append(SECTION_TRANSFER);
+        prompt.append(SECTION_THIRD_PARTY);
+        prompt.append(SECTION_UTILS);
         
-        if (tags.contains(Tag.TRANSFER)) {
-            prompt.append(SECTION_TRANSFER);
-        }
-        
-        if (tags.contains(Tag.THIRD_PARTY)) {
-            prompt.append(SECTION_THIRD_PARTY);
-        }
-        
-        if (tags.contains(Tag.UTILS)) {
-            prompt.append(SECTION_UTILS);
-        }
-        
-        // Always include base pending section - model needs to know how to create clarifications
+        // Pending clarifications
         prompt.append(SECTION_PENDING_BASE);
-        
-        // Only include pending resolution section if user has pending actions
         if (context.getPendingActions() != null && !context.getPendingActions().isEmpty()) {
             prompt.append(SECTION_PENDING_RESOLUTION);
         }
         
-        // Always include correction section - model will decide if it's relevant
+        // Corrections
         prompt.append(SECTION_CORRECTION);
         
+        // Custom instructions
         if (context.getCustomInstructions() != null && !context.getCustomInstructions().isEmpty()) {
             prompt.append(SECTION_CUSTOM_INSTRUCTIONS);
         }
         
         prompt.append(SECTION_RESPONSE_FORMAT);
-        prompt.append(buildUserContext(context, tags));
+        prompt.append(buildUserContext(context, category));
         
         return prompt.toString();
     }
@@ -643,26 +630,19 @@ public class MainAgent {
     // PRIVATE HELPERS
     // ═══════════════════════════════════════════════════════════════════════════
 
-    private String buildClassificationMeta(Set<Tag> tags) {
-        String loadedTags = tags.stream().map(Tag::name).collect(Collectors.joining(", "));
-        
-        Set<Tag> notLoaded = ALL_CONTEXT_TAGS.stream()
-                .filter(t -> !tags.contains(t))
-                .collect(Collectors.toSet());
-        
-        String notLoadedTags = notLoaded.isEmpty() 
-                ? "none (all loaded)" 
-                : notLoaded.stream().map(Tag::name).collect(Collectors.joining(", "));
-        
-        return SECTION_CLASSIFICATION_META.formatted(loadedTags, notLoadedTags);
+    private String buildClassificationMeta(Category category) {
+        // Simplified: just show the category
+        return "## Message Category\n" + category.name();
     }
 
     /**
      * Build user context prompt using dedicated mapper.
      * Delegates to UserContextToPromptMapper for clean separation of concerns.
      */
-    private String buildUserContext(UserEntity context, Set<Tag> tags) {
-        return contextMapper.buildContextPrompt(context, tags);
+    private String buildUserContext(UserEntity context, Category category) {
+        // For COMPLEX_ACTION, we load full context (as before)
+        // For simpler categories, they will be handled by dedicated handlers (not MainAgent)
+        return contextMapper.buildContextPrompt(context, category);
     }
 
     private String truncate(String s, int maxLen) {
