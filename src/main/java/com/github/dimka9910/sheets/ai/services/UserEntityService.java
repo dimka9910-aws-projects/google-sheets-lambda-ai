@@ -33,33 +33,6 @@ public class UserEntityService {
     // ═══════════════════════════════════════════════════════════════════════════
 
     /**
-     * Get context by userName (system identifier).
-     * Returns empty context if not found.
-     * Loads CORE data (user, accounts, funds) + chat history.
-     * 
-     * Использует JOIN FETCH для accounts/funds → 2 queries вместо 4!
-     */
-    @Transactional(readOnly = true)
-    public UserEntity getByUserName(String userName) {
-        log.info("Getting context for userName: {}", userName);
-        
-        // JOIN FETCH: загружает user + accounts + funds за ОДИН запрос
-        Optional<UserJpaEntity> userOpt = userRepository.findByUsernameWithAccountsAndFunds(userName);
-        
-        if (userOpt.isEmpty()) {
-            log.info("User {} not found, returning empty context", userName);
-            return UserEntity.builder()
-                    .userName(userName)
-                    .build();
-        }
-
-        UserEntity dto = loadCoreContext(userOpt.get());
-        loadChatHistory(dto, 10);  // Load last 10 messages (отдельный запрос)
-        
-        return dto;
-    }
-
-    /**
      * Get context by Telegram ID.
      * Returns Optional.empty() if not found.
      * Loads CORE data (user, accounts, funds) + chat history.
@@ -243,7 +216,7 @@ public class UserEntityService {
      * Load CORE user context: user + accounts + funds.
      * Chat messages и linked users загружаются отдельно по требованию.
      * 
-     * ВАЖНО: userJpa должен быть загружен через findByUsernameWithAccountsAndFunds(),
+     * ВАЖНО: userJpa должен быть загружен через findByTelegramIdWithAccountsAndFunds(),
      * иначе будут отдельные queries для accounts/funds.
      */
     private UserEntity loadCoreContext(UserJpaEntity userJpa) {
