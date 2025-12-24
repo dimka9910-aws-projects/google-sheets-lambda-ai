@@ -1,9 +1,9 @@
-package com.github.dimka9910.sheets.ai.services.handlers;
+package com.github.dimka9910.sheets.ai.services.agents;
 
 import com.github.dimka9910.sheets.ai.dto.actions.FinancialAction;
 import com.github.dimka9910.sheets.ai.dto.actions.FinancialAction.OperationType;
 import com.github.dimka9910.sheets.ai.dto.telegram.ChatRequest;
-import com.github.dimka9910.sheets.ai.dto.user.FundEntry;
+import com.github.dimka9910.sheets.ai.dto.user.LinkedUserEntry;
 import com.github.dimka9910.sheets.ai.dto.user.UserEntity;
 import com.github.dimka9910.sheets.ai.services.MainAgentResultHandler;
 import lombok.RequiredArgsConstructor;
@@ -19,18 +19,18 @@ import org.springframework.stereotype.Component;
 import java.util.List;
 
 /**
- * Lightweight handler for SIMPLE_EXPENSE category.
+ * Lightweight handler for THIRD_PARTY_ACTION category.
  * 
- * Uses gpt-4o-mini with minimal context for fast processing.
- * Handles messages like: "coffee 200", "taxi 500", "groceries 3000"
+ * Uses gpt-4o-mini with linked users context for fast processing.
+ * Handles messages like: "to Sarah 200", "for girlfriend 1500", "from partner 500"
  */
 @Slf4j
 @Component
 @RequiredArgsConstructor
-public class SimpleExpenseHandler {
+public class ThirdPartyActionAgent {
     
     private static final String MODEL = "gpt-4o-mini";
-    private static final int MAX_TOKENS = 300;
+    private static final int MAX_TOKENS = 400;
     
     private final ChatModel chatModel;
     private final MainAgentResultHandler resultHandler;
@@ -39,18 +39,14 @@ public class SimpleExpenseHandler {
     // REQUEST / RESPONSE
     // ═══════════════════════════════════════════════════════════════════════════
     
-    public record Request(
-            String message,
-            UserEntity userContext
-    ) {}
-    
     /**
      * DTO for structured output parsing.
      */
-    public record ExpenseResult(
+    public record ThirdPartyResult(
+            String operationType,  // EXPENSE or TRANSFER
             Double amount,
             String currency,
-            String fund,
+            String targetPerson,  // Linked user name
             String comment
     ) {}
     
@@ -61,7 +57,7 @@ public class SimpleExpenseHandler {
     public com.github.dimka9910.sheets.ai.dto.telegram.ChatResponse process(ChatRequest chatRequest, UserEntity userContext) {
         String message = chatRequest.getMessage();
         
-        log.info("🔷 SimpleExpenseHandler processing: \"{}\"", message);
+        log.info("🔷 ThirdPartyHandler processing: \"{}\"", message);
         
         try {
             // Build prompt
@@ -69,7 +65,7 @@ public class SimpleExpenseHandler {
             String userPrompt = "User message: " + message;
             
             // Create converter for structured output
-            BeanOutputConverter<ExpenseResult> outputConverter = new BeanOutputConverter<>(ExpenseResult.class);
+            BeanOutputConverter<ThirdPartyResult> outputConverter = new BeanOutputConverter<>(ThirdPartyResult.class);
             String format = outputConverter.getFormat();
             systemPrompt += "\n\n## Response Format\nReturn JSON following this schema:\n" + format;
             
@@ -91,17 +87,23 @@ public class SimpleExpenseHandler {
             String content = chatResponse.getResult().getOutput().getText();
             
             // Parse structured output
-            ExpenseResult result = outputConverter.convert(content);
+            ThirdPartyResult result = outputConverter.convert(content);
             
-            log.info("✅ Parsed expense: {} {} {}", result.amount(), result.currency(), result.fund());
+            log.info("✅ Parsed third-party action: {} {} {} to {}", 
+                    result.operationType(), result.amount(), result.currency(), result.targetPerson());
             
             // Convert to FinancialAction
+            OperationType opType = "TRANSFER".equalsIgnoreCase(result.operationType()) 
+                    ? OperationType.TRANSFER 
+                    : OperationType.EXPENSE;
+            
             FinancialAction action = FinancialAction.builder()
-                    .operationType(OperationType.EXPENSE)
+                    .operationType(opType)
                     .amount(result.amount())
                     .currency(result.currency() != null ? result.currency() : userContext.getDefaultCurrency())
-                    .account(userContext.getDefaultAccount())  // Always use default for simple expense
-                    .fund(result.fund() != null ? result.fund() : userContext.getDefaultFund())
+                    .account(userContext.getDefaultAccount())
+                    .targetPerson(result.targetPerson())
+                    .userName(userContext.getUserName())  // Current user is sender
                     .comment(result.comment())
                     .build();
             
@@ -109,18 +111,18 @@ public class SimpleExpenseHandler {
             com.github.dimka9910.sheets.ai.dto.actions.MainAgentResponse agentResponse = 
                     com.github.dimka9910.sheets.ai.dto.actions.MainAgentResponse.builder()
                             .actions(List.of(action))
-                            .response("Recorded expense: " + result.amount() + " " + result.currency() + 
-                                    " (" + (result.fund() != null ? result.fund() : userContext.getDefaultFund()) + ")")
+                            .response("Recorded " + result.operationType().toLowerCase() + ": " + 
+                                    result.amount() + " " + result.currency() + " to " + result.targetPerson())
                             .build();
             
             return resultHandler.handle(chatRequest, agentResponse, userContext);
             
         } catch (Exception e) {
-            log.error("❌ SimpleExpenseHandler error: {}", e.getMessage(), e);
+            log.error("❌ ThirdPartyHandler error: {}", e.getMessage(), e);
             return com.github.dimka9910.sheets.ai.dto.telegram.ChatResponse.builder()
                     .chatId(chatRequest.getResponseChatId())
                     .success(false)
-                    .message("Error processing expense: " + e.getMessage())
+                    .message("Error processing third-party action: " + e.getMessage())
                     .build();
         }
     }
@@ -133,36 +135,40 @@ public class SimpleExpenseHandler {
         StringBuilder sb = new StringBuilder();
         
         sb.append("""
-                You are a lightweight expense parser for a personal finance bot.
-                Parse simple expense messages (amount + optional item/category).
+                You are a lightweight parser for third-party financial actions.
+                Parse messages involving other people (linked users).
                 
                 ## Task
-                Extract: amount, currency, fund (category), comment
+                Extract: operationType, amount, currency, targetPerson, comment
+                
+                ## Operation Types
+                - EXPENSE: Paying FOR someone, gift, shared expense
+                - TRANSFER: Sending money TO someone or receiving FROM someone
                 
                 ## Rules
                 - If currency not specified → use default
-                - If fund not specified → try to infer from comment OR use default
-                - comment = item name or description
+                - Match person name/alias to linked users
+                - If person not found → return the name as-is (will be handled later)
                 
                 ## User Context
                 """);
         
+        // Current user
+        sb.append("Current user: ").append(context.getUserName()).append("\n");
+        
         // Default currency
         sb.append("Default currency: ").append(context.getDefaultCurrency()).append("\n");
         
-        // Default fund
-        sb.append("Default fund: ").append(context.getDefaultFund()).append("\n");
-        
-        // Available funds with aliases
-        sb.append("\nAvailable funds:\n");
-        if (context.getFunds() != null && !context.getFunds().isEmpty()) {
-            for (FundEntry fund : context.getFunds()) {
-                sb.append("- ").append(fund.getFundId());
-                if (fund.getDisplayName() != null) {
-                    sb.append(" (").append(fund.getDisplayName()).append(")");
+        // Linked users with aliases
+        sb.append("\nLinked users:\n");
+        if (context.getLinkedUsers() != null && !context.getLinkedUsers().isEmpty()) {
+            for (LinkedUserEntry linkedUser : context.getLinkedUsers()) {
+                sb.append("- ").append(linkedUser.getUserName());
+                if (linkedUser.getDisplayName() != null) {
+                    sb.append(" (").append(linkedUser.getDisplayName()).append(")");
                 }
-                if (fund.getAliases() != null && !fund.getAliases().isEmpty()) {
-                    sb.append(" [aliases: ").append(String.join(", ", fund.getAliases())).append("]");
+                if (linkedUser.getAliases() != null && !linkedUser.getAliases().isEmpty()) {
+                    sb.append(" [aliases: ").append(String.join(", ", linkedUser.getAliases())).append("]");
                 }
                 sb.append("\n");
             }
@@ -171,9 +177,10 @@ public class SimpleExpenseHandler {
         sb.append("""
                 
                 ## Examples
-                "coffee 200" → amount: 200, currency: (default), fund: FOOD, comment: "coffee"
-                "taxi 500 RSD" → amount: 500, currency: RSD, fund: TRANSPORT, comment: "taxi"
-                "3000" → amount: 3000, currency: (default), fund: (default), comment: null
+                "to Sarah 200" → operationType: TRANSFER, amount: 200, targetPerson: Sarah
+                "for girlfriend 1500" → operationType: EXPENSE, amount: 1500, targetPerson: girlfriend
+                "from partner 500 RSD" → operationType: TRANSFER, amount: 500, currency: RSD, targetPerson: partner
+                "paid for wife's lunch 800" → operationType: EXPENSE, amount: 800, targetPerson: wife, comment: "lunch"
                 """);
         
         return sb.toString();

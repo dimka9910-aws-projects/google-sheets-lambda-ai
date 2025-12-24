@@ -40,7 +40,10 @@ public class MessageClassifierAgent {
     // REQUEST / RESPONSE
     // ═══════════════════════════════════════════════════════════════════════════
     
-    public record Request(String message) {}
+    public record Request(
+            String message,
+            boolean hasLinkedUsers
+    ) {}
     
     public record Response(
             Category category,
@@ -78,31 +81,36 @@ public class MessageClassifierAgent {
             Choose the most specific category that matches.
             """;
 
-    private static final String PROMPT_CATEGORIES = """
-            
-            ## Categories (choose EXACTLY ONE)
-            
+    private static final String CATEGORY_SIMPLE_EXPENSE = """
             **SIMPLE_EXPENSE** - Single straightforward expense
             - One amount + optional item name
             - Examples: "coffee 200", "taxi 500", "groceries 3000", "200"
             - NO person names, NO transfers between accounts
-            
+            """;
+    
+    private static final String CATEGORY_INTERNAL_TRANSFER = """
             **INTERNAL_TRANSFER** - Transfer between user's OWN accounts
             - Keywords: transfer, move, withdraw, deposit, top up (any language)
             - From/to user's accounts (not to other people)
             - Examples: "transfer 1000 from card A to cash", "withdrew 500 from card"
-            
+            """;
+    
+    private static final String CATEGORY_THIRD_PARTY_ACTION = """
             **THIRD_PARTY_ACTION** - Involves another person (linked user)
             - Mentions person by name or relationship (Sarah, girlfriend, wife, partner)
             - Paying FOR someone, receiving FROM someone, transfers to/from people
             - Examples: "to Sarah 200", "for girlfriend 1500", "from partner 500"
-            
+            """;
+    
+    private static final String CATEGORY_SIMPLE_CUSTOM_INSTRUCTION = """
             **SIMPLE_CUSTOM_INSTRUCTION** - Remember/alias instructions
             - User wants to save a setting, alias, or custom instruction
             - Keywords: remember, btw, by the way, just so you know (any language)
             - Setting aliases: "Sarah = USER_X", "card nickname = bank account"
             - Examples: "remember that Sarah is USER_X", "main card is account Y"
-            
+            """;
+    
+    private static final String CATEGORY_COMPLEX_ACTION = """
             **COMPLEX_ACTION** - Everything else (default fallback)
             - Multiple operations in one message
             - Questions about settings, help, show data
@@ -152,8 +160,8 @@ public class MessageClassifierAgent {
     
     public Response process(Request request) {
         try {
-            // Build system + user messages
-            String systemPrompt = buildSystemPrompt();
+            // Build system + user messages (dynamic based on user context)
+            String systemPrompt = buildSystemPrompt(request);
             String userPrompt = buildUserPrompt(request);
             
             // Add JSON schema for structured output
@@ -200,16 +208,35 @@ public class MessageClassifierAgent {
     /**
      * Convenience method for direct call.
      */
-    public Response classify(String message) {
-        return process(new Request(message));
+    public Response classify(String message, boolean hasLinkedUsers) {
+        return process(new Request(message, hasLinkedUsers));
     }
     
     // ═══════════════════════════════════════════════════════════════════════════
     // BUILD PROMPT (Spring AI uses system + user messages)
     // ═══════════════════════════════════════════════════════════════════════════
     
-    private String buildSystemPrompt() {
-        return PROMPT_INTRO + PROMPT_CATEGORIES + PROMPT_RULES;
+    private String buildSystemPrompt(Request request) {
+        StringBuilder sb = new StringBuilder();
+        
+        sb.append(PROMPT_INTRO);
+        sb.append("\n\n## Categories (choose EXACTLY ONE)\n\n");
+        
+        // Always include these categories
+        sb.append(CATEGORY_SIMPLE_EXPENSE).append("\n");
+        sb.append(CATEGORY_INTERNAL_TRANSFER).append("\n");
+        
+        // Only include THIRD_PARTY_ACTION if user has linked users
+        if (request.hasLinkedUsers()) {
+            sb.append(CATEGORY_THIRD_PARTY_ACTION).append("\n");
+        }
+        
+        sb.append(CATEGORY_SIMPLE_CUSTOM_INSTRUCTION).append("\n");
+        sb.append(CATEGORY_COMPLEX_ACTION);
+        
+        sb.append(PROMPT_RULES);
+        
+        return sb.toString();
     }
     
     private String buildUserPrompt(Request request) {

@@ -1,3 +1,4 @@
+
 package com.github.dimka9910.sheets.ai.db.entity;
 
 import jakarta.persistence.*;

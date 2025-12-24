@@ -7,9 +7,9 @@ import com.github.dimka9910.sheets.ai.dto.user.UserEntity;
 import com.github.dimka9910.sheets.ai.services.agents.MainAgent;
 import com.github.dimka9910.sheets.ai.services.agents.MessageClassifierAgent;
 import com.github.dimka9910.sheets.ai.services.agents.MessageClassifierAgent.Category;
-import com.github.dimka9910.sheets.ai.services.handlers.SimpleExpenseHandler;
-import com.github.dimka9910.sheets.ai.services.handlers.InternalTransferHandler;
-import com.github.dimka9910.sheets.ai.services.handlers.ThirdPartyHandler;
+import com.github.dimka9910.sheets.ai.services.agents.SimpleExpenseAgent;
+import com.github.dimka9910.sheets.ai.services.agents.InternalTransferAgent;
+import com.github.dimka9910.sheets.ai.services.agents.ThirdPartyActionAgent;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -32,9 +32,9 @@ import org.springframework.stereotype.Service;
 public class Orchestrator {
     
     private final MessageClassifierAgent classifierAgent;
-    private final SimpleExpenseHandler simpleExpenseHandler;
-    private final InternalTransferHandler internalTransferHandler;
-    private final ThirdPartyHandler thirdPartyHandler;
+    private final SimpleExpenseAgent simpleExpenseAgent;
+    private final InternalTransferAgent internalTransferAgent;
+    private final ThirdPartyActionAgent thirdPartyActionAgent;
     private final MainAgent mainAgent;
     private final MainAgentResultHandler mainAgentResultHandler;
     
@@ -57,8 +57,9 @@ public class Orchestrator {
                 return buildSetupRequiredResponse(request, userContext);
             }
             
-            // Step 1: Classify into ONE category (based on message only)
-            Category category = classify(message);
+            // Step 1: Classify into ONE category
+            boolean hasLinkedUsers = userContext.getLinkedUsers() != null && !userContext.getLinkedUsers().isEmpty();
+            Category category = classify(message, hasLinkedUsers);
             
             log.info("Classification: category={}", category);
             
@@ -66,15 +67,15 @@ public class Orchestrator {
             return switch (category) {
                 case SIMPLE_EXPENSE -> {
                     log.info("→ Routing to SimpleExpenseHandler");
-                    yield simpleExpenseHandler.process(request, userContext);
+                    yield simpleExpenseAgent.process(request, userContext);
                 }
                 case INTERNAL_TRANSFER -> {
                     log.info("→ Routing to InternalTransferHandler");
-                    yield internalTransferHandler.process(request, userContext);
+                    yield internalTransferAgent.process(request, userContext);
                 }
                 case THIRD_PARTY_ACTION -> {
                     log.info("→ Routing to ThirdPartyHandler");
-                    yield thirdPartyHandler.process(request, userContext);
+                    yield thirdPartyActionAgent.process(request, userContext);
                 }
                 case SIMPLE_CUSTOM_INSTRUCTION -> {
                     // TODO: CustomInstructionAgent needs refactoring to match handler interface
@@ -116,9 +117,10 @@ public class Orchestrator {
     // CLASSIFICATION
     // ═══════════════════════════════════════════════════════════════════════════
     
-    private Category classify(String message) {
-        // Classify message into ONE category (based on message only, no context)
-        var classifierResponse = classifierAgent.classify(message);
+    private Category classify(String message, boolean hasLinkedUsers) {
+        // Classify message into ONE category
+        // Available categories dynamically adapt based on user context (e.g., has linked users)
+        var classifierResponse = classifierAgent.classify(message, hasLinkedUsers);
         
         if (!classifierResponse.isSuccess()) {
             log.error("Classification failed: {}", classifierResponse.errorMessage());
@@ -126,7 +128,7 @@ public class Orchestrator {
         }
         
         Category category = classifierResponse.category();
-        log.info("ClassifierAgent: category={}", category);
+        log.info("ClassifierAgent: category={} (hasLinkedUsers={})", category, hasLinkedUsers);
         
         return category;
     }

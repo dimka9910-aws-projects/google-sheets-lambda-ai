@@ -1,4 +1,4 @@
-package com.github.dimka9910.sheets.ai.services.handlers;
+package com.github.dimka9910.sheets.ai.services.agents;
 
 import com.github.dimka9910.sheets.ai.dto.actions.FinancialAction;
 import com.github.dimka9910.sheets.ai.dto.actions.FinancialAction.OperationType;
@@ -27,7 +27,7 @@ import java.util.List;
 @Slf4j
 @Component
 @RequiredArgsConstructor
-public class InternalTransferHandler {
+public class InternalTransferAgent {
     
     private static final String MODEL = "gpt-4o-mini";
     private static final int MAX_TOKENS = 300;
