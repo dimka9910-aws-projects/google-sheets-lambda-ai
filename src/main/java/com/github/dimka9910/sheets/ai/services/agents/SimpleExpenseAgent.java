@@ -175,6 +175,14 @@ public class SimpleExpenseAgent {
         // Default fund
         sb.append("\nDefault fund: ").append(context.getDefaultFund()).append("\n");
         
+        // Custom instructions (user's personal rules)
+        if (context.getCustomInstructions() != null && !context.getCustomInstructions().isEmpty()) {
+            sb.append("\n## Custom User Instructions\n");
+            for (String instruction : context.getCustomInstructions()) {
+                sb.append("- ").append(instruction).append("\n");
+            }
+        }
+        
         // Available funds with aliases
         sb.append("\nAvailable funds:\n");
         if (context.getFunds() != null && !context.getFunds().isEmpty()) {
