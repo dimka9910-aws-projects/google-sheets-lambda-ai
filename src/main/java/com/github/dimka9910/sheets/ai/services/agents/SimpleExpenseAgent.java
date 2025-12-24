@@ -3,6 +3,7 @@ package com.github.dimka9910.sheets.ai.services.agents;
 import com.github.dimka9910.sheets.ai.dto.actions.FinancialAction;
 import com.github.dimka9910.sheets.ai.dto.actions.FinancialAction.OperationType;
 import com.github.dimka9910.sheets.ai.dto.actions.MainAgentResponse;
+import com.github.dimka9910.sheets.ai.dto.actions.PendingClarificationAction;
 import com.github.dimka9910.sheets.ai.dto.user.UserEntity;
 import com.github.dimka9910.sheets.ai.services.UserContextToPromptMapper;
 import lombok.RequiredArgsConstructor;
@@ -106,9 +107,15 @@ public class SimpleExpenseAgent {
             // Validate: SimpleExpenseAgent can only handle messages with clear amount
             if (result.amount() == null) {
                 log.warn("⚠️ Message too vague for SimpleExpenseAgent (missing amount): \"{}\"", message);
+                
+                // Return PendingClarificationAction (like MainAgent does)
+                PendingClarificationAction clarification = PendingClarificationAction.builder()
+                        .context("User wants to record expense. Need: amount. Original message: " + message)
+                        .build();
+                
                 return MainAgentResponse.builder()
-                        .actions(List.of())
-                        .response("CLARIFICATION_NEEDED")  // Special marker for Orchestrator to route to MainAgent
+                        .actions(List.of(clarification))
+                        .response("How much did that cost?")
                         .build();
             }
             

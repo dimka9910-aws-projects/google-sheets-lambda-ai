@@ -89,13 +89,6 @@ public class Orchestrator {
                 }
             };
             
-            // Fallback: If lightweight agent couldn't handle (e.g. needs clarification), route to MainAgent
-            if ("CLARIFICATION_NEEDED".equals(agentResponse.getResponse())) {
-                log.info("⚠️ Lightweight agent needs clarification → routing to MainAgent");
-                var agentRequest = new MainAgent.Request(message, userContext, Category.COMPLEX_ACTION);
-                agentResponse = mainAgent.process(agentRequest).result();
-            }
-            
             log.info("Agent parsed: {} actions, pending={}", 
                     agentResponse.getActions().size(), agentResponse.hasPendingClarifications());
             
