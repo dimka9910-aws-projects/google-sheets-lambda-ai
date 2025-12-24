@@ -3,7 +3,6 @@ package com.github.dimka9910.sheets.ai.services.agents;
 import com.github.dimka9910.sheets.ai.dto.actions.FinancialAction;
 import com.github.dimka9910.sheets.ai.dto.actions.FinancialAction.OperationType;
 import com.github.dimka9910.sheets.ai.dto.actions.MainAgentResponse;
-import com.github.dimka9910.sheets.ai.dto.actions.PendingClarificationAction;
 import com.github.dimka9910.sheets.ai.dto.user.UserEntity;
 import com.github.dimka9910.sheets.ai.services.UserContextToPromptMapper;
 import lombok.RequiredArgsConstructor;
@@ -56,9 +55,7 @@ public class SimpleExpenseAgent {
             String currency,
             String account,
             String fund,
-            String comment,
-            Boolean needsClarification,
-            String clarificationQuestion
+            String comment
     ) {}
     
     // ═══════════════════════════════════════════════════════════════════════════
@@ -95,25 +92,23 @@ public class SimpleExpenseAgent {
             ChatResponse chatResponse = chatModel.call(prompt);
             String content = chatResponse.getResult().getOutput().getText();
             
+            if (content == null || content.isBlank()) {
+                log.error("❌ Empty response from LLM");
+                return MainAgentResponse.builder()
+                        .actions(List.of())
+                        .response("Error: Empty response from AI model")
+                        .build();
+            }
+            
             // Parse structured output
             ExpenseResult result = outputConverter.convert(content);
             
-            // Check if clarification is needed
-            if (Boolean.TRUE.equals(result.needsClarification())) {
-                String question = result.clarificationQuestion() != null ? 
-                        result.clarificationQuestion() : 
-                        "Please provide more details about this expense";
-                
-                log.info("⚠️ Clarification needed: {}", question);
-                
-                // Create pending clarification action
-                PendingClarificationAction clarification = PendingClarificationAction.builder()
-                        .context("simple_expense: " + message)
-                        .build();
-                
+            // Validate: SimpleExpenseAgent can only handle messages with clear amount
+            if (result.amount() == null) {
+                log.warn("⚠️ Message too vague for SimpleExpenseAgent (missing amount): \"{}\"", message);
                 return MainAgentResponse.builder()
-                        .actions(List.of(clarification))
-                        .response(question)
+                        .actions(List.of())
+                        .response("CLARIFICATION_NEEDED")  // Special marker for Orchestrator to route to MainAgent
                         .build();
             }
             
@@ -162,15 +157,11 @@ public class SimpleExpenseAgent {
             Extract: amount, currency, account, fund (category), comment
             
             ## Rules
-            - If currency not specified → use default
-            - If account not specified → use default
-            - If fund not specified → try to infer from comment OR use default
+            - amount is MANDATORY - if missing or unclear, return amount=null
+            - If currency not specified → use default (set to null in response)
+            - If account not specified → use default (set to null in response)
+            - If fund not specified → try to infer from comment OR use default (set to null in response)
             - comment = item name or description
-            
-            ## Clarifications
-            - If AMOUNT is missing or unclear → set needsClarification=true and ask for amount
-            - If message is too vague to parse → set needsClarification=true and ask for details
-            - DO NOT ask for clarification if you can use defaults (currency, account, fund)
             
             ## User Context
             Default currency: {currency}
@@ -188,16 +179,16 @@ public class SimpleExpenseAgent {
             
             ## Examples
             
-            ### Normal parsing:
-            "coffee 200" → amount: 200, currency: (default), account: (default), fund: FOOD, comment: "coffee", needsClarification: false
-            "taxi 500 RSD" → amount: 500, currency: RSD, account: (default), fund: TRANSPORT, comment: "taxi", needsClarification: false
-            "3000 cash" → amount: 3000, currency: (default), account: CASH, fund: (default), comment: null, needsClarification: false
-            "200 from card A" → amount: 200, currency: (default), account: CARD_A, fund: (default), comment: null, needsClarification: false
+            ### Valid simple expenses (with clear amount):
+            "coffee 200" → amount: 200, currency: null, account: null, fund: "FOOD", comment: "coffee"
+            "taxi 500 RSD" → amount: 500, currency: "RSD", account: null, fund: "TRANSPORT", comment: "taxi"
+            "3000 cash" → amount: 3000, currency: null, account: "CASH", fund: null, comment: null
+            "200 from card A" → amount: 200, currency: null, account: "CARD_A", fund: null, comment: null
             
-            ### Clarification needed:
-            "coffee" → needsClarification: true, clarificationQuestion: "How much did the coffee cost?"
-            "купил" → needsClarification: true, clarificationQuestion: "What did you buy and how much did it cost?"
-            "something" → needsClarification: true, clarificationQuestion: "Please specify the amount for this expense"
+            ### Invalid (no clear amount - return amount=null):
+            "coffee" → amount: null, currency: null, account: null, fund: null, comment: "coffee"
+            "купил" → amount: null, currency: null, account: null, fund: null, comment: null
+            "something" → amount: null, currency: null, account: null, fund: null, comment: "something"
             """;
     
     private String buildSystemPrompt(UserEntity context) {

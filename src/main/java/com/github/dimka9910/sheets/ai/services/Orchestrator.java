@@ -89,6 +89,13 @@ public class Orchestrator {
                 }
             };
             
+            // Fallback: If lightweight agent couldn't handle (e.g. needs clarification), route to MainAgent
+            if ("CLARIFICATION_NEEDED".equals(agentResponse.getResponse())) {
+                log.info("⚠️ Lightweight agent needs clarification → routing to MainAgent");
+                var agentRequest = new MainAgent.Request(message, userContext, Category.COMPLEX_ACTION);
+                agentResponse = mainAgent.process(agentRequest).result();
+            }
+            
             log.info("Agent parsed: {} actions, pending={}", 
                     agentResponse.getActions().size(), agentResponse.hasPendingClarifications());
             
@@ -122,9 +129,6 @@ public class Orchestrator {
      */
     private TelegramChatResponse buildSetupRequiredResponse(TelegramChatRequest request, UserEntity userContext) {
         log.info("User {} missing setup", userContext.getUserName());
-        
-        boolean hasAccounts = userContext.getAccounts() != null && !userContext.getAccounts().isEmpty();
-        boolean hasFunds = userContext.getFunds() != null && !userContext.getFunds().isEmpty();
         
         StringBuilder sb = new StringBuilder();
         sb.append("⚙️User is not fully configured\n\n");
