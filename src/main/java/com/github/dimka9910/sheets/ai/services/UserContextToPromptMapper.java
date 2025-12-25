@@ -11,6 +11,7 @@ import org.springframework.stereotype.Component;
 
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.stream.Collectors;
 
 /**
@@ -203,21 +204,41 @@ public class UserContextToPromptMapper {
                 .collect(Collectors.joining("\n"));
     }
 
-    /**
-     * Format custom instructions as a section for prompts.
-     * Returns empty string if no instructions.
-     */
-    public String formatCustomInstructionsSection(List<String> instructions) {
-        if (instructions == null || instructions.isEmpty()) {
-            return "";
-        }
 
-        StringBuilder sb = new StringBuilder("## Custom User Instructions\n");
-        for (String instruction : instructions) {
-            sb.append("- ").append(instruction).append("\n");
-        }
-        return sb.toString();
+  /**
+   * Format custom instructions as a complete, numbered section for prompts.
+   * Numbered lists are preferred for strict rule adherence by LLMs.
+   */
+  public String formatCustomInstructionsSection(List<String> instructions) {
+    if (instructions == null || instructions.isEmpty()) {
+      return "";
     }
+
+    // Pre-filter the list to remove nulls, empty strings, or blank instructions
+    List<String> validInstructions = instructions.stream()
+        .filter(Objects::nonNull)
+        .map(String::trim)
+        .filter(s -> !s.isEmpty())
+        .toList();
+
+    if (validInstructions.isEmpty()) {
+      return "";
+    }
+
+    StringBuilder sb = new StringBuilder();
+    // Using high-priority headers to ensure the LLM prioritizes this block
+    sb.append("\n## Custom User Instructions (STRICT PRIORITY)\n");
+    sb.append("Apply these specific user rules before any standard logic:\n");
+
+    for (int i = 0; i < validInstructions.size(); i++) {
+      // Numbered lists are treated by the model as a strict sequence of rules
+      sb.append(String.format("%d. %s\n", i + 1, validInstructions.get(i)));
+    }
+
+    // Add a trailing newline to ensure clean separation from subsequent prompt sections
+    sb.append("\n");
+    return sb.toString();
+  }
 
     /**
      * Format defaults section as a complete prompt section.

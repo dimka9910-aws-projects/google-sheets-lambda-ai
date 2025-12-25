@@ -1,7 +1,5 @@
 package com.github.dimka9910.sheets.ai.services.agents;
 
-import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import com.github.dimka9910.sheets.ai.dto.actions.FinancialAction;
 import com.github.dimka9910.sheets.ai.dto.actions.MainAgentResponse;
 import com.github.dimka9910.sheets.ai.dto.user.UserEntity;
@@ -42,7 +40,7 @@ public class SimpleExpenseAgent {
     // Cache converter to avoid reflection overhead on each call
     private final BeanOutputConverter<MainAgentResponse> outputConverter;
     
-    // Cache ResponseFormat for native Structured Outputs
+    // Native OpenAI JSON response format (guarantees valid JSON)
     private final ResponseFormat responseFormat;
     
     public SimpleExpenseAgent(ChatModel chatModel, UserContextToPromptMapper contextMapper) {
@@ -50,51 +48,11 @@ public class SimpleExpenseAgent {
         this.contextMapper = contextMapper;
         // Initialize converter once (expensive reflection operation)
         this.outputConverter = new BeanOutputConverter<>(MainAgentResponse.class);
-        // Initialize native OpenAI Structured Outputs response format
-        this.responseFormat = createResponseFormat();
-    }
-    
-    /**
-     * Create ResponseFormat with JSON Schema for native Structured Outputs.
-     * This is initialized once in constructor to avoid overhead.
-     */
-    private ResponseFormat createResponseFormat() {
-        try {
-            // Get JSON schema string from BeanOutputConverter
-            String schemaString = outputConverter.getFormat();
-            
-            // Extract JSON part from the formatted string
-            // Format: "...Here is the JSON Schema instance your output must adhere to:\n```{...}```"
-            String jsonPart = schemaString.substring(
-                schemaString.indexOf("```{") + 3,
-                schemaString.lastIndexOf("}```") + 1
-            );
-            
-            // Parse and convert to Map<String, Object>
-            ObjectMapper mapper = new ObjectMapper();
-            JsonNode schemaNode = mapper.readTree(jsonPart);
-            @SuppressWarnings("unchecked")
-            Map<String, Object> schemaMap = mapper.convertValue(schemaNode, Map.class);
-            
-            // Build ResponseFormat with JSON_SCHEMA type
-            ResponseFormat.JsonSchema jsonSchema = ResponseFormat.JsonSchema.builder()
-                    .name("MainAgentResponse")
-                    .schema(schemaMap)
-                    .strict(true)  // Enable strict mode for guaranteed schema adherence
-                    .build();
-            
-            return ResponseFormat.builder()
-                    .type(ResponseFormat.Type.JSON_SCHEMA)
-                    .jsonSchema(jsonSchema)
-                    .build();
-                    
-        } catch (Exception e) {
-            log.error("Failed to create ResponseFormat, falling back to JSON_OBJECT mode", e);
-            // Fallback to simple JSON_OBJECT mode (less strict but still valid JSON)
-            return ResponseFormat.builder()
-                    .type(ResponseFormat.Type.JSON_OBJECT)
-                    .build();
-        }
+        // Use JSON_OBJECT mode for reliable JSON without fragile schema parsing
+        // OpenAI guarantees valid JSON, BeanOutputConverter validates structure
+        this.responseFormat = ResponseFormat.builder()
+                .type(ResponseFormat.Type.JSON_OBJECT)
+                .build();
     }
     
     // ═══════════════════════════════════════════════════════════════════════════
@@ -121,11 +79,16 @@ public class SimpleExpenseAgent {
         }
         
         try {
-            // Build prompt (without JSON schema - it's passed via responseFormat)
+            // Build prompt and append JSON schema
             String systemPrompt = buildSystemPrompt(userContext);
             String userPrompt = "User message: " + message;
             
-            // Create Spring AI Prompt with native Structured Outputs
+            // Add JSON schema to prompt (cached, no reflection overhead)
+            // JSON_OBJECT mode doesn't pass schema via API, so we include it in prompt
+            String jsonSchema = outputConverter.getFormat();
+            systemPrompt += "\n\n" + jsonSchema;
+            
+            // Create Spring AI Prompt with JSON_OBJECT response format
             @SuppressWarnings("null")
             Prompt prompt = new Prompt(
                     List.of(
@@ -136,7 +99,7 @@ public class SimpleExpenseAgent {
                             .model(MODEL)
                             .maxTokens(MAX_TOKENS)
                             .temperature(0.0)  // Deterministic for consistent parsing
-                            .responseFormat(responseFormat)  // Native OpenAI Structured Outputs!
+                            .responseFormat(responseFormat)  // Guarantees valid JSON
                             .build()
             );
             
@@ -204,39 +167,44 @@ public class SimpleExpenseAgent {
     // ═══════════════════════════════════════════════════════════════════════════
     
     private static final String PROMPT_TEMPLATE = """
-            You are a lightweight expense parser for a personal finance bot.
-            Parse simple expense messages (amount + optional item/category/account).
-            
-            ## Rules
-            - If amount is CLEAR → create FINANCIAL action (type: "FINANCIAL", operationType: "EXPENSE")
-            - If amount is MISSING/UNCLEAR → create PENDING_CLARIFICATION action (type: "PENDING_CLARIFICATION")
-            - Use null for fields that should use defaults (currency, account, fund)
-            - Try to infer fund (category) from comment (FOOD, TRANSPORT, etc.)
-            - Generate friendly response message in user's language
-            
-            ## User Context
-            Default currency: {currency}
-            Default account: {defaultAccount}
-            Default fund: {defaultFund}
-            
-            Available accounts:
-            {accounts}
-            
-            Available funds:
-            {funds}
-            
-            {customInstructions}
-            
-            ## Examples
-            
-            "coffee 200" → FINANCIAL: amount=200, fund="FOOD", comment="coffee"
-            "taxi 500 RSD" → FINANCIAL: amount=500, currency="RSD", fund="TRANSPORT"
-            "3000 cash" → FINANCIAL: amount=3000, account="CASH"
-            "200 from card A" → FINANCIAL: amount=200, account="CARD_A"
-            
-            "coffee" → PENDING_CLARIFICATION: context="Need amount for coffee"
-            "купил" → PENDING_CLARIFICATION: context="Need amount and item details"
-            """;
+        You are a high-precision financial parser for a personal finance assistant.
+        Your task is to extract a single EXPENSE operation from the user message.
+        
+        ## Core Extraction Rules
+        - **Amount**: Mandatory. Must be a number. If missing or unclear -> PENDING_CLARIFICATION.
+        - **Currency**: Extraction order: 1. Explicitly mentioned -> 2. Slang/Context -> 3. User default. If ambiguous -> PENDING_CLARIFICATION.
+        - **Entity Selection (Account & Fund)**:
+            1. **Inference**: Detect logical hints. Phrases like "paid with papers" imply a CASH account. "Treat for myself" implies a PERSONAL fund. Match against provided display names and aliases.
+            2. **Default**: If no hints or explicit names are found, use the provided defaults.
+            3. **Clarify**: If multiple entities match and you cannot decide -> PENDING_CLARIFICATION.
+        
+        ## Clarification Logic
+        When creating a PENDING_CLARIFICATION action:
+        - **Context Field**: Write a detailed note for yourself. Include:
+          1. Information already captured (e.g., "User bought pizza").
+          2. Specific missing data (e.g., "Missing amount").
+          3. Reason for ambiguity (e.g., "User has multiple Visa cards, no default set").
+        This note will be used in the next turn to complete the action.
+        
+        ## Custom Instructions
+        {customInstructions}
+        
+        ## User Context
+        - Default Currency: {currency}
+        - Default Account: {defaultAccount}
+        - Default Fund: {defaultFund}
+        
+        ### Available Accounts:
+        {accounts}
+        
+        ### Available Funds:
+        {funds}
+        
+        ## Examples
+        - "coffee 200" -> FINANCIAL: {{"amount": 200, "fund": "FOOD", "comment": "coffee"}}
+        - "3000 cash" -> FINANCIAL: {{"amount": 3000, "account": "CASH_MAIN"}}
+        - "coffee" -> PENDING_CLARIFICATION: {{"context": "Recording coffee expense, but amount is missing."}}
+    """;
     
     private String buildSystemPrompt(UserEntity context) {
         Map<String, Object> params = new HashMap<>();
