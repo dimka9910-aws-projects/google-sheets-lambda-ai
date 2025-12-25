@@ -60,7 +60,7 @@ public class MainAgentResponse {
      * Message to show user.
      * Model generates this based on what it understood and what actions it created.
      */
-    @JsonPropertyDescription("Human-readable message to show the user. Should be a friendly confirmation (for successful actions), a clarifying question (for PENDING_CLARIFICATION), or a conversational response. Use the same language as the user's input.")
+    @JsonPropertyDescription("Human-readable message to show the user. Should be a friendly confirmation (for successful actions), a clarifying question (for PENDING_CLARIFICATION), or a conversational response, summarizing performed actions. Use the same language as the user's input.")
     private String response;
     
     // ═══════════════════════════════════════════════════════════════════════════

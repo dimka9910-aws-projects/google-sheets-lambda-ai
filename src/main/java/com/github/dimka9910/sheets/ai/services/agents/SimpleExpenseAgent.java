@@ -1,5 +1,7 @@
 package com.github.dimka9910.sheets.ai.services.agents;
 
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.github.dimka9910.sheets.ai.dto.actions.FinancialAction;
 import com.github.dimka9910.sheets.ai.dto.actions.MainAgentResponse;
 import com.github.dimka9910.sheets.ai.dto.user.UserEntity;
@@ -13,6 +15,7 @@ import org.springframework.ai.chat.prompt.Prompt;
 import org.springframework.ai.chat.prompt.PromptTemplate;
 import org.springframework.ai.converter.BeanOutputConverter;
 import org.springframework.ai.openai.OpenAiChatOptions;
+import org.springframework.ai.openai.api.ResponseFormat;
 import org.springframework.stereotype.Component;
 
 import java.util.HashMap;
@@ -39,11 +42,59 @@ public class SimpleExpenseAgent {
     // Cache converter to avoid reflection overhead on each call
     private final BeanOutputConverter<MainAgentResponse> outputConverter;
     
+    // Cache ResponseFormat for native Structured Outputs
+    private final ResponseFormat responseFormat;
+    
     public SimpleExpenseAgent(ChatModel chatModel, UserContextToPromptMapper contextMapper) {
         this.chatModel = chatModel;
         this.contextMapper = contextMapper;
         // Initialize converter once (expensive reflection operation)
         this.outputConverter = new BeanOutputConverter<>(MainAgentResponse.class);
+        // Initialize native OpenAI Structured Outputs response format
+        this.responseFormat = createResponseFormat();
+    }
+    
+    /**
+     * Create ResponseFormat with JSON Schema for native Structured Outputs.
+     * This is initialized once in constructor to avoid overhead.
+     */
+    private ResponseFormat createResponseFormat() {
+        try {
+            // Get JSON schema string from BeanOutputConverter
+            String schemaString = outputConverter.getFormat();
+            
+            // Extract JSON part from the formatted string
+            // Format: "...Here is the JSON Schema instance your output must adhere to:\n```{...}```"
+            String jsonPart = schemaString.substring(
+                schemaString.indexOf("```{") + 3,
+                schemaString.lastIndexOf("}```") + 1
+            );
+            
+            // Parse and convert to Map<String, Object>
+            ObjectMapper mapper = new ObjectMapper();
+            JsonNode schemaNode = mapper.readTree(jsonPart);
+            @SuppressWarnings("unchecked")
+            Map<String, Object> schemaMap = mapper.convertValue(schemaNode, Map.class);
+            
+            // Build ResponseFormat with JSON_SCHEMA type
+            ResponseFormat.JsonSchema jsonSchema = ResponseFormat.JsonSchema.builder()
+                    .name("MainAgentResponse")
+                    .schema(schemaMap)
+                    .strict(true)  // Enable strict mode for guaranteed schema adherence
+                    .build();
+            
+            return ResponseFormat.builder()
+                    .type(ResponseFormat.Type.JSON_SCHEMA)
+                    .jsonSchema(jsonSchema)
+                    .build();
+                    
+        } catch (Exception e) {
+            log.error("Failed to create ResponseFormat, falling back to JSON_OBJECT mode", e);
+            // Fallback to simple JSON_OBJECT mode (less strict but still valid JSON)
+            return ResponseFormat.builder()
+                    .type(ResponseFormat.Type.JSON_OBJECT)
+                    .build();
+        }
     }
     
     // ═══════════════════════════════════════════════════════════════════════════
@@ -70,19 +121,11 @@ public class SimpleExpenseAgent {
         }
         
         try {
-            // Build prompt with JSON schema for structured output
+            // Build prompt (without JSON schema - it's passed via responseFormat)
             String systemPrompt = buildSystemPrompt(userContext);
             String userPrompt = "User message: " + message;
             
-            // Get JSON schema from cached converter (no reflection overhead)
-            String jsonSchema = outputConverter.getFormat();
-            
-            // Append JSON schema to system prompt
-            systemPrompt += "\n\n## Response Format\nReturn JSON following this schema:\n" + jsonSchema;
-            
-            // Create Spring AI Prompt
-            // Note: responseFormat (JSON_OBJECT mode) not available in Spring AI 1.1.2
-            // But BeanOutputConverter + explicit schema in prompt is reliable enough
+            // Create Spring AI Prompt with native Structured Outputs
             @SuppressWarnings("null")
             Prompt prompt = new Prompt(
                     List.of(
@@ -93,6 +136,7 @@ public class SimpleExpenseAgent {
                             .model(MODEL)
                             .maxTokens(MAX_TOKENS)
                             .temperature(0.0)  // Deterministic for consistent parsing
+                            .responseFormat(responseFormat)  // Native OpenAI Structured Outputs!
                             .build()
             );
             
