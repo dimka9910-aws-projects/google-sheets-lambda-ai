@@ -126,11 +126,8 @@ public class UserEntityMapper {
                 .role(jpa.getRole().name())
                 .content(jpa.getContent())
                 .wasClarification(jpa.getWasClarification())
-                .relatedOperationIds(
-                    jpa.getRelatedOperationIds() != null 
-                        ? Arrays.asList(jpa.getRelatedOperationIds()) 
-                        : null
-                )
+                .relatedFinancialActions(jpa.getRelatedFinancialActions())
+                .timestamp(jpa.getCreatedAt() != null ? jpa.getCreatedAt().toEpochMilli() : null)
                 .build();
     }
 
@@ -218,11 +215,7 @@ public class UserEntityMapper {
                 .role(ChatMessageJpaEntity.MessageRole.valueOf(dto.getRole()))
                 .content(dto.getContent())
                 .wasClarification(dto.getWasClarification())
-                .relatedOperationIds(
-                    dto.getRelatedOperationIds() != null 
-                        ? dto.getRelatedOperationIds().toArray(new UUID[0]) 
-                        : null
-                )
+                .relatedFinancialActions(dto.getRelatedFinancialActions())
                 .build();
     }
 }

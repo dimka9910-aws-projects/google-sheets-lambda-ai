@@ -1,12 +1,12 @@
 package com.github.dimka9910.sheets.ai.dto.user;
 
+import com.github.dimka9910.sheets.ai.dto.actions.FinancialAction;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
 import java.util.List;
-import java.util.UUID;
 
 /**
  * Одно сообщение в истории диалога.
@@ -25,8 +25,9 @@ public class ConversationMessage {
     // Флаг что это был уточняющий вопрос
     private Boolean wasClarification;
     
-    // UUID операций созданных этим сообщением (для аудита и отмены)
-    private List<UUID> relatedOperationIds;
+    // FinancialAction объекты созданные как результат этого сообщения
+    // (для аудита, отмены, и контекста для corrections)
+    private List<FinancialAction> relatedFinancialActions;
     
     public static ConversationMessage userMessage(String content) {
         return ConversationMessage.builder()

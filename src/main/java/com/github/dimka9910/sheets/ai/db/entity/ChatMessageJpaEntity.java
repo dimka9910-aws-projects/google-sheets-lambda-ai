@@ -1,11 +1,14 @@
 package com.github.dimka9910.sheets.ai.db.entity;
 
-import io.hypersistence.utils.hibernate.type.array.UUIDArrayType;
+import com.github.dimka9910.sheets.ai.dto.actions.FinancialAction;
+import io.hypersistence.utils.hibernate.type.json.JsonBinaryType;
 import jakarta.persistence.*;
 import lombok.*;
 import org.hibernate.annotations.Type;
 
 import java.time.Instant;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.UUID;
 
 /**
@@ -37,9 +40,9 @@ public class ChatMessageJpaEntity {
     @Column(name = "was_clarification")
     private Boolean wasClarification;
 
-    @Type(UUIDArrayType.class)
-    @Column(name = "related_operation_ids", columnDefinition = "uuid[]")
-    private UUID[] relatedOperationIds;
+    @Type(JsonBinaryType.class)
+    @Column(name = "related_financial_actions", columnDefinition = "jsonb")
+    private List<FinancialAction> relatedFinancialActions;
 
     @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt;
@@ -51,6 +54,9 @@ public class ChatMessageJpaEntity {
         }
         if (wasClarification == null) {
             wasClarification = false;
+        }
+        if (relatedFinancialActions == null) {
+            relatedFinancialActions = new ArrayList<>();
         }
     }
 

@@ -9,5 +9,7 @@ databaseChangeLog:
       file: db/changelog/migrations/004-add-related-operations-to-chat-messages.yaml
   - include:
       file: db/changelog/migrations/005-refactor-financial-operations.yaml
+  - include:
+      file: db/changelog/migrations/006-change-related-operations-to-jsonb.yaml
 
 

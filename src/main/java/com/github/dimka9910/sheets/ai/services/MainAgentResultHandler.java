@@ -14,6 +14,7 @@ import org.springframework.stereotype.Service;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
+import java.util.UUID;
 
 /**
  * Spring Service for handling MainAgentResponse results.
@@ -92,11 +93,18 @@ public class MainAgentResultHandler {
         // Handle financial actions
         boolean allSuccess = true;
         int operationsCount = 0;
+        List<FinancialAction> successfulActions = new ArrayList<>();
         
         for (FinancialAction action : financialActions) {
+            // Generate UUID for this action if not present
+            if (action.getId() == null) {
+                action.setId(UUID.randomUUID());
+            }
+            
             boolean success = handleFinancialAction(action, userContext);
             if (success) {
                 operationsCount++;
+                successfulActions.add(action);
             } else {
                 allSuccess = false;
             }
@@ -107,12 +115,13 @@ public class MainAgentResultHandler {
         boolean isSuccess = hasFinancialWork ? allSuccess && operationsCount > 0 : true;
 
         
-        // Add assistant response to history
+        // Add assistant response to history with related financial actions
         boolean wasClarification = !pendingActions.isEmpty();
         userContext.addToHistory(ConversationMessage.builder()
                 .role("assistant")
                 .content(agentResponse.getResponse())
                 .wasClarification(wasClarification)
+                .relatedFinancialActions(successfulActions)
                 .build());
         
         // Save context before processing custom instructions

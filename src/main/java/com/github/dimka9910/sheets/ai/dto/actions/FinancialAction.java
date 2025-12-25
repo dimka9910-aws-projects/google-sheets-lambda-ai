@@ -7,12 +7,17 @@ import lombok.Data;
 import lombok.EqualsAndHashCode;
 import lombok.NoArgsConstructor;
 
+import java.util.UUID;
+
 /**
- * Financial operation action: EXPENSE, INCOME, TRANSFER.
+ * Financial operation action: EXPENSE, INCOME, TRANSFER, MODIFY, DELETE.
+ * 
+ * Each action has a unique ID for tracking and editing.
  * 
  * Example JSON:
  * {
  *   "type": "FINANCIAL",
+ *   "id": "550e8400-e29b-41d4-a716-446655440000",
  *   "operationType": "EXPENSE",
  *   "amount": 500.0,
  *   "currency": "RSD",
@@ -31,7 +36,14 @@ public class FinancialAction extends AgentAction {
     public static final String TYPE = "FINANCIAL";
     
     /**
-     * Operation type: EXPENSE, INCOME, TRANSFER
+     * Unique identifier for this financial action.
+     * Used for tracking and editing operations.
+     * Generated when action is created.
+     */
+    private UUID id;
+    
+    /**
+     * Operation type: EXPENSE, INCOME, TRANSFER, MODIFY, DELETE
      */
     private OperationType operationType;
     

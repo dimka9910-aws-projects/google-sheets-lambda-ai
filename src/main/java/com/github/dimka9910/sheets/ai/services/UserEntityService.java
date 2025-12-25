@@ -255,11 +255,8 @@ public class UserEntityService {
                             .role(jpa.getRole().name())
                             .content(jpa.getContent())
                             .wasClarification(jpa.getWasClarification())
-                            .relatedOperationIds(
-                                jpa.getRelatedOperationIds() != null 
-                                    ? Arrays.asList(jpa.getRelatedOperationIds()) 
-                                    : null
-                            )
+                            .relatedFinancialActions(jpa.getRelatedFinancialActions())
+                            .timestamp(jpa.getCreatedAt() != null ? jpa.getCreatedAt().toEpochMilli() : null)
                             .build())
                     .collect(Collectors.toList());
             
