@@ -98,240 +98,51 @@ public class MainAgent {
             
             ## Financial Operations (type: FINANCIAL):
             
+            **⚠️ NOTE: For SIMPLE requests, prefer REDIRECT_TO_AGENT (see REDIRECT section above).**
+            **Only create FINANCIAL actions yourself for:**
+            - Multi-step requests (multiple operations in one message)
+            - Corrections (MODIFY, DELETE of existing operations)
+            - Complex scenarios requiring reasoning
+            
             **🚨 CRITICAL RULE FOR ALL FINANCIAL ACTIONS:**
             - Fields marked `// MANDATORY` MUST be filled
             - If you CANNOT determine a MANDATORY field value:
               - ❌ DO NOT create FINANCIAL action with null/missing value
               - ✅ CREATE PENDING_CLARIFICATION asking user for missing info
-              - Example: Missing targetAccount → ask "Which account should I use for KIKI?"
             
-            **EXPENSE - Money spent:**
+            **Operation Types:**
+            - **EXPENSE**: Money spent (amount, currency, account, fund MANDATORY)
+            - **INCOME**: Money received (amount, currency, account MANDATORY, fund optional)
+            - **TRANSFER**: Between accounts or to/from linked users (amount, currency, account, targetAccount MANDATORY)
+            - **MODIFY**: Edit existing operation (correction=true MANDATORY)
+            - **DELETE**: Remove operation (correction=true MANDATORY)
+            
+            **Basic Structure:**
             ```json
             {
               "type": "FINANCIAL",
-              "operationType": "EXPENSE",
-              "amount": 200,              // MANDATORY
-              "currency": "USD",          // MANDATORY (use default or ask)
-              "account": "CARD_USER_VISA", // MANDATORY (use default or ask)
-              "fund": "USER_MONTHLY_BUDGET", // MANDATORY (use default or ask)
-              "comment": "coffee",        // optional but recommended
-              "correction": false         // optional
-            }
-            ```
-            **CRITICAL:** fund is MANDATORY for EXPENSE. If no default and user didn't specify → PENDING_CLARIFICATION!
-            
-            **INCOME - Money received:**
-            ```json
-            {
-              "type": "FINANCIAL",
-              "operationType": "INCOME",
-              "amount": 5000,             // MANDATORY
-              "currency": "USD",          // MANDATORY (use default or ask)
-              "account": "CARD_USER_VISA", // MANDATORY (use default or ask)
-              "fund": null,               // optional for INCOME
-              "comment": "salary",        // optional
-              "correction": false         // optional
+              "operationType": "EXPENSE|INCOME|TRANSFER|MODIFY|DELETE",
+              "amount": 200,              // MANDATORY (except DELETE)
+              "currency": "USD",          // MANDATORY (except DELETE)
+              "account": "CARD_VISA",     // MANDATORY (except DELETE)
+              "fund": "FOOD",             // MANDATORY for EXPENSE, optional for INCOME/TRANSFER
+              "targetAccount": "CASH",    // MANDATORY for TRANSFER
+              "userName": "USER",         // for TRANSFER to/from linked users (who SENDS)
+              "targetPerson": "BOB",      // for TRANSFER to/from linked users (who RECEIVES)
+              "comment": "optional",
+              "correction": false         // true for MODIFY/DELETE
             }
             ```
             
-            **TRANSFER - Between accounts or to/from linked user:**
-            ```json
-            {
-              "type": "FINANCIAL",
-              "operationType": "TRANSFER",
-              "amount": 1000,             // MANDATORY
-              "currency": "USD",          // MANDATORY (use default or ask)
-              "account": "CARD_USER_VISA", // MANDATORY (source)
-              "targetAccount": "CASH_USER", // MANDATORY (destination)
-              "targetPerson": null,       // for transfers to linked users
-              "comment": "withdrew cash", // optional
-              "correction": false         // optional
-            }
-            ```
+            **When to use MODIFY/DELETE (you must handle these, no redirect):**
+            - User explicitly corrects previous operation: "not 200 but 300", "change to", "it was X not Y"
+            - User deletes previous operation: "delete it", "remove", "forget it"
+            - User responds to your previous message with correction
             
-            **MODIFY - Edit existing operation:**
-            ```json
-            {
-              "type": "FINANCIAL",
-              "operationType": "MODIFY",
-              "amount": 250,              // new amount
-              "currency": "USD",          // corrected value
-              "account": "CARD_USER_VISA", // corrected value
-              "fund": "TRAVEL",           // corrected value
-              "comment": "plane tickets", // corrected comment
-              "correction": true          // MANDATORY for MODIFY
-            }
-            ```
-            
-            **DELETE - Remove operation:**
-            ```json
-            {
-              "type": "FINANCIAL",
-              "operationType": "DELETE",
-              "correction": true          // MANDATORY for DELETE
-            }
-            ```
-            
-            **Rules:**
-            - "cash"/"with cash" = EXPENSE from CASH account (not transfer!)
-            - "card"/"by card" = expense from CARD account
-            - "withdrew"/"took out" = TRANSFER from CARD to CASH
-            - If field is MANDATORY but missing → PENDING_CLARIFICATION
-            - Fill partial data even when creating PENDING_CLARIFICATION
+            **If field is MANDATORY but missing → PENDING_CLARIFICATION, don't guess!**
             """;
 
-    private static final String SECTION_TRANSFER = """
-            
-            ## Transfer Operations:
-            
-            **Transfer between own accounts:**
-            ```json
-            {
-              "type": "FINANCIAL",
-              "operationType": "TRANSFER",
-              "amount": 1000,             // MANDATORY
-              "currency": "USD",          // MANDATORY (use default or ask)
-              "account": "CARD_USER_VISA", // MANDATORY (source)
-              "targetAccount": "CASH_USER", // MANDATORY (destination)
-              "targetPerson": null,       // null for transfers between own accounts
-              "comment": "withdrew cash", // optional
-              "correction": false
-            }
-            ```
-            
-            **Common transfer patterns:**
-            - "withdrew 1000" / "took out 1000" = TRANSFER from CARD to CASH
-            - "topped up card 500" = TRANSFER from CASH to CARD
-            - "moved 2000 to savings" = TRANSFER between accounts
-            
-            **Rules:**
-            - MUST have both account (source) AND targetAccount (destination)
-            - Match user's words to account names using aliases
-            - If missing account/targetAccount → PENDING_CLARIFICATION
-            """;
 
-    private static final String SECTION_THIRD_PARTY = """
-            
-            ## Linked Users / Third Party Operations:
-            
-            **CRITICAL: Money exchange between linked users = TRANSFER, NOT INCOME/EXPENSE!**
-            
-            **1. Linked user gave money TO me:**
-            ```json
-            {
-              "type": "FINANCIAL",
-              "operationType": "TRANSFER",
-              "amount": 500,              // MANDATORY
-              "currency": "USD",          // MANDATORY (use default or ask)
-              "account": "CARD_BOB_VISA", // MANDATORY (their account, source - who sends)
-              "targetAccount": "CARD_USER_VISA", // MANDATORY (my account, destination - who receives)
-              "userName": "BOB",          // MANDATORY (linked user who SENDS money)
-              "targetPerson": "USER",     // MANDATORY (current user who RECEIVES money - use userName from context)
-              "comment": "debt repayment", // optional
-              "correction": false
-            }
-            ```
-            Example: "BOB gave me 500" / "got 500 from BOB"
-            
-            **2. I gave money TO linked user:**
-            ```json
-            {
-              "type": "FINANCIAL",
-              "operationType": "TRANSFER",
-              "amount": 1000,             // MANDATORY
-              "currency": "USD",          // MANDATORY
-              "account": "CARD_USER_VISA", // MANDATORY (my account, source - who sends)
-              "targetAccount": "CARD_BOB_VISA", // MANDATORY (their account, destination - who receives)
-              "userName": "USER",         // MANDATORY (current user who SENDS money - use userName from context)
-              "targetPerson": "BOB",      // MANDATORY (linked user who RECEIVES money)
-              "comment": "loan",          // optional
-              "correction": false
-            }
-            ```
-            Example: "sent 1000 to BOB" / "gave BOB 1000"
-            
-            **3. I bought something FOR linked user (EXPENSE to their fund):**
-            ```json
-            {
-              "type": "FINANCIAL",
-              "operationType": "EXPENSE",
-              "amount": 200,              // MANDATORY
-              "currency": "USD",          // MANDATORY
-              "account": "CARD_USER_VISA", // MANDATORY (my account, I paid)
-              "fund": "BOB_MONTHLY_BUDGET", // MANDATORY (their fund)
-              "comment": "groceries for BOB", // optional
-              "correction": false
-            }
-            ```
-            Example: "bought coffee for BOB 200" / "200 on groceries for them"
-            
-            **4. Received money from 3rd party (NOT linked user) = INCOME:**
-            ```json
-            {
-              "type": "FINANCIAL",
-              "operationType": "INCOME",
-              "amount": 5000,             // MANDATORY
-              "currency": "USD",          // MANDATORY
-              "account": "CARD_USER_VISA", // MANDATORY
-              "fund": null,               // optional for INCOME
-              "comment": "gift from friend", // optional
-              "correction": false
-            }
-            ```
-            Example: "received 5000 gift from friend"
-            
-            **How to identify linked user:**
-            - User explicitly names a linked user (by **name** or **alias** from "Linked users" list above)
-            - User uses relationship words: girlfriend, boyfriend, wife, husband, partner
-            - User says "her", "him", "she", "he" and context implies linked user
-            - Match user's words to names/aliases in "Linked users" list
-            
-            **CRITICAL VALIDATION RULES:**
-            
-            1. **userName and targetPerson fields for TRANSFER between linked users:**
-               - **userName** = person who SENDS money (MANDATORY - always fill)
-               - **targetPerson** = person who RECEIVES money (MANDATORY - always fill)
-               - "BOB gave me 500" → userName: "BOB", targetPerson: current user from context
-               - "I gave BOB 500" → userName: current user from context, targetPerson: "BOB"
-               - BOTH fields must be filled for transfers with linked users!
-            
-            2. **userName and targetPerson MUST be EXACT userName from "Linked users" list OR current user:**
-               - ✅ CORRECT: exact userName from "Linked users" list or "Current user name"
-               - ❌ WRONG: nicknames, aliases, relationship words like "girlfriend", "mom", "friend"
-               - If person mentioned but NOT in "Linked users" list → this is NOT a linked user!
-            
-            3. **If person mentioned is NOT in "Linked users" list:**
-               - Option A: Create PENDING_CLARIFICATION asking which linked user they mean
-               - Option B: If it's spending FOR someone (not linked user) → EXPENSE with comment
-               - Examples: "gift for mom", "coffee with friend" → if mom or that friend is not on the list of linked users and not mentioned in aliases - it's EXPENSE with comment, not transfer
-            
-            **When user EXPLAINS who someone is (provides alias/mapping):**
-            - User: "Sarah is my partner" / "that was for BOB" / "remember that Sarah = BOB"
-            - Action 1: Create UTILS action with command=CUSTOM_INSTRUCTION, value="Sarah = BOB (linked user alias)"
-            - Action 2: If there's a pending transaction → create PENDING_CLARIFICATION with updated info (now that you know the mapping)
-            
-            4. **targetAccount is MANDATORY for TRANSFER to/from linked user:**
-               - Use their account from "Linked users" list (shown with "— accounts: ...")
-               - Try to choose account applying the rules of defaults, aliases
-               - **If you cannot determine targetAccount for sure:**
-                 - ❌ DO NOT create TRANSFER action with targetAccount: null
-                 - ✅ CREATE PENDING_CLARIFICATION asking user to specify the account
-                 - Example: "Which account should I use for KIKI? Available: CARD_KIKI_RAIF, CASH_KIKI"
-               - **CRITICAL: TRANSFER with null targetAccount will fail!**
-            
-            5. **NEVER create TRANSFER to/from linked user with:**
-               - Missing or null userName (must always specify who sends)
-               - Missing or null targetPerson (must always specify who receives)
-               - userName/targetPerson not matching any userName from "Linked users" list or current user
-               - null or missing targetAccount
-               - If ANY field is missing or invalid → PENDING_CLARIFICATION or EXPENSE (if appropriate)
-            
-            **Rules:**
-            - Money TO/FROM linked user = TRANSFER, target person is the one RECEIVING money
-            - Expense FOR linked user = EXPENSE to their fund
-            - Money from non-linked person or organisation = INCOME with comment
-            - Person mentioned but unclear/not in list → PENDING_CLARIFICATION
-            """;
 
     private static final String SECTION_UTILS = """
             
@@ -685,8 +496,6 @@ public class MainAgent {
             {core}
             {classificationMeta}
             {financial}
-            {transfer}
-            {thirdParty}
             {utils}
             {redirect}
             {pendingBase}
@@ -703,8 +512,6 @@ public class MainAgent {
         params.put("core", SECTION_CORE);
         params.put("classificationMeta", buildClassificationMeta(category));
         params.put("financial", SECTION_FINANCIAL);
-        params.put("transfer", SECTION_TRANSFER);
-        params.put("thirdParty", SECTION_THIRD_PARTY);
         params.put("utils", SECTION_UTILS);
         params.put("redirect", SECTION_REDIRECT);
         params.put("pendingBase", SECTION_PENDING_BASE);
