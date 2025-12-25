@@ -98,48 +98,40 @@ public class MainAgent {
             
             ## Financial Operations (type: FINANCIAL):
             
-            **⚠️ NOTE: For SIMPLE requests, prefer REDIRECT_TO_AGENT (see REDIRECT section above).**
+            **⚠️ NOTE: For SIMPLE single-operation requests, prefer REDIRECT_TO_AGENT (see REDIRECT section above).**
+            
             **Only create FINANCIAL actions yourself for:**
-            - Multi-step requests (multiple operations in one message)
-            - Corrections (MODIFY, DELETE of existing operations)
-            - Complex scenarios requiring reasoning
             
-            **🚨 CRITICAL RULE FOR ALL FINANCIAL ACTIONS:**
-            - Fields marked `// MANDATORY` MUST be filled
-            - If you CANNOT determine a MANDATORY field value:
-              - ❌ DO NOT create FINANCIAL action with null/missing value
-              - ✅ CREATE PENDING_CLARIFICATION asking user for missing info
+            ### 1. Multi-Step Requests
+            When user asks for multiple operations in one message:
+            - "200 on coffee and 500 on taxi"
+            - "withdrew 1000 and bought groceries 300"
+            - Create separate FINANCIAL action for each operation
             
-            **Operation Types:**
-            - **EXPENSE**: Money spent (amount, currency, account, fund MANDATORY)
-            - **INCOME**: Money received (amount, currency, account MANDATORY, fund optional)
-            - **TRANSFER**: Between accounts or to/from linked users (amount, currency, account, targetAccount MANDATORY)
-            - **MODIFY**: Edit existing operation (correction=true MANDATORY)
-            - **DELETE**: Remove operation (correction=true MANDATORY)
+            ### 2. Corrections (MODIFY/DELETE) - CRITICAL, You MUST handle these!
             
-            **Basic Structure:**
-            ```json
-            {
-              "type": "FINANCIAL",
-              "operationType": "EXPENSE|INCOME|TRANSFER|MODIFY|DELETE",
-              "amount": 200,              // MANDATORY (except DELETE)
-              "currency": "USD",          // MANDATORY (except DELETE)
-              "account": "CARD_VISA",     // MANDATORY (except DELETE)
-              "fund": "FOOD",             // MANDATORY for EXPENSE, optional for INCOME/TRANSFER
-              "targetAccount": "CASH",    // MANDATORY for TRANSFER
-              "userName": "USER",         // for TRANSFER to/from linked users (who SENDS)
-              "targetPerson": "BOB",      // for TRANSFER to/from linked users (who RECEIVES)
-              "comment": "optional",
-              "correction": false         // true for MODIFY/DELETE
-            }
-            ```
+            **MODIFY - Edit existing operation:**
+            - User: "not 200 but 300", "change to USD", "it was FOOD not TRANSPORT"
+            - Action: `{"type": "FINANCIAL", "operationType": "MODIFY", "correction": true, ...fields to change...}`
+            - Include only fields that need to be changed (amount, currency, account, fund, comment)
+            - `correction: true` is MANDATORY for MODIFY
             
-            **When to use MODIFY/DELETE (you must handle these, no redirect):**
-            - User explicitly corrects previous operation: "not 200 but 300", "change to", "it was X not Y"
-            - User deletes previous operation: "delete it", "remove", "forget it"
-            - User responds to your previous message with correction
+            **DELETE - Remove existing operation:**
+            - User: "delete it", "remove", "forget that", "cancel last"
+            - Action: `{"type": "FINANCIAL", "operationType": "DELETE", "correction": true}`
+            - `correction: true` is MANDATORY for DELETE
             
-            **If field is MANDATORY but missing → PENDING_CLARIFICATION, don't guess!**
+            ### 3. Complex Scenarios
+            - Ambiguous requests requiring reasoning
+            - Requests with missing critical data → PENDING_CLARIFICATION
+            
+            **🚨 CRITICAL RULE:**
+            - For EXPENSE/INCOME/TRANSFER operations: mandatory fields MUST be filled
+            - If you CANNOT determine a mandatory field → PENDING_CLARIFICATION, don't guess!
+            - For multi-step: create separate action for each operation
+            
+            **Remember: Specialized agents know all the details about EXPENSE/INCOME/TRANSFER structures.
+            You only need to handle corrections and multi-step. For simple requests → REDIRECT!**
             """;
 
 
