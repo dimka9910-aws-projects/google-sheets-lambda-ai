@@ -147,24 +147,23 @@ public class SimpleExpenseAgent {
         for (var action : response.getActions()) {
             if (action instanceof FinancialAction financial) {
                 // Check that model filled all required fields
-                if (financial.getAmount() == null) {
-                    log.error("❌ Model returned FINANCIAL action without amount! This should be PENDING_CLARIFICATION instead.");
-                    throw new IllegalStateException("Model returned incomplete FINANCIAL action: amount is null");
-                }
-                
-                if (financial.getCurrency() == null) {
-                    log.error("❌ Model failed to apply default currency! Model should use defaults from context.");
-                    throw new IllegalStateException("Model returned incomplete FINANCIAL action: currency is null");
-                }
-                
-                if (financial.getAccount() == null) {
-                    log.error("❌ Model failed to select account! Model should either select from context or return PENDING_CLARIFICATION.");
-                    throw new IllegalStateException("Model returned incomplete FINANCIAL action: account is null");
-                }
-                
-                if (financial.getFund() == null) {
-                    log.error("❌ Model failed to select fund! Model should either infer/select or return PENDING_CLARIFICATION.");
-                    throw new IllegalStateException("Model returned incomplete FINANCIAL action: fund is null");
+                if (financial.getAmount() == null || 
+                    financial.getCurrency() == null || 
+                    financial.getAccount() == null || 
+                    financial.getFund() == null) {
+                    
+                    String errorMsg = String.format(
+                        "❌ Model returned FINANCIAL action with null field(s). " +
+                        "Model MUST fill all fields or return PENDING_CLARIFICATION. " +
+                        "Fields: amount=%s, currency=%s, account=%s, fund=%s",
+                        financial.getAmount(),
+                        financial.getCurrency(),
+                        financial.getAccount(),
+                        financial.getFund()
+                    );
+                    
+                    log.error(errorMsg);
+                    throw new IllegalStateException(errorMsg);
                 }
                 
                 log.debug("✅ FINANCIAL action validated: amount={}, currency={}, account={}, fund={}", 
