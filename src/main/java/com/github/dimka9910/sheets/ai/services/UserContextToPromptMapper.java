@@ -204,6 +204,40 @@ public class UserContextToPromptMapper {
                 .collect(Collectors.joining("\n"));
     }
 
+    /**
+     * Format linked users list as multi-line text for prompts.
+     * Each linked user on a new line with "- " prefix.
+     * Shows userName (EXACT userName to use in actions), displayName, and aliases.
+     */
+    public String formatLinkedUsersList(List<LinkedUserEntry> linkedUsers) {
+        if (linkedUsers == null || linkedUsers.isEmpty()) {
+            return "(No linked users configured)";
+        }
+
+        return linkedUsers.stream()
+                .map(lu -> "- " + formatLinkedUserEntry(lu))
+                .collect(Collectors.joining("\n"));
+    }
+
+    private String formatLinkedUserEntry(LinkedUserEntry lu) {
+        StringBuilder sb = new StringBuilder();
+        
+        // Show userName (this is the EXACT userName to use in FINANCIAL actions!)
+        sb.append("**").append(lu.getUserName()).append("**");
+        
+        // Show display name if different
+        if (lu.getDisplayName() != null && !lu.getDisplayName().equals(lu.getUserName())) {
+            sb.append(" (").append(lu.getDisplayName()).append(")");
+        }
+        
+        // Show aliases
+        if (lu.getAliases() != null && !lu.getAliases().isEmpty()) {
+            sb.append(" [aliases: ").append(String.join(", ", lu.getAliases())).append("]");
+        }
+        
+        return sb.toString();
+    }
+
 
   /**
    * Format custom instructions as a complete, numbered section for prompts.

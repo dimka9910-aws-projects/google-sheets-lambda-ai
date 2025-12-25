@@ -250,8 +250,8 @@ public class InternalTransferAgent {
          - "withdrew 500 from card" → 
            {{"amount": 500, "currency": "RSD", "account": "CARD_MAIN", "targetAccount": "CASH", "operationType": "TRANSFER"}}
          
-         - "move 200 USD to savings" → 
-           {{"amount": 200, "currency": "USD", "account": "CARD_MAIN", "targetAccount": "SAVINGS", "operationType": "TRANSFER"}}
+         - "put 200 bucks on card" → 
+           {{"amount": 200, "currency": "USD", "account": "CASH", "targetAccount": "CARD", "operationType": "TRANSFER"}}
          
          ### PENDING_CLARIFICATION (missing required data):
          - "transfer 1000" → 
