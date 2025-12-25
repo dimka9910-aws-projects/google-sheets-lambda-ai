@@ -1,6 +1,7 @@
 package com.github.dimka9910.sheets.ai.services;
 
 import com.github.dimka9910.sheets.ai.dto.actions.MainAgentResponse;
+import com.github.dimka9910.sheets.ai.dto.actions.RedirectToAgentAction;
 import com.github.dimka9910.sheets.ai.dto.telegram.TelegramChatRequest;
 import com.github.dimka9910.sheets.ai.dto.telegram.TelegramChatResponse;
 import com.github.dimka9910.sheets.ai.dto.user.UserEntity;
@@ -10,9 +11,12 @@ import com.github.dimka9910.sheets.ai.services.agents.MessageClassifierAgent.Cat
 import com.github.dimka9910.sheets.ai.services.agents.SimpleExpenseAgent;
 import com.github.dimka9910.sheets.ai.services.agents.InternalTransferAgent;
 import com.github.dimka9910.sheets.ai.services.agents.ThirdPartyActionAgent;
+import com.github.dimka9910.sheets.ai.services.agents.CustomInstructionAgent;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
+
+import java.util.List;
 
 /**
  * Spring Service for orchestrating message processing.
@@ -35,6 +39,7 @@ public class Orchestrator {
     private final SimpleExpenseAgent simpleExpenseAgent;
     private final InternalTransferAgent internalTransferAgent;
     private final ThirdPartyActionAgent thirdPartyActionAgent;
+    private final CustomInstructionAgent customInstructionAgent;
     private final MainAgent mainAgent;
     private final MainAgentResultHandler mainAgentResultHandler;
     
@@ -89,8 +94,15 @@ public class Orchestrator {
                 }
             };
             
-            log.info("Agent parsed: {} actions, pending={}", 
-                    agentResponse.getActions().size(), agentResponse.hasPendingClarifications());
+            log.info("Agent parsed: {} actions, pending={}, redirects={}", 
+                    agentResponse.getActions().size(), 
+                    agentResponse.hasPendingClarifications(),
+                    agentResponse.hasRedirects());
+            
+            // Step 3: Handle redirects if any
+            if (agentResponse.hasRedirects()) {
+                agentResponse = handleRedirects(agentResponse, userContext);
+            }
             
             return mainAgentResultHandler.handle(request, agentResponse, userContext);
             
@@ -102,6 +114,75 @@ public class Orchestrator {
                     .message("Error: " + e.getMessage())
                     .build();
         }
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // REDIRECT HANDLING
+    // ═══════════════════════════════════════════════════════════════════════════
+    
+    /**
+     * Handle REDIRECT_TO_AGENT actions by calling the appropriate specialized agent.
+     * 
+     * MainAgent (or any agent) can return REDIRECT_TO_AGENT actions to offload
+     * simple requests to faster, cheaper specialized agents.
+     * 
+     * @param agentResponse Response containing REDIRECT_TO_AGENT actions
+     * @param userContext User context for the specialized agent
+     * @return New response from the specialized agent
+     */
+    private MainAgentResponse handleRedirects(MainAgentResponse agentResponse, UserEntity userContext) {
+        List<RedirectToAgentAction> redirects = agentResponse.getRedirectActions();
+        
+        if (redirects.isEmpty()) {
+            return agentResponse;
+        }
+        
+        // Currently we only support single redirect per response
+        // (MainAgent should not return multiple redirects in one response)
+        if (redirects.size() > 1) {
+            log.warn("Multiple redirects found ({}), processing only the first one", redirects.size());
+        }
+        
+        RedirectToAgentAction redirect = redirects.get(0);
+        String message = redirect.getMessage();
+        
+        log.info("→ Redirecting to {} with message: \"{}\"", 
+                redirect.getAgentType(), truncate(message, 60));
+        
+        // Route to specialized agent based on agentType
+        MainAgentResponse specializedResponse = switch (redirect.getAgentType()) {
+            case CUSTOM_INSTRUCTION -> {
+                log.info("  ↳ Calling CustomInstructionAgent");
+                // CustomInstructionAgent expects List<String> instructions, so wrap message in list
+                var ciRequest = new CustomInstructionAgent.Request(List.of(message), userContext);
+                var ciResponse = customInstructionAgent.process(ciRequest);
+                
+                // Convert CustomInstructionAgent.Response to MainAgentResponse
+                // For now, just return a simple response (TODO: proper conversion if needed)
+                yield MainAgentResponse.builder()
+                        .actions(List.of()) // CustomInstructionAgent handles actions differently
+                        .response(ciResponse.explanation() != null ? ciResponse.explanation() : "Settings updated")
+                        .build();
+            }
+            case SIMPLE_EXPENSE -> {
+                log.info("  ↳ Calling SimpleExpenseAgent");
+                yield simpleExpenseAgent.process(message, userContext);
+            }
+            case INTERNAL_TRANSFER -> {
+                log.info("  ↳ Calling InternalTransferAgent");
+                yield internalTransferAgent.process(message, userContext);
+            }
+            case THIRD_PARTY_ACTION -> {
+                log.info("  ↳ Calling ThirdPartyActionAgent");
+                yield thirdPartyActionAgent.process(message, userContext);
+            }
+        };
+        
+        log.info("  ✅ Specialized agent returned: {} actions, pending={}", 
+                specializedResponse.getActions().size(), 
+                specializedResponse.hasPendingClarifications());
+        
+        return specializedResponse;
     }
 
     // ═══════════════════════════════════════════════════════════════════════════

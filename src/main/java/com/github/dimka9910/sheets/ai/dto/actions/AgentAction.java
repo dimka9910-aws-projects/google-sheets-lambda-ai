@@ -10,6 +10,7 @@ import com.fasterxml.jackson.annotation.JsonTypeInfo;
  * - FINANCIAL → FinancialAction
  * - UTILS → UtilsAction  
  * - PENDING_CLARIFICATION → PendingClarificationAction
+ * - REDIRECT_TO_AGENT → RedirectToAgentAction
  */
 @JsonTypeInfo(
     use = JsonTypeInfo.Id.NAME,
@@ -19,7 +20,8 @@ import com.fasterxml.jackson.annotation.JsonTypeInfo;
 @JsonSubTypes({
     @JsonSubTypes.Type(value = FinancialAction.class, name = "FINANCIAL"),
     @JsonSubTypes.Type(value = UtilsAction.class, name = "UTILS"),
-    @JsonSubTypes.Type(value = PendingClarificationAction.class, name = "PENDING_CLARIFICATION")
+    @JsonSubTypes.Type(value = PendingClarificationAction.class, name = "PENDING_CLARIFICATION"),
+    @JsonSubTypes.Type(value = RedirectToAgentAction.class, name = "REDIRECT_TO_AGENT")
 })
 public abstract class AgentAction {
     

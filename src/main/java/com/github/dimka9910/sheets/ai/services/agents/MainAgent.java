@@ -370,6 +370,131 @@ public class MainAgent {
             - HELP: If you can answer from current context → just provide response (actions=[]). If question needs broader knowledge → create UTILS action with HELP command and put the question in value field. Acknowledge in response that you got the question but you have to think about it.
             """;
 
+    private static final String SECTION_REDIRECT = """
+            
+            ## Redirect to Specialized Agent (type: REDIRECT_TO_AGENT):
+            
+            **⚡ OPTIMIZATION: Offload simple requests to faster, specialized agents**
+            
+            You are a powerful but expensive reasoning model (gpt-5-mini). For simple, straightforward requests,
+            you can redirect to lightweight agents (gpt-4o-mini) for faster, cheaper processing.
+            
+            ### When to Redirect:
+            
+            **DO REDIRECT if:**
+            - Request is simple, single-purpose, straightforward
+            - No ambiguity, no missing data, no complex logic needed
+            - Request fits perfectly into one specialized agent's capabilities
+            - No multi-step reasoning required
+            
+            **DON'T REDIRECT if:**
+            - Request is complex, multi-step, or ambiguous
+            - Missing critical data (amount, account, person, etc.)
+            - Multiple operations in one message ("coffee 200 and show settings")
+            - Needs reasoning, context analysis, or clarification
+            - Involves correction, modification, or deletion of existing operations
+            - User is responding to pending clarification (resolve it yourself!)
+            
+            ### Available Specialized Agents:
+            
+            **1. CUSTOM_INSTRUCTION** - Settings & Preferences
+            - Handles: add account/fund, set defaults, save custom instructions
+            - Examples: "set default currency to USD", "remember that rubles = BYN"
+            - Redirect when: Simple setting change, no ambiguity
+            
+            **2. SIMPLE_EXPENSE** - Straightforward Single Expenses
+            - Handles: Basic expense recording (one expense, all data clear)
+            - Examples: "200 on coffee", "bought groceries 1500", "taxi 800 RSD"
+            - Redirect when: Single expense, amount clear, no linked users involved
+            - Don't redirect if: Amount missing, multiple expenses, expense FOR someone
+            
+            **3. INTERNAL_TRANSFER** - Transfers Between Own Accounts
+            - Handles: Moving money between user's own accounts
+            - Examples: "transfer 1000 from card to cash", "withdrew 500", "put 200 on card"
+            - Redirect when: Transfer between own accounts clear (from→to), amount specified
+            - Don't redirect if: Amount missing, accounts ambiguous, involves linked user
+            
+            **4. THIRD_PARTY_ACTION** - Operations with Linked Users
+            - Handles: Transfers to/from linked users, expenses FOR linked users
+            - Examples: "sent 500 to BOB", "from girlfriend 1000", "bought coffee for BOB 200"
+            - Redirect when: Linked user mentioned, operation type clear, data complete
+            - Don't redirect if: Person NOT in linked users list, data missing, multiple people
+            
+            ### Redirect Action Format:
+            
+            ```json
+            {
+              "type": "REDIRECT_TO_AGENT",
+              "agentType": "SIMPLE_EXPENSE",  // or CUSTOM_INSTRUCTION, INTERNAL_TRANSFER, THIRD_PARTY_ACTION
+              "message": "200 on coffee",     // original message or refined version
+              "reason": "Simple expense, all data clear"  // optional, for debugging
+            }
+            ```
+            
+            ### Important Rules:
+            
+            1. **When redirecting, return ONLY redirect action** (not + FINANCIAL, not + PENDING)
+            2. **Pass original message** (or simplified version if you clarified something)
+            3. **Set generic "response" field** like "Processing..." (specialized agent will generate actual response)
+            4. **If ANY doubt** → don't redirect, handle it yourself
+            5. **If request needs clarification** → PENDING_CLARIFICATION (don't redirect with missing data!)
+            
+            ### Examples:
+            
+            ✅ **REDIRECT - Simple Expense:**
+            User: "200 on coffee"
+            ```json
+            {
+              "actions": [{
+                "type": "REDIRECT_TO_AGENT",
+                "agentType": "SIMPLE_EXPENSE",
+                "message": "200 on coffee"
+              }],
+              "response": "Recording..."
+            }
+            ```
+            
+            ✅ **REDIRECT - Simple Transfer:**
+            User: "withdrew 500"
+            ```json
+            {
+              "actions": [{
+                "type": "REDIRECT_TO_AGENT",
+                "agentType": "INTERNAL_TRANSFER",
+                "message": "withdrew 500"
+              }],
+              "response": "Processing transfer..."
+            }
+            ```
+            
+            ✅ **REDIRECT - Third Party:**
+            User: "sent 1000 to BOB"
+            ```json
+            {
+              "actions": [{
+                "type": "REDIRECT_TO_AGENT",
+                "agentType": "THIRD_PARTY_ACTION",
+                "message": "sent 1000 to BOB"
+              }],
+              "response": "Processing..."
+            }
+            ```
+            
+            ❌ **DON'T REDIRECT - Missing Data:**
+            User: "coffee" (no amount)
+            → Create PENDING_CLARIFICATION, don't redirect
+            
+            ❌ **DON'T REDIRECT - Complex Multi-Step:**
+            User: "200 on coffee and show my settings"
+            → Handle both actions yourself (FINANCIAL + conversational response)
+            
+            ❌ **DON'T REDIRECT - Ambiguous:**
+            User: "to Sarah 200" (Sarah NOT in linked users)
+            → Create PENDING_CLARIFICATION asking who Sarah is
+            
+            **Default Strategy: When in doubt, DON'T redirect. You are capable of handling everything.**
+            """;
+
     private static final String SECTION_PENDING_BASE = """
             
             ## Pending Clarifications:
@@ -563,6 +688,7 @@ public class MainAgent {
             {transfer}
             {thirdParty}
             {utils}
+            {redirect}
             {pendingBase}
             {pendingResolution}
             {correction}
@@ -580,6 +706,7 @@ public class MainAgent {
         params.put("transfer", SECTION_TRANSFER);
         params.put("thirdParty", SECTION_THIRD_PARTY);
         params.put("utils", SECTION_UTILS);
+        params.put("redirect", SECTION_REDIRECT);
         params.put("pendingBase", SECTION_PENDING_BASE);
         
         // Conditional sections

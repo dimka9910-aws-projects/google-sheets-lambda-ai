@@ -35,6 +35,14 @@ import java.util.List;
  *   "response": "Сколько стоил кофе?"
  * }
  * 
+ * Example - redirect to specialized agent:
+ * {
+ *   "actions": [
+ *     {"type": "REDIRECT_TO_AGENT", "agentType": "SIMPLE_EXPENSE", "message": "200 on coffee"}
+ *   ],
+ *   "response": "Processing..."
+ * }
+ * 
  * Example - just chat:
  * {
  *   "actions": [],
@@ -52,7 +60,7 @@ public class MainAgentResponse {
      * List of actions to perform.
      * Can be empty for pure conversational responses.
      */
-    @JsonPropertyDescription("List of actions to perform. Can include FINANCIAL (expenses/income/transfers), UTILS (settings commands), or PENDING_CLARIFICATION (questions to user). Empty array for pure conversational responses.")
+    @JsonPropertyDescription("List of actions to perform. Can include FINANCIAL (expenses/income/transfers), UTILS (settings commands), PENDING_CLARIFICATION (questions to user), or REDIRECT_TO_AGENT (offload to specialized agent for faster processing). Empty array for pure conversational responses.")
     @Builder.Default
     private List<AgentAction> actions = new ArrayList<>();
     
@@ -113,6 +121,26 @@ public class MainAgentResponse {
         return actions.stream()
                 .filter(a -> a instanceof UtilsAction)
                 .map(a -> (UtilsAction) a)
+                .toList();
+    }
+    
+    /**
+     * Check if response has redirect actions
+     */
+    public boolean hasRedirects() {
+        if (actions == null) return false;
+        return actions.stream()
+                .anyMatch(a -> a instanceof RedirectToAgentAction);
+    }
+    
+    /**
+     * Get all redirect actions
+     */
+    public List<RedirectToAgentAction> getRedirectActions() {
+        if (actions == null) return List.of();
+        return actions.stream()
+                .filter(a -> a instanceof RedirectToAgentAction)
+                .map(a -> (RedirectToAgentAction) a)
                 .toList();
     }
     
