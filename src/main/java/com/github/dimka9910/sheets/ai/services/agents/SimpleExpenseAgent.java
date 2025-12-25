@@ -119,8 +119,8 @@ public class SimpleExpenseAgent {
             // This handles @JsonSubTypes polymorphic deserialization automatically
             MainAgentResponse result = outputConverter.convert(content);
             
-            // Apply defaults if needed (currency, account, fund)
-            applyDefaults(result, userContext);
+            // Validate that model followed instructions (all fields must be filled)
+            validateResult(result);
             
             log.info("✅ SimpleExpenseAgent result: {} actions, pending={}", 
                     result.getActions().size(), result.hasPendingClarifications());
@@ -137,27 +137,38 @@ public class SimpleExpenseAgent {
     }
     
     /**
-     * Apply user defaults to FinancialActions if fields are null.
+     * Validate that model followed instructions.
+     * FINANCIAL actions MUST have all required fields filled (model should use defaults from context).
+     * If fields are null, model failed to follow prompt instructions.
      */
-    private void applyDefaults(MainAgentResponse response, UserEntity userContext) {
+    private void validateResult(MainAgentResponse response) {
         if (response.getActions() == null) return;
         
         for (var action : response.getActions()) {
             if (action instanceof FinancialAction financial) {
-                // Apply default currency
+                // Check that model filled all required fields
+                if (financial.getAmount() == null) {
+                    log.error("❌ Model returned FINANCIAL action without amount! This should be PENDING_CLARIFICATION instead.");
+                    throw new IllegalStateException("Model returned incomplete FINANCIAL action: amount is null");
+                }
+                
                 if (financial.getCurrency() == null) {
-                    financial.setCurrency(userContext.getDefaultCurrency());
+                    log.error("❌ Model failed to apply default currency! Model should use defaults from context.");
+                    throw new IllegalStateException("Model returned incomplete FINANCIAL action: currency is null");
                 }
                 
-                // Apply default account
-                if (financial.getAccount() == null && userContext.getDefaultAccount() != null) {
-                    financial.setAccount(userContext.getDefaultAccount().getAccountId());
+                if (financial.getAccount() == null) {
+                    log.error("❌ Model failed to select account! Model should either select from context or return PENDING_CLARIFICATION.");
+                    throw new IllegalStateException("Model returned incomplete FINANCIAL action: account is null");
                 }
                 
-                // Apply default fund
-                if (financial.getFund() == null && userContext.getDefaultFund() != null) {
-                    financial.setFund(userContext.getDefaultFund().getFundId());
+                if (financial.getFund() == null) {
+                    log.error("❌ Model failed to select fund! Model should either infer/select or return PENDING_CLARIFICATION.");
+                    throw new IllegalStateException("Model returned incomplete FINANCIAL action: fund is null");
                 }
+                
+                log.debug("✅ FINANCIAL action validated: amount={}, currency={}, account={}, fund={}", 
+                    financial.getAmount(), financial.getCurrency(), financial.getAccount(), financial.getFund());
             }
         }
     }
@@ -167,44 +178,72 @@ public class SimpleExpenseAgent {
     // ═══════════════════════════════════════════════════════════════════════════
     
     private static final String PROMPT_TEMPLATE = """
-        You are a high-precision financial parser for a personal finance assistant.
-        Your task is to extract a single EXPENSE operation from the user message.
-        
-        ## Core Extraction Rules
-        - **Amount**: Mandatory. Must be a number. If missing or unclear -> PENDING_CLARIFICATION.
-        - **Currency**: Extraction order: 1. Explicitly mentioned -> 2. Slang/Context -> 3. User default. If ambiguous -> PENDING_CLARIFICATION.
-        - **Entity Selection (Account & Fund)**:
-            1. **Inference**: Detect logical hints. Phrases like "paid with papers" imply a CASH account. "Treat for myself" implies a PERSONAL fund. Match against provided display names and aliases.
-            2. **Default**: If no hints or explicit names are found, use the provided defaults.
-            3. **Clarify**: If multiple entities match and you cannot decide -> PENDING_CLARIFICATION.
-        
-        ## Clarification Logic
-        When creating a PENDING_CLARIFICATION action:
-        - **Context Field**: Write a detailed note for yourself. Include:
-          1. Information already captured (e.g., "User bought pizza").
-          2. Specific missing data (e.g., "Missing amount").
-          3. Reason for ambiguity (e.g., "User has multiple Visa cards, no default set").
-        This note will be used in the next turn to complete the action.
-        
-        ## Custom Instructions
-        {customInstructions}
-        
-        ## User Context
-        - Default Currency: {currency}
-        - Default Account: {defaultAccount}
-        - Default Fund: {defaultFund}
-        
-        ### Available Accounts:
-        {accounts}
-        
-        ### Available Funds:
-        {funds}
-        
-        ## Examples
-        - "coffee 200" -> FINANCIAL: {{"amount": 200, "fund": "FOOD", "comment": "coffee"}}
-        - "3000 cash" -> FINANCIAL: {{"amount": 3000, "account": "CASH_MAIN"}}
-        - "coffee" -> PENDING_CLARIFICATION: {{"context": "Recording coffee expense, but amount is missing."}}
-    """;
+         You are a high-precision financial parser for a personal finance assistant.
+         Your task is to extract a single EXPENSE operation from the user message.
+         
+         ## CRITICAL: Complete Data Rule
+         **If you return a FINANCIAL action, ALL fields (amount, currency, account, fund) MUST be filled.**
+         - Use defaults from User Context if not explicitly specified
+         - If you cannot determine a value AND there is no default → return PENDING_CLARIFICATION instead
+         - NEVER return a FINANCIAL action with null/empty fields
+         
+         ## Core Extraction Rules
+         
+         ### Amount (MANDATORY):
+         - Must be a number. If missing or unclear → PENDING_CLARIFICATION.
+         - Examples: "200", "15.50", "3000"
+         
+         ### Currency (MANDATORY):
+         - Extraction priority:
+           1. Explicitly mentioned in message (e.g., "200 RSD", "50 EUR")
+           2. Inferred from context/slang
+           3. **Use default currency from User Context**
+         - If ambiguous AND no default → PENDING_CLARIFICATION
+         
+         ### Account (MANDATORY):
+         - Selection priority:
+           1. **Inference**: Detect hints ("paid with cash", "from card", "visa")
+           2. **Match**: Compare against available accounts (names/aliases)
+           3. **Use default account from User Context**
+         - If multiple matches AND no default → PENDING_CLARIFICATION
+         
+         ### Fund/Category (MANDATORY):
+         - Selection priority:
+           1. **Inference**: Infer from item/context ("coffee" → FOOD, "taxi" → TRANSPORT)
+           2. **Use default fund from User Context**
+         - If cannot infer AND no default → PENDING_CLARIFICATION
+         
+         ## Clarification Logic
+         When you CANNOT fill all required fields, return PENDING_CLARIFICATION:
+         - **Context Field**: Detailed note including:
+           1. Information captured (e.g., "User bought coffee")
+           2. Specific missing data (e.g., "Amount not specified")
+           3. Why ambiguous (e.g., "User has multiple Visa cards, unclear which one")
+         
+         ## Custom Instructions
+         {customInstructions}
+         
+         ## User Context (USE THESE DEFAULTS!)
+         - Default Currency: {currency} ← USE THIS if not specified in message
+         - Default Account: {defaultAccount} ← USE THIS if cannot infer from message
+         - Default Fund: {defaultFund} ← USE THIS if cannot infer from message
+         
+         ### Available Accounts:
+         {accounts}
+         
+         ### Available Funds:
+         {funds}
+         
+         ## Examples
+         
+         ### Valid FINANCIAL (all fields filled):
+         - "coffee 200" → {{"amount": 200, "currency": "RSD", "account": "CARD_MAIN", "fund": "FOOD", "comment": "coffee"}}
+         - "3000 cash" → {{"amount": 3000, "currency": "RSD", "account": "CASH", "fund": "PERSONAL", "comment": null}}
+         
+         ### PENDING_CLARIFICATION (missing required data):
+         - "coffee" → {{"context": "User wants to record coffee expense. Missing: amount."}}
+         - "200 visa" → {{"context": "User spent 200 RSD. Unclear: which Visa card (VISA_A or VISA_B)?"}}
+     """;
     
     private String buildSystemPrompt(UserEntity context) {
         Map<String, Object> params = new HashMap<>();
