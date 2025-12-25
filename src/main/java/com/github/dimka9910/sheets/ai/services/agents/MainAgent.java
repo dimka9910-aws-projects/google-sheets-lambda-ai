@@ -91,8 +91,9 @@ public class MainAgent {
     // ═══════════════════════════════════════════════════════════════════════════
     // PROMPT SECTIONS
     // ═══════════════════════════════════════════════════════════════════════════
-    
-    private static final String SECTION_CORE = """
+
+
+  private static final String SECTION_CORE = """
             # Role: Complex Request Orchestrator & Decomposer
             
             You are the primary intelligence for **complex** financial requests. Simple requests are handled by specialized agents.
