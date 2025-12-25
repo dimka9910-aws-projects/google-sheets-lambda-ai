@@ -1,11 +1,9 @@
 package com.github.dimka9910.sheets.ai.services.agents;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
 import com.github.dimka9910.sheets.ai.dto.actions.*;
 import com.github.dimka9910.sheets.ai.dto.user.UserEntity;
 import com.github.dimka9910.sheets.ai.services.UserContextToPromptMapper;
 import com.github.dimka9910.sheets.ai.services.agents.MessageClassifierAgent.Category;
-import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.ai.chat.messages.SystemMessage;
 import org.springframework.ai.chat.messages.UserMessage;
@@ -13,12 +11,15 @@ import org.springframework.ai.chat.model.ChatModel;
 import org.springframework.ai.chat.model.ChatResponse;
 import org.springframework.ai.chat.prompt.Prompt;
 import org.springframework.ai.chat.prompt.PromptTemplate;
+import org.springframework.ai.converter.BeanOutputConverter;
 import org.springframework.ai.openai.OpenAiChatOptions;
+import org.springframework.ai.openai.api.ResponseFormat;
 import org.springframework.stereotype.Component;
 
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 
 /**
  * Spring Component for main AI agent - parses user commands using Spring AI + OpenAI.
@@ -37,7 +38,6 @@ import java.util.Map;
  */
 @Slf4j
 @Component
-@RequiredArgsConstructor
 public class MainAgent {
 
     // ═══════════════════════════════════════════════════════════════════════════
@@ -46,6 +46,28 @@ public class MainAgent {
     
     private static final String MODEL = "gpt-5-mini";
     private static final int MAX_COMPLETION_TOKENS = 4000;
+    
+    // ═══════════════════════════════════════════════════════════════════════════
+    // DEPENDENCIES
+    // ═══════════════════════════════════════════════════════════════════════════
+    
+    private final ChatModel chatModel;
+    private final UserContextToPromptMapper contextMapper;
+    
+    // Cache converter and format for performance and reliability
+    private final BeanOutputConverter<MainAgentResponse> outputConverter;
+    private final ResponseFormat responseFormat;
+    
+    public MainAgent(ChatModel chatModel, UserContextToPromptMapper contextMapper) {
+        this.chatModel = chatModel;
+        this.contextMapper = contextMapper;
+        // Initialize converter once (expensive reflection operation)
+        this.outputConverter = new BeanOutputConverter<>(MainAgentResponse.class);
+        // Use JSON_OBJECT mode for reliable JSON without fragile schema parsing
+        this.responseFormat = ResponseFormat.builder()
+                .type(ResponseFormat.Type.JSON_OBJECT)
+                .build();
+    }
 
     // ═══════════════════════════════════════════════════════════════════════════
     // REQUEST / RESPONSE
@@ -268,107 +290,16 @@ public class MainAgent {
             - If user changed topic → acknowledge the topic switch, mention old pending won't be completed, process new request
             """;
 
-    private static final String SECTION_CORRECTION = """
-            
-            ## Correction Mode:
-            
-            User is responding to your previous message or correcting last operation.
-            
-            **Correction patterns:** "not X but Y", "change to", "it was X not Y", "modify", "fix"
-            
-            **For financial operations:**
-            - Use FINANCIAL with operationType=MODIFY
-            - Set correction=true
-            - Fill all corrected fields
-            - Look at "Last Operation" in context for original values
-            
-            **For settings:**
-            - Just create new UTILS action with corrected value
-            - Example: user said "default EUR" but you set USD → user says "not USD but EUR" → create SET_DEFAULT_CURRENCY with "EUR"
-            
-            **Context helps:**
-            - "Recent Conversation" shows what was discussed
-            - "Last Operation" shows what was recorded
-            - Use this to understand what user wants to correct
-            """;
-
-    private static final String SECTION_CUSTOM_INSTRUCTIONS = """
-            
-            ## Custom Instructions:
-            
-            User has saved instructions. APPLY them when parsing:
-            - Currency mappings: "rubles = BYN" → use BYN
-            - Math operations: "multiply by 2" → multiply amounts
-            - Aliases: "cafe = FOOD" → use FOOD fund
-            
-            User's explicit input overrides instructions if conflict.
-            
-            **Saving new instructions:**
-            When user shares ANY useful information that will help you in future (tips, preferences, reminders, clarifications, context about their life):
-            - Create UTILS action with command=CUSTOM_INSTRUCTION
-            - Put the instruction in value field
-            - Examples:
-              - "whenever I say rubles, it's BYN" → CUSTOM_INSTRUCTION "rubles = BYN"
-              - "if I buy something for partner, use their fund PARTNER_PERSONAL" → CUSTOM_INSTRUCTION "purchases for partner → fund PARTNER_PERSONAL"
-              - "when I say 'withdrew', always multiply by 2" → CUSTOM_INSTRUCTION "withdrew = amount × 2"
-              - "Sarah is my girlfriend" / "Sarah = linked user BOB" → CUSTOM_INSTRUCTION "Sarah = BOB (linked user alias)"
-              - "I work at IT company, salary comes at end of month" → CUSTOM_INSTRUCTION "salary comes end of month from user's IT company"
-              - "forget about rubles" → CUSTOM_INSTRUCTION "remove rubles instruction"
-              - "clear all my instructions" → CUSTOM_INSTRUCTION "clear all"
-            
-            **What to save:**
-            - Currency/account/fund mappings
-            - Math operations or conversion rules
-            - Personal context (job, relationships, habits)
-            - Preferences (how user likes to phrase things)
-            - Anything that wasn't known before but will help process future commands better
-
-            - If you're not sure if this information has to be saved for later, leave a PENDING_CLARIFICATION action and ask user for clarification.
-            - "plane tickets 300 euro" -> you save it with default fund as you should, e.g. PERSONAL, -> user replies "no! it's plane tickets! ofc it has to be TRAVEL fund" -> you have to do a correction of operation and you can suggest to remember it for further operations.
-            """;
-
-    private static final String SECTION_RESPONSE_FORMAT = """
-            
-            ## Response Format (JSON only, no text outside)
-            
-            ```json
-            {
-              "actions": [
-                { "type": "FINANCIAL", "operationType": "EXPENSE", "amount": 500, "currency": "USD", "account": "CARD_USER_VISA", "fund": "Food", "comment": "coffee" },
-                { "type": "UTILS", "command": "ADD_ACCOUNT", "value": "MONO" },
-                { "type": "PENDING_CLARIFICATION", "context": "Need amount for transport expense" }
-              ],
-              "response": "Message to show user"
-            }
-            ```
-            
-            **Action types:**
-            - FINANCIAL: operationType (EXPENSE/INCOME/TRANSFER), amount, currency, account, fund, comment, targetAccount, targetPerson, correction
-            - UTILS: command (see table above), value
-            - PENDING_CLARIFICATION: context (your note about what's unclear)
-            
-            **Rules:**
-            - actions=[] for pure conversation (questions, greetings)
-            - response ALWAYS required - this is what user sees
-            - Multiple tasks → multiple actions
-            - Need clarification → PENDING_CLARIFICATION + helpful response
-            """;
 
     // REMOVED: ALL_CONTEXT_TAGS - no longer needed with simplified Category system
-
-    // ═══════════════════════════════════════════════════════════════════════════
-    // DEPENDENCIES (injected by Spring)
-    // ═══════════════════════════════════════════════════════════════════════════
-    
-    private final ChatModel chatModel;
-    private final ObjectMapper objectMapper;
-    private final UserContextToPromptMapper contextMapper;
 
     // ═══════════════════════════════════════════════════════════════════════════
     // PROCESS
     // ═══════════════════════════════════════════════════════════════════════════
 
     public Response process(Request request) {
+        log.info("🧠 MainAgent Orchestrating: \"{}\"", truncate(request.message(), 60));
+        
         try {
             // Build system and user messages
             String systemPrompt = buildSystemPrompt(request.userContext(), request.category());
@@ -377,7 +308,8 @@ public class MainAgent {
             log.debug("System prompt length: {} chars, User prompt length: {} chars", 
                     systemPrompt.length(), userPrompt.length());
             
-            // Create Spring AI Prompt with messages
+            // Create Spring AI Prompt with JSON_OBJECT response format
+            @SuppressWarnings("null")
             Prompt prompt = new Prompt(
                     List.of(
                             new SystemMessage(systemPrompt),
@@ -386,28 +318,28 @@ public class MainAgent {
                     OpenAiChatOptions.builder()
                             .model(MODEL)
                             .maxCompletionTokens(MAX_COMPLETION_TOKENS)
-                            .temperature(0.7)
+                            .temperature(0.7) // Reasoning models benefit from slightly higher temp for multi-step
+                            .responseFormat(responseFormat) // Guarantees valid JSON
                             .build()
             );
             
             // Call LLM via Spring AI (observability handled automatically)
             ChatResponse chatResponse = chatModel.call(prompt);
-            
-            String content = chatResponse.getResult().getOutput().getText();  
+            String content = chatResponse.getResult().getOutput().getText();
             log.debug("AI response: {}", truncate(content, 400));
             
-            // Parse response
-            return parseResponse(chatResponse);
+            // Use BeanOutputConverter for robust polymorphic parsing
+            MainAgentResponse result = outputConverter.convert(content);
+            
+            log.info("✅ Parsed: {} actions, response='{}'", 
+                    result.getActions().size(), 
+                    truncate(result.getResponse(), 50));
+            
+            return new Response(result, null);
             
         } catch (Exception e) {
-            log.error("MainAgent error: {}", e.getMessage(), e);
-            return new Response(
-                    MainAgentResponse.builder()
-                            .actions(List.of())
-                            .response("Sorry, please try again.")
-                            .build(),
-                    e.getMessage()
-            );
+            log.error("❌ MainAgent fatal error: {}", e.getMessage(), e);
+            return new Response(null, e.getMessage());
         }
     }
 
@@ -425,9 +357,7 @@ public class MainAgent {
             {logic}
             {pendingBase}
             {pendingResolution}
-            {correction}
-            {customInstructions}
-            {responseFormat}
+            {formatInstructions}
             {userContext}
             """;
     
@@ -445,50 +375,19 @@ public class MainAgent {
         params.put("logic", SECTION_LOGIC);
         params.put("pendingBase", SECTION_PENDING_BASE);
         
-        // Conditional sections
+        // Conditional: only show if there's something to resolve
         params.put("pendingResolution", 
                 context.getPendingActions() != null && !context.getPendingActions().isEmpty() 
                         ? SECTION_PENDING_RESOLUTION : "");
         
-        params.put("correction", SECTION_CORRECTION);
+        // JSON Format Instructions (from BeanOutputConverter)
+        params.put("formatInstructions", outputConverter.getFormat());
         
-        params.put("customInstructions",
-                context.getCustomInstructions() != null && !context.getCustomInstructions().isEmpty()
-                        ? SECTION_CUSTOM_INSTRUCTIONS : "");
-        
-        params.put("responseFormat", SECTION_RESPONSE_FORMAT);
-        params.put("userContext", buildUserContext(context, category));
+        // User Context + Custom Instructions (handled by mapper)
+        params.put("userContext", contextMapper.buildContextPrompt(context, category));
         
         PromptTemplate template = new PromptTemplate(SYSTEM_PROMPT_TEMPLATE);
-        return template.render(params);
-    }
-
-    // ═══════════════════════════════════════════════════════════════════════════
-    // PARSE RESPONSE
-    // ═══════════════════════════════════════════════════════════════════════════
-
-    private Response parseResponse(ChatResponse chatResponse) {
-        try {
-            String content = chatResponse.getResult().getOutput().getText();  
-            String cleanJson = cleanJsonResponse(content);
-            MainAgentResponse result = objectMapper.readValue(cleanJson, MainAgentResponse.class);
-            
-            log.info("✅ Parsed: {} actions, response='{}'", 
-                    result.getActions().size(), 
-                    truncate(result.getResponse(), 50));
-            
-            return new Response(result, null);
-            
-        } catch (Exception e) {
-            log.error("❌ Parse error: {}", e.getMessage(), e);
-            return new Response(
-                    MainAgentResponse.builder()
-                            .actions(List.of())
-                            .response("Sorry, please try again.")
-                            .build(),
-                    "Parse error: " + e.getMessage()
-            );
-        }
+        return Objects.requireNonNull(template.render(params), "Prompt template render returned null");
     }
 
     // ═══════════════════════════════════════════════════════════════════════════
@@ -500,31 +399,8 @@ public class MainAgent {
         return "## Message Category\n" + category.name();
     }
 
-    /**
-     * Build user context prompt using dedicated mapper.
-     * Delegates to UserContextToPromptMapper for clean separation of concerns.
-     */
-    private String buildUserContext(UserEntity context, Category category) {
-        // For COMPLEX_ACTION, we load full context (as before)
-        // For simpler categories, they will be handled by dedicated handlers (not MainAgent)
-        return contextMapper.buildContextPrompt(context, category);
-    }
-
     private String truncate(String s, int maxLen) {
         if (s == null) return null;
         return s.length() <= maxLen ? s : s.substring(0, maxLen) + "...";
-    }
-
-    private String cleanJsonResponse(String response) {
-        String cleaned = response.trim();
-        if (cleaned.startsWith("```json")) {
-            cleaned = cleaned.substring(7);
-        } else if (cleaned.startsWith("```")) {
-            cleaned = cleaned.substring(3);
-        }
-        if (cleaned.endsWith("```")) {
-            cleaned = cleaned.substring(0, cleaned.length() - 3);
-        }
-        return cleaned.trim();
     }
 }
