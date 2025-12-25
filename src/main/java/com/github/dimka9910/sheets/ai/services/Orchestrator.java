@@ -12,6 +12,7 @@ import com.github.dimka9910.sheets.ai.services.agents.SimpleExpenseAgent;
 import com.github.dimka9910.sheets.ai.services.agents.InternalTransferAgent;
 import com.github.dimka9910.sheets.ai.services.agents.ThirdPartyActionAgent;
 import com.github.dimka9910.sheets.ai.services.agents.CustomInstructionAgent;
+import com.github.dimka9910.sheets.ai.services.agents.ExpenseEditAndDeletionAgent;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -40,6 +41,7 @@ public class Orchestrator {
     private final InternalTransferAgent internalTransferAgent;
     private final ThirdPartyActionAgent thirdPartyActionAgent;
     private final CustomInstructionAgent customInstructionAgent;
+    private final ExpenseEditAndDeletionAgent expenseEditAndDeletionAgent;
     private final MainAgent mainAgent;
     private final MainAgentResultHandler mainAgentResultHandler;
     
@@ -175,6 +177,10 @@ public class Orchestrator {
             case THIRD_PARTY_ACTION -> {
                 log.info("  ↳ Calling ThirdPartyActionAgent");
                 yield thirdPartyActionAgent.process(message, userContext);
+            }
+            case CORRECTION -> {
+                log.info("  ↳ Calling ExpenseEditAndDeletionAgent");
+                yield expenseEditAndDeletionAgent.process(message, userContext);
             }
         };
         

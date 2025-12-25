@@ -28,7 +28,7 @@ public class RedirectToAgentAction extends AgentAction {
     /**
      * Type of agent to redirect to.
      */
-    @JsonPropertyDescription("Type of specialized agent to handle this request. Options: CUSTOM_INSTRUCTION (for settings/preferences), SIMPLE_EXPENSE (for straightforward expenses), INTERNAL_TRANSFER (for transfers between own accounts), THIRD_PARTY_ACTION (for operations with linked users).")
+    @JsonPropertyDescription("Type of specialized agent to handle this request. Options: CUSTOM_INSTRUCTION (for settings/preferences), SIMPLE_EXPENSE (for straightforward expenses), INTERNAL_TRANSFER (for transfers between own accounts), THIRD_PARTY_ACTION (for operations with linked users), CORRECTION (for modifying or deleting existing operations).")
     private AgentType agentType;
     
     /**
@@ -75,7 +75,13 @@ public class RedirectToAgentAction extends AgentAction {
          * ThirdPartyActionAgent - handles operations with linked users.
          * Examples: "sent 500 to BOB", "bought coffee for girlfriend 200"
          */
-        THIRD_PARTY_ACTION
+        THIRD_PARTY_ACTION,
+        
+        /**
+         * ExpenseEditAndDeletionAgent - handles corrections (MODIFY/DELETE) of existing operations.
+         * Examples: "not 200 but 300", "change to FOOD fund", "delete last"
+         */
+        CORRECTION
     }
 }
 

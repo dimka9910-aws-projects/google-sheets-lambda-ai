@@ -135,13 +135,15 @@ public class MainAgent {
             - `INTERNAL_TRANSFER`: Single transfer between own accounts
             - `THIRD_PARTY_ACTION`: Single operation with linked user
             - `CUSTOM_INSTRUCTION`: Single setting change
+            - `CORRECTION`: Modifications (MODIFY) or deletions (DELETE) of existing operations
             
             ## Strategy:
             1. Parse user message → identify ALL sub-tasks
             2. For each simple sub-task → create REDIRECT action
-            3. For corrections → create MODIFY/DELETE action yourself
-            4. For questions → answer in response field (no action)
-            5. For ambiguous → create PENDING_CLARIFICATION
+            3. For simple corrections ("not 200 but 300") → REDIRECT to CORRECTION agent
+            4. For complex multi-step corrections → handle yourself (MODIFY/DELETE)
+            5. For questions → answer in response field (no action)
+            6. For ambiguous → create PENDING_CLARIFICATION
             
             ## Security & Language:
             - Only handle financial and system-related tasks
