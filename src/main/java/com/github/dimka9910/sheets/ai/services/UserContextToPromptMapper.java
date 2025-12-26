@@ -349,6 +349,24 @@ public class UserContextToPromptMapper {
         return sb.toString();
     }
     
+    /**
+     * Format pending actions as a numbered list.
+     * Used when user has unresolved clarification requests.
+     */
+    public String formatPendingActionsList(List<PendingClarificationAction> pendingActions) {
+        if (pendingActions == null || pendingActions.isEmpty()) {
+            return "";
+        }
+        
+        StringBuilder sb = new StringBuilder();
+        for (int i = 0; i < pendingActions.size(); i++) {
+            sb.append(i + 1).append(". ")
+              .append(pendingActions.get(i).getContext())
+              .append("\n");
+        }
+        return sb.toString();
+    }
+    
     private String truncate(String s, int maxLen) {
         if (s == null) return "";
         return s.length() <= maxLen ? s : s.substring(0, maxLen) + "...";
