@@ -247,7 +247,7 @@ public class MainAgent {
             
             # Reasoning Rules (Context Analysis & Enrichment)
             
-            ## 1. Analyze Conversation History
+            ## 1. Analyze Conversation History & Extract FinancialActions
             
             **Look for context in recent messages:**
             - Last operations mentioned by assistant
@@ -255,11 +255,52 @@ public class MainAgent {
             - Custom instructions user provided earlier
             - Corrections user made to previous operations
             
+            **CRITICAL: Extract FinancialAction Objects**
+            
+            Each ASSISTANT message in conversation history shows "→ Created operations" with full FinancialAction details:
+            - ID: UUID (unique identifier for this operation)
+            - Type: EXPENSE/INCOME/TRANSFER
+            - Amount, Currency, Account, Fund
+            - Comment, Target Account (for TRANSFER)
+            
+            **Use FinancialActions for corrections:**
+            When user says "not 200 but 300" or "change to FOOD" or "delete it":
+            1. Find the LAST assistant message with "→ Created operations"
+            2. Extract the FinancialAction ID and ALL fields
+            3. Include this in your REDIRECT message to CORRECTION agent
+            
+            **Example:**
+            ```
+            Recent Conversation shows:
+            ASSISTANT: Recorded expense
+              → Created operations:
+                • ID: 550e8400-e29b-41d4-a716-446655440000
+                  Type: EXPENSE
+                  Amount: 200 RSD
+                  Account: CARD_VISA
+                  Fund: FOOD
+                  Comment: coffee
+            
+            USER: not 200 but 300
+            
+            YOUR REDIRECT:
+            "User wants to modify operation ID=550e8400-e29b-41d4-a716-446655440000.
+             Original operation details:
+               - Type: EXPENSE
+               - Amount: 200
+               - Currency: RSD
+               - Account: CARD_VISA
+               - Fund: FOOD
+               - Comment: coffee
+             User's correction: Change amount from 200 to 300.
+             All other fields remain unchanged."
+            ```
+            
             **Use this to understand:**
-            - What "last operation" means (most recent financial operation in history)
-            - What "it" or "that" refers to
-            - What "same" means (copy values from previous operation)
-            - What user is correcting/disagreeing with
+            - What "last operation" means (most recent FinancialAction in history)
+            - What "it" or "that" refers to (the FinancialAction with specific ID)
+            - What "same" means (copy ALL fields from previous FinancialAction)
+            - What user is correcting/disagreeing with (specific FinancialAction)
             
             ## 2. Identify Request Type
             

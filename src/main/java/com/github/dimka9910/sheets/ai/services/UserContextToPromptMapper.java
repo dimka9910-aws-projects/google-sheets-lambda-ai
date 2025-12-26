@@ -1,5 +1,6 @@
 package com.github.dimka9910.sheets.ai.services;
 
+import com.github.dimka9910.sheets.ai.dto.actions.FinancialAction;
 import com.github.dimka9910.sheets.ai.dto.actions.PendingClarificationAction;
 import com.github.dimka9910.sheets.ai.dto.user.AccountEntry;
 import com.github.dimka9910.sheets.ai.dto.user.ConversationMessage;
@@ -132,13 +133,8 @@ public class UserContextToPromptMapper {
     private void appendConversationHistory(StringBuilder ctx, UserEntity context) {
         List<ConversationMessage> history = context.getConversationHistory();
         if (history != null && !history.isEmpty()) {
-            ctx.append("\n## Recent Conversation:\n");
-            int start = Math.max(0, history.size() - 4); // last 4 messages
-            for (int i = start; i < history.size(); i++) {
-                ConversationMessage msg = history.get(i);
-                String role = "user".equals(msg.getRole()) ? "User" : "Bot";
-                ctx.append(role).append(": ").append(msg.getContent()).append("\n");
-            }
+            // Use new detailed formatter that includes FinancialAction objects
+            ctx.append(formatConversationHistoryWithActions(history, 10)); // last 10 messages
         }
     }
 
@@ -301,6 +297,61 @@ public class UserContextToPromptMapper {
      */
     public String formatFundsSection(UserEntity context) {
         return "\n## Funds\n" + formatFundsList(context.getFunds()) + "\n";
+    }
+    
+    /**
+     * Format conversation history with Financial Actions for MainAgent.
+     * Shows last N messages with their related financial operations.
+     * This enables context-aware corrections and references to previous operations.
+     */
+    public String formatConversationHistoryWithActions(List<ConversationMessage> messages, int limit) {
+        if (messages == null || messages.isEmpty()) {
+            return "";
+        }
+        
+        StringBuilder sb = new StringBuilder("\n## Recent Conversation History\n\n");
+        
+        // Take last N messages
+        int startIndex = Math.max(0, messages.size() - limit);
+        List<ConversationMessage> recentMessages = messages.subList(startIndex, messages.size());
+        
+        for (ConversationMessage msg : recentMessages) {
+            // Format message header
+            sb.append("**").append(msg.getRole().toUpperCase()).append("**: ");
+            sb.append(truncate(msg.getContent(), 200)).append("\n");
+            
+            // If assistant message has related financial actions, show them
+            if ("assistant".equals(msg.getRole()) && 
+                msg.getRelatedFinancialActions() != null && 
+                !msg.getRelatedFinancialActions().isEmpty()) {
+                
+                sb.append("  → Created operations:\n");
+                for (var action : msg.getRelatedFinancialActions()) {
+                    sb.append("    • ID: ").append(action.getId()).append("\n");
+                    sb.append("      Type: ").append(action.getOperationType()).append("\n");
+                    sb.append("      Amount: ").append(action.getAmount())
+                      .append(" ").append(action.getCurrency()).append("\n");
+                    sb.append("      Account: ").append(action.getAccount()).append("\n");
+                    if (action.getFund() != null) {
+                        sb.append("      Fund: ").append(action.getFund()).append("\n");
+                    }
+                    if (action.getTargetAccount() != null) {
+                        sb.append("      Target Account: ").append(action.getTargetAccount()).append("\n");
+                    }
+                    if (action.getComment() != null && !action.getComment().isBlank()) {
+                        sb.append("      Comment: ").append(action.getComment()).append("\n");
+                    }
+                }
+            }
+            sb.append("\n");
+        }
+        
+        return sb.toString();
+    }
+    
+    private String truncate(String s, int maxLen) {
+        if (s == null) return "";
+        return s.length() <= maxLen ? s : s.substring(0, maxLen) + "...";
     }
 }
 

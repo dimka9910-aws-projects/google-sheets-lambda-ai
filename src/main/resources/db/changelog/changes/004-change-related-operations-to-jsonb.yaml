@@ -1,0 +1,34 @@
+databaseChangeLog:
+  - changeSet:
+      id: 004-change-related-operations-to-jsonb
+      author: system
+      comment: "Change related_operation_ids from UUID[] to JSONB to store full FinancialAction objects"
+      changes:
+        # Drop the old UUID[] column
+        - dropColumn:
+            tableName: chat_messages
+            columnName: related_operation_ids
+        
+        # Add new JSONB column to store FinancialAction objects
+        - addColumn:
+            tableName: chat_messages
+            columns:
+              - column:
+                  name: related_financial_actions
+                  type: jsonb
+                  remarks: "Array of FinancialAction objects (as JSON) that were created as result of this message"
+                  defaultValueComputed: "'[]'::jsonb"
+      
+      rollback:
+        # Rollback: restore UUID[] column
+        - dropColumn:
+            tableName: chat_messages
+            columnName: related_financial_actions
+        - addColumn:
+            tableName: chat_messages
+            columns:
+              - column:
+                  name: related_operation_ids
+                  type: uuid[]
+                  defaultValueComputed: "ARRAY[]::uuid[]"
+

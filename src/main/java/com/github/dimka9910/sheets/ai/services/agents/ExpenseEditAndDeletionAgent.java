@@ -155,12 +155,27 @@ public class ExpenseEditAndDeletionAgent {
             throw new IllegalStateException(
                     "ExpenseEditAndDeletionAgent: correction flag must be TRUE. Got: " + action.isCorrection());
         }
+        
+        // CRITICAL: id must be present (identifies which operation to modify/delete)
+        if (action.getId() == null) {
+            throw new IllegalStateException(
+                    "ExpenseEditAndDeletionAgent: operation ID is required for corrections. Got: null");
+        }
 
         FinancialAction.OperationType opType = action.getOperationType();
         
         if (opType == FinancialAction.OperationType.DELETE) {
-            // DELETE: no other fields required
-            log.debug("Validated DELETE action");
+            // DELETE: validate identifying fields are present
+            if (action.getAmount() == null || action.getCurrency() == null || 
+                action.getAccount() == null) {
+                throw new IllegalStateException(
+                        "ExpenseEditAndDeletionAgent: DELETE requires identifying fields. Got: " +
+                        "id=" + action.getId() +
+                        ", amount=" + action.getAmount() +
+                        ", currency=" + action.getCurrency() +
+                        ", account=" + action.getAccount());
+            }
+            log.debug("Validated DELETE action with ID: {}", action.getId());
             return;
         }
 
@@ -170,12 +185,13 @@ public class ExpenseEditAndDeletionAgent {
                 action.getAccount() == null || action.getFund() == null) {
                 throw new IllegalStateException(
                         "ExpenseEditAndDeletionAgent: MODIFY requires all fields. Got: " +
-                        "amount=" + action.getAmount() +
+                        "id=" + action.getId() +
+                        ", amount=" + action.getAmount() +
                         ", currency=" + action.getCurrency() +
                         ", account=" + action.getAccount() +
                         ", fund=" + action.getFund());
             }
-            log.debug("Validated MODIFY action");
+            log.debug("Validated MODIFY action with ID: {}", action.getId());
             return;
         }
 
@@ -195,10 +211,27 @@ public class ExpenseEditAndDeletionAgent {
             
             ## Your Task
             
-            Analyze the user's message and recent conversation history to determine:
-            1. Do they want to MODIFY a recent operation?
-            2. Do they want to DELETE a recent operation?
-            3. Is the request unclear? (need PENDING_CLARIFICATION)
+            You receive enriched context from MainAgent with full operation details.
+            MainAgent has already identified which operation to modify/delete and extracted all its fields.
+            
+            Your job:
+            1. Parse the enriched message to extract operation details
+            2. Apply user's correction
+            3. Return FINANCIAL action with correction=true
+            
+            ## Enriched Message Format
+            
+            MainAgent sends you messages like:
+            "User wants to modify operation ID=<uuid>.
+             Original operation details:
+               - Type: EXPENSE
+               - Amount: 200
+               - Currency: RSD
+               - Account: CARD_VISA
+               - Fund: FOOD
+               - Comment: coffee
+             User's correction: Change amount from 200 to 300.
+             All other fields remain unchanged."
             
             ## User Context
             
@@ -218,28 +251,48 @@ public class ExpenseEditAndDeletionAgent {
             
             ## Rules for MODIFY
             
-            When user wants to change something about a recent operation:
+            MainAgent has already extracted operation details for you:
             - operationType: "MODIFY"
             - correction: true (MANDATORY!)
-            - Fill ALL fields with CORRECTED values (not just changed fields, but ALL!)
-            - Look at recent conversation to understand what operation they're referring to
+            - id: UUID from enriched message (operation ID to modify)
+            - Fill ALL fields with CORRECTED values
             
-            **Correction patterns:**
-            - "not 200 but 300" → MODIFY amount to 300, infer other fields from context
-            - "change to FOOD fund" → MODIFY fund to FOOD, infer other fields from context
-            - "it was from cash" → MODIFY account to CASH, infer other fields from context
-            - "the comment should be taxi" → MODIFY comment, keep other fields
+            **How to process:**
+            1. Extract original values from enriched message
+            2. Apply the specific change mentioned
+            3. Keep all other fields unchanged
+            
+            **Example:**
+            Enriched message: "Original: amount=200, currency=RSD, account=CARD_VISA, fund=FOOD. Change: amount to 300."
+            
+            Your MODIFY action:
+            - id: <uuid from enriched message>
+            - operationType: MODIFY
+            - amount: 300 (changed)
+            - currency: RSD (unchanged)
+            - account: CARD_VISA (unchanged)
+            - fund: FOOD (unchanged)
+            - correction: true
             
             ## Rules for DELETE
             
-            When user wants to remove a recent operation:
+            MainAgent has already identified which operation to delete:
             - operationType: "DELETE"
             - correction: true (MANDATORY!)
-            - Fill: amount, currency, account, fund (to identify what to delete)
-            - Look at recent conversation to find the operation
+            - id: UUID from enriched message
+            - Fill: amount, currency, account, fund (from enriched message)
             
-            **Delete patterns:**
-            - "delete last", "remove it", "cancel that", "wrong, delete"
+            **Example:**
+            Enriched message: "User wants to delete operation ID=<uuid>. Original: amount=200, currency=RSD..."
+            
+            Your DELETE action:
+            - id: <uuid from enriched message>
+            - operationType: DELETE
+            - amount: 200 (from original)
+            - currency: RSD (from original)
+            - account: CARD_VISA (from original)
+            - fund: FOOD (from original)
+            - correction: true
             
             ## Rules for PENDING_CLARIFICATION
             
@@ -252,15 +305,15 @@ public class ExpenseEditAndDeletionAgent {
             ## CRITICAL: Complete Data Rule
             
             For MODIFY:
-            - You MUST fill ALL fields: amount, currency, account, fund
-            - Infer from recent conversation what the original operation was
-            - Apply user's correction to that operation
-            - If you cannot determine a field → return PENDING_CLARIFICATION instead
+            - You MUST fill ALL fields: id, amount, currency, account, fund
+            - Extract original values from enriched message provided by MainAgent
+            - Apply the specific correction mentioned
+            - If enriched message is unclear → return PENDING_CLARIFICATION
             
             For DELETE:
-            - You MUST fill: amount, currency, account, fund
-            - These fields identify what to delete
-            - Infer from recent conversation
+            - You MUST fill: id, amount, currency, account, fund
+            - Extract all values from enriched message provided by MainAgent
+            - If enriched message doesn't have operation details → return PENDING_CLARIFICATION
             
             ## Entity Resolution (Accounts & Funds)
             
