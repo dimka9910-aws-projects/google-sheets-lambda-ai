@@ -14,7 +14,7 @@ import org.springframework.ai.chat.prompt.Prompt;
 import org.springframework.ai.chat.prompt.PromptTemplate;
 import org.springframework.ai.converter.BeanOutputConverter;
 import org.springframework.ai.openai.OpenAiChatOptions;
-import org.springframework.ai.openai.api.ResponseFormat;
+import org.springframework.ai.openai.api.OpenAiApi;
 import org.springframework.stereotype.Component;
 
 import java.util.HashMap;
@@ -41,19 +41,11 @@ public class InternalTransferAgent {
     // Cache converter to avoid reflection overhead on each call
     private final BeanOutputConverter<MainAgentResponse> outputConverter;
     
-    // Native OpenAI JSON response format (guarantees valid JSON)
-    private final ResponseFormat responseFormat;
-    
     public InternalTransferAgent(ChatModel chatModel, UserContextToPromptMapper contextMapper) {
         this.chatModel = chatModel;
         this.contextMapper = contextMapper;
         // Initialize converter once (expensive reflection operation)
         this.outputConverter = new BeanOutputConverter<>(MainAgentResponse.class);
-        // Use JSON_OBJECT mode for reliable JSON without fragile schema parsing
-        // OpenAI guarantees valid JSON, BeanOutputConverter validates structure
-        this.responseFormat = ResponseFormat.builder()
-                .type(ResponseFormat.Type.JSON_OBJECT)
-                .build();
     }
     
     // ═══════════════════════════════════════════════════════════════════════════
@@ -98,9 +90,8 @@ public class InternalTransferAgent {
                     ),
                     OpenAiChatOptions.builder()
                             .model(MODEL)
-                            .maxTokens(MAX_TOKENS)
+                            .maxCompletionTokens(MAX_TOKENS)
                             .temperature(0.0)  // Deterministic for consistent parsing
-                            .responseFormat(responseFormat)  // Guarantees valid JSON
                             .build()
             );
             
@@ -188,6 +179,12 @@ public class InternalTransferAgent {
          - Use defaults from User Context if not explicitly specified
          - If you cannot determine a value AND there is no default → return PENDING_CLARIFICATION instead
          - NEVER return a FINANCIAL action with null/empty fields
+         
+         ## CRITICAL: ID Field Rule
+         **ALWAYS set "id": null for new operations.**
+         - The "id" field is ONLY used for editing/deleting existing operations
+         - For new transfers, "id" MUST be null (system will generate UUID on backend)
+         - Do NOT generate or invent UUID values
          
          ## Core Extraction Rules
          

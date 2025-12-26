@@ -38,6 +38,7 @@ public class UserEntityMapper {
             List<ChatMessageJpaEntity> chatMessages
     ) {
         UserEntity.UserEntityBuilder builder = UserEntity.builder()
+                .id(userJpa.getId())  // Database primary key (required for saving operations)
                 .userName(userJpa.getUsername())
                 .telegramId(userJpa.getTelegramId())
                 .displayName(userJpa.getDisplayName())
@@ -98,6 +99,7 @@ public class UserEntityMapper {
 
     private AccountEntry toAccountEntry(AccountJpaEntity jpa) {
         return AccountEntry.builder()
+                .id(jpa.getId())  // UUID for internal reference
                 .accountId(jpa.getExternalId())
                 .displayName(jpa.getDisplayName())
                 .aliases(jpa.getAliases() != null ? List.of(jpa.getAliases()) : List.of())
@@ -106,6 +108,7 @@ public class UserEntityMapper {
 
     private FundEntry toFundEntry(FundJpaEntity jpa) {
         return FundEntry.builder()
+                .id(jpa.getId())  // UUID for internal reference
                 .fundId(jpa.getExternalId())
                 .displayName(jpa.getDisplayName())
                 .aliases(jpa.getAliases() != null ? List.of(jpa.getAliases()) : List.of())

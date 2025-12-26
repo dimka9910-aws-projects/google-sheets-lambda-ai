@@ -41,29 +41,14 @@ spring:
     enabled: false  # Migrations run separately in CI/CD, not at Lambda startup
     change-log: classpath:/db/changelog/db.changelog-master.yaml
 
-  # Spring AI configuration
+  # Spring AI OpenAI configuration (1.1.2 - правильная структура)
   ai:
     openai:
-      api-key: ${OPENAI_API_KEY}
-      base-url: https://api.openai.com  # Can override for testing
+      api-key: ${OPENAI_API_KEY:${openai.api.key}}
       chat:
-        enabled: true
         options:
-          model: gpt-4o
+          model: gpt-4o-mini
           temperature: 0.7
-          max-tokens: 2000
-        # Enable centralized observability (auto-logs latency, tokens, errors)
-        observations:
-          enabled: true
-          include-prompt: false  # Don't log full prompts (save memory/logs)
-          include-completion: false  # Don't log full responses (save memory/logs)
-      # Retry configuration for resilience
-      retry:
-        max-attempts: 3
-        backoff:
-          initial-interval: 1000
-          multiplier: 2.0
-          max-interval: 10000
 
 # Logging configuration
 logging:

@@ -3,6 +3,8 @@ package com.github.dimka9910.sheets.ai.db.entity;
 import io.hypersistence.utils.hibernate.type.json.JsonBinaryType;
 import jakarta.persistence.*;
 import lombok.*;
+import org.hibernate.annotations.Fetch;
+import org.hibernate.annotations.FetchMode;
 import org.hibernate.annotations.Type;
 
 import java.time.Instant;
@@ -65,15 +67,18 @@ public class UserJpaEntity {
 
     // ═══════════════════════════════════════════════════════════════════════════
     // RELATIONSHIPS для JOIN FETCH (избегаем N+1)
+    // Используем SUBSELECT чтобы избежать MultipleBagFetchException
     // ═══════════════════════════════════════════════════════════════════════════
 
     @OneToMany(fetch = FetchType.LAZY)
     @JoinColumn(name = "user_id", referencedColumnName = "id")
+    @Fetch(FetchMode.SUBSELECT)
     @Builder.Default
     private List<AccountJpaEntity> accounts = new ArrayList<>();
 
     @OneToMany(fetch = FetchType.LAZY)
     @JoinColumn(name = "user_id", referencedColumnName = "id")
+    @Fetch(FetchMode.SUBSELECT)
     @Builder.Default
     private List<FundJpaEntity> funds = new ArrayList<>();
 

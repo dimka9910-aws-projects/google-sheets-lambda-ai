@@ -13,7 +13,7 @@ import org.springframework.ai.chat.prompt.Prompt;
 import org.springframework.ai.chat.prompt.PromptTemplate;
 import org.springframework.ai.converter.BeanOutputConverter;
 import org.springframework.ai.openai.OpenAiChatOptions;
-import org.springframework.ai.openai.api.ResponseFormat;
+import org.springframework.ai.openai.api.OpenAiApi;
 import org.springframework.stereotype.Component;
 
 import java.util.HashMap;
@@ -39,17 +39,13 @@ public class ExpenseEditAndDeletionAgent {
     private final ChatModel chatModel;
     private final UserContextToPromptMapper contextMapper;
     
-    // Cache converter and format for performance
+    // Cache converter for performance
     private final BeanOutputConverter<MainAgentResponse> outputConverter;
-    private final ResponseFormat responseFormat;
 
     public ExpenseEditAndDeletionAgent(ChatModel chatModel, UserContextToPromptMapper contextMapper) {
         this.chatModel = chatModel;
         this.contextMapper = contextMapper;
         this.outputConverter = new BeanOutputConverter<>(MainAgentResponse.class);
-        this.responseFormat = ResponseFormat.builder()
-                .type(ResponseFormat.Type.JSON_OBJECT)
-                .build();
     }
 
     /**
@@ -72,7 +68,6 @@ public class ExpenseEditAndDeletionAgent {
                             .model(MODEL)
                             .maxCompletionTokens(MAX_COMPLETION_TOKENS)
                             .temperature(0.3) // Lower temp for precise corrections
-                            .responseFormat(responseFormat)
                             .build()
             );
 
@@ -104,99 +99,86 @@ public class ExpenseEditAndDeletionAgent {
     }
 
     private String buildSystemPrompt(UserEntity userContext) {
-        Map<String, Object> params = new HashMap<>();
-
-        // Format user context sections using mapper
-        params.put("accounts", contextMapper.formatAccountsList(userContext.getAccounts()));
-        params.put("funds", contextMapper.formatFundsList(userContext.getFunds()));
-        params.put("customInstructions", contextMapper.formatCustomInstructionsSection(
-                userContext.getCustomInstructions()
-        ));
+        StringBuilder sb = new StringBuilder();
         
-        // Default currency
-        params.put("currency", userContext.getDefaultCurrency() != null 
-                ? userContext.getDefaultCurrency() : "not set");
+        sb.append(PROMPT_TEMPLATE_HEADER);
         
-        // Default account and fund
-        String defaultInfo = "";
+        // Available lists (reference only, enriched message is primary)
+        sb.append("\n## Available Accounts (Reference):\n");
+        sb.append(contextMapper.formatAccountsList(userContext.getAccounts())).append("\n");
+        
+        sb.append("\n## Available Funds (Reference):\n");
+        sb.append(contextMapper.formatFundsList(userContext.getFunds())).append("\n");
+        
+        // Defaults
+        sb.append("\n## Defaults:\n");
+        sb.append("- Currency: ").append(userContext.getDefaultCurrency() != null 
+                ? userContext.getDefaultCurrency() : "not set").append("\n");
         if (userContext.getDefaultAccount() != null) {
-            defaultInfo += "Default Account: " + userContext.getDefaultAccount().getAccountId() + "\n";
+            sb.append("- Account: ").append(userContext.getDefaultAccount().getAccountId()).append("\n");
         }
         if (userContext.getDefaultFund() != null) {
-            defaultInfo += "Default Fund: " + userContext.getDefaultFund().getFundId() + "\n";
+            sb.append("- Fund: ").append(userContext.getDefaultFund().getFundId()).append("\n");
         }
-        params.put("defaults", defaultInfo.isEmpty() ? "" : defaultInfo);
-
-        // Recent conversation (critical for understanding what to edit/delete!)
-        params.put("recentConversation", formatRecentConversation(userContext));
-
-        PromptTemplate template = new PromptTemplate(PROMPT_TEMPLATE);
-        return template.render(params);
-    }
-
-    private String formatRecentConversation(UserEntity userContext) {
-        if (userContext.getConversationHistory() == null || userContext.getConversationHistory().isEmpty()) {
-            return "No recent conversation.";
+        
+        // Custom instructions
+        String customInstructions = contextMapper.formatCustomInstructionsSection(
+                userContext.getCustomInstructions());
+        if (customInstructions != null && !customInstructions.isBlank()) {
+            sb.append("\n").append(customInstructions).append("\n");
         }
-        StringBuilder sb = new StringBuilder("## Recent Conversation (Last 10 messages):\n\n");
-        userContext.getConversationHistory().stream()
-                .skip(Math.max(0, userContext.getConversationHistory().size() - 10))
-                .forEach(msg -> sb.append("**")
-                        .append(msg.getRole().toUpperCase())
-                        .append("**: ")
-                        .append(msg.getContent())
-                        .append("\n\n"));
+        
+        // JSON Schema
+        sb.append("\n# OUTPUT FORMAT (JSON Schema):\n");
+        sb.append(outputConverter.getFormat()).append("\n");
+
         return sb.toString();
     }
 
     private void validateFinancialAction(FinancialAction action) {
-        // CRITICAL: correction must be true for MODIFY/DELETE
+        // 1. БАЗОВАЯ ПРОВЕРКА (Общая для всех коррекций)
         if (!action.isCorrection()) {
-            throw new IllegalStateException(
-                    "ExpenseEditAndDeletionAgent: correction flag must be TRUE. Got: " + action.isCorrection());
+            throw new IllegalStateException("Correction flag must be TRUE for this agent.");
         }
         
-        // CRITICAL: id must be present (identifies which operation to modify/delete)
         if (action.getId() == null) {
-            throw new IllegalStateException(
-                    "ExpenseEditAndDeletionAgent: operation ID is required for corrections. Got: null");
+            throw new IllegalStateException("Operation ID (UUID) is mandatory for corrections.");
         }
 
         FinancialAction.OperationType opType = action.getOperationType();
+
+        // 2. ПРОВЕРКА ОБЯЗАТЕЛЬНЫХ ПОЛЕЙ ДАННЫХ
+        // Для DELETE и MODIFY нужны базовые поля для идентификации записи
+        if (action.getAmount() == null) {
+            throw new IllegalStateException("Amount is missing for correction ID=" + action.getId());
+        }
+        if (action.getCurrency() == null) {
+            throw new IllegalStateException("Currency is missing for correction ID=" + action.getId());
+        }
+        if (action.getAccount() == null) {
+            throw new IllegalStateException("Source Account is missing for correction ID=" + action.getId());
+        }
+
+        // 3. СПЕЦИФИЧЕСКАЯ ЛОГИКА ПО ТИПАМ ОПЕРАЦИЙ
+        switch (opType) {
+            case MODIFY -> validateModifyDetails(action);
+            case DELETE -> log.debug("✅ Validated DELETE for ID: {}", action.getId());
+            default -> throw new IllegalStateException("Only MODIFY or DELETE allowed. Got: " + opType);
+        }
+    }
+
+    private void validateModifyDetails(FinancialAction action) {
+        // Если это расход — фонд обязателен
+        if (action.getOperationType() == FinancialAction.OperationType.EXPENSE && action.getFund() == null) {
+            throw new IllegalStateException("MODIFY Expense requires a Fund ID. Got ID=" + action.getId());
+        }
+
+        // Если это перевод — нужен целевой аккаунт
+        if (action.getOperationType() == FinancialAction.OperationType.TRANSFER && action.getTargetAccount() == null) {
+            throw new IllegalStateException("MODIFY Transfer requires a Target Account ID. Got ID=" + action.getId());
+        }
         
-        if (opType == FinancialAction.OperationType.DELETE) {
-            // DELETE: validate identifying fields are present
-            if (action.getAmount() == null || action.getCurrency() == null || 
-                action.getAccount() == null) {
-                throw new IllegalStateException(
-                        "ExpenseEditAndDeletionAgent: DELETE requires identifying fields. Got: " +
-                        "id=" + action.getId() +
-                        ", amount=" + action.getAmount() +
-                        ", currency=" + action.getCurrency() +
-                        ", account=" + action.getAccount());
-            }
-            log.debug("Validated DELETE action with ID: {}", action.getId());
-            return;
-        }
-
-        if (opType == FinancialAction.OperationType.MODIFY) {
-            // MODIFY: all fields must be non-null (model must fill everything)
-            if (action.getAmount() == null || action.getCurrency() == null || 
-                action.getAccount() == null || action.getFund() == null) {
-                throw new IllegalStateException(
-                        "ExpenseEditAndDeletionAgent: MODIFY requires all fields. Got: " +
-                        "id=" + action.getId() +
-                        ", amount=" + action.getAmount() +
-                        ", currency=" + action.getCurrency() +
-                        ", account=" + action.getAccount() +
-                        ", fund=" + action.getFund());
-            }
-            log.debug("Validated MODIFY action with ID: {}", action.getId());
-            return;
-        }
-
-        throw new IllegalStateException(
-                "ExpenseEditAndDeletionAgent: only MODIFY or DELETE allowed. Got: " + opType);
+        log.debug("✅ Validated MODIFY for ID: {}", action.getId());
     }
 
     private String truncate(String s, int maxLen) {
@@ -204,25 +186,33 @@ public class ExpenseEditAndDeletionAgent {
         return s.length() <= maxLen ? s : s.substring(0, maxLen) + "...";
     }
 
-    private static final String PROMPT_TEMPLATE = """
-            # Role: Financial Operation Correction Specialist
+    private static final String PROMPT_TEMPLATE_HEADER = """
+            # CORRECTION SPECIALIST PROTOCOL
             
-            You handle corrections to existing financial operations: modifications (MODIFY) and deletions (DELETE).
+            You handle corrections to existing financial operations: MODIFY and DELETE.
             
-            ## Your Task
+            ## HIERARCHY OF TRUTH (CRITICAL!)
             
-            You receive enriched context from MainAgent with full operation details.
-            MainAgent has already identified which operation to modify/delete and extracted all its fields.
+            When processing corrections, trust this order:
             
-            Your job:
-            1. Parse the enriched message to extract operation details
-            2. Apply user's correction
-            3. Return FINANCIAL action with correction=true
+            1. **ENRICHED MESSAGE FROM MAINAGENT** (Primary Source)
+               - This is your #1 source of data
+               - Contains the UUID and all operation details
+               - MainAgent already did the detective work
+               
+            2. **USER MESSAGE** (Specific Change)
+               - Use this to understand what to change
+               - Example: "300 instead of 200" means amount=300
+               
+            3. **AVAILABLE LISTS** (Name Resolution Only)
+               - Use accounts/funds lists ONLY if enriched message has ambiguous names
+               - Do NOT use these to override enriched message data
             
-            ## Enriched Message Format
+            ## ENRICHED MESSAGE FORMAT
             
             MainAgent sends you messages like:
-            "User wants to modify operation ID=<uuid>.
+            
+            "User wants to modify operation ID=550e8400-e29b-41d4-a716-446655440000.
              Original operation details:
                - Type: EXPENSE
                - Amount: 200
@@ -233,145 +223,62 @@ public class ExpenseEditAndDeletionAgent {
              User's correction: Change amount from 200 to 300.
              All other fields remain unchanged."
             
-            ## User Context
-            
-            {recentConversation}
-            
-            {defaults}
-            
-            ### Available Accounts:
-            {accounts}
-            
-            ### Available Funds:
-            {funds}
-            
-            **Default Currency:** {currency}
-            
-            {customInstructions}
-            
-            ## Rules for MODIFY
-            
-            MainAgent has already extracted operation details for you:
-            - operationType: "MODIFY"
-            - correction: true (MANDATORY!)
-            - id: UUID from enriched message (operation ID to modify)
-            - Fill ALL fields with CORRECTED values
-            
-            **How to process:**
-            1. Extract original values from enriched message
+            Your job:
+            1. Extract UUID and original values from enriched message
             2. Apply the specific change mentioned
+            3. Return FINANCIAL action with correction=true
+            
+            ## RULES FOR MODIFY
+            
+            **Mandatory fields:**
+            - `id`: UUID from enriched message (CRITICAL!)
+            - `operationType`: "MODIFY"
+            - `correction`: true
+            - `amount`, `currency`, `account`: Always required
+            - `fund`: Required for EXPENSE, optional for INCOME
+            - `targetAccount`: Required for TRANSFER
+            
+            **Process:**
+            1. Extract ALL original values from enriched message
+            2. Apply the specific change mentioned by user
             3. Keep all other fields unchanged
             
-            **Example:**
-            Enriched message: "Original: amount=200, currency=RSD, account=CARD_VISA, fund=FOOD. Change: amount to 300."
+            **Special rules by operation type:**
+            - **EXPENSE**: Must have `fund` field
+            - **INCOME**: `fund` is optional
+            - **TRANSFER**: Must have both `account` (source) and `targetAccount` (destination)
             
-            Your MODIFY action:
-            - id: <uuid from enriched message>
-            - operationType: MODIFY
-            - amount: 300 (changed)
-            - currency: RSD (unchanged)
-            - account: CARD_VISA (unchanged)
-            - fund: FOOD (unchanged)
-            - correction: true
+            ## RULES FOR DELETE
             
-            ## Rules for DELETE
+            **Mandatory fields:**
+            - `id`: UUID from enriched message
+            - `operationType`: "DELETE"
+            - `correction`: true
+            - `amount`, `currency`, `account`: For identification/verification
             
-            MainAgent has already identified which operation to delete:
-            - operationType: "DELETE"
-            - correction: true (MANDATORY!)
-            - id: UUID from enriched message
-            - Fill: amount, currency, account, fund (from enriched message)
+            **Process:**
+            Extract all identifying fields from enriched message.
             
-            **Example:**
-            Enriched message: "User wants to delete operation ID=<uuid>. Original: amount=200, currency=RSD..."
+            ## PENDING_CLARIFICATION
             
-            Your DELETE action:
-            - id: <uuid from enriched message>
-            - operationType: DELETE
-            - amount: 200 (from original)
-            - currency: RSD (from original)
-            - account: CARD_VISA (from original)
-            - fund: FOOD (from original)
-            - correction: true
+            Use ONLY if:
+            - Enriched message doesn't contain operation details
+            - Enriched message is ambiguous or corrupted
+            - Cannot parse UUID or required fields
             
-            ## Rules for PENDING_CLARIFICATION
+            **Context field should explain:**
+            - What data is missing from enriched message
+            - What question to ask user
             
-            If unclear what user wants:
-            - No recent operation in conversation history → ask user to be more specific
-            - Ambiguous which operation to modify → ask which one
-            - Ambiguous which field to change → ask for clarification
-            - Unknown account/fund mentioned → ask for clarification
+            ## CRITICAL RULES
             
-            ## CRITICAL: Complete Data Rule
-            
-            For MODIFY:
-            - You MUST fill ALL fields: id, amount, currency, account, fund
-            - Extract original values from enriched message provided by MainAgent
-            - Apply the specific correction mentioned
-            - If enriched message is unclear → return PENDING_CLARIFICATION
-            
-            For DELETE:
-            - You MUST fill: id, amount, currency, account, fund
-            - Extract all values from enriched message provided by MainAgent
-            - If enriched message doesn't have operation details → return PENDING_CLARIFICATION
-            
-            ## Entity Resolution (Accounts & Funds)
-            
-            1. **User mentions specific account/fund** → use it (validate against available list)
-            2. **User mentions unclear account/fund** → PENDING_CLARIFICATION
-            3. **User doesn't mention** → infer from recent conversation
-            4. **Cannot infer** → use defaults OR PENDING_CLARIFICATION
-            
-            ## Strategy for Parsing Corrections
-            
-            1. Read recent conversation backward to find the last financial operation
-            2. Look for assistant messages mentioning amounts, accounts, funds
-            3. Apply user's correction instruction to that operation
-            4. Fill ALL required fields
-            
-            ## Output Format
-            
-            You MUST return valid JSON with this structure:
-            - "actions": array of actions (FINANCIAL with correction=true, or PENDING_CLARIFICATION)
-            - "response": human-readable message to show user
-            
-            **Success example:**
-            ```json
-            {
-              "actions": [
-                {
-                  "type": "FINANCIAL",
-                  "operationType": "MODIFY",
-                  "amount": 300,
-                  "currency": "USD",
-                  "account": "CARD_VISA",
-                  "fund": "FOOD",
-                  "comment": "coffee",
-                  "correction": true
-                }
-              ],
-              "response": "Changed amount to 300 USD."
-            }
-            ```
-            
-            **Clarification example:**
-            ```json
-            {
-              "actions": [
-                {
-                  "type": "PENDING_CLARIFICATION",
-                  "context": "User wants to modify an operation but recent conversation doesn't show any financial operations."
-                }
-              ],
-              "response": "I don't see a recent operation to modify. Could you be more specific about which operation you want to change?"
-            }
-            ```
-            
-            Remember:
-            - correction=true is MANDATORY for all FINANCIAL actions
-            - For MODIFY: fill ALL fields (infer from recent conversation)
-            - For DELETE: fill identifying fields (infer from recent conversation)
-            - If unclear or cannot infer: return PENDING_CLARIFICATION
+            1. **Trust enriched message first** - it contains the authoritative UUID and data
+            2. **correction=true is MANDATORY** for all FINANCIAL actions from this agent
+            3. **Return PURE JSON** - no markdown, no comments
+            4. **Validate operation type logic:**
+               - EXPENSE → needs fund
+               - TRANSFER → needs targetAccount
+               - INCOME → fund optional
             """;
 }
 

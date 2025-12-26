@@ -27,7 +27,6 @@ import java.util.Map;
  */
 @Slf4j
 @Component
-@RequiredArgsConstructor
 public class MessageClassifierAgent {
     
     // ═══════════════════════════════════════════════════════════════════════════
@@ -163,7 +162,7 @@ public class MessageClassifierAgent {
                     ),
                     OpenAiChatOptions.builder()
                             .model(MODEL)
-                            .maxTokens(MAX_TOKENS)
+                            .maxCompletionTokens(MAX_TOKENS)
                             .temperature(0.3)  // Lower temperature for classification
                             .build()
             );

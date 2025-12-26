@@ -26,13 +26,16 @@ public interface UserJpaRepository extends JpaRepository<UserJpaEntity, UUID> {
     Optional<UserJpaEntity> findByTelegramId(String telegramId);
     
     /**
-     * Find user with accounts and funds by Telegram ID in ONE query (JOIN FETCH).
+     * Find user with accounts and funds by Telegram ID.
+     * Использует 2 запроса чтобы избежать MultipleBagFetchException:
+     * 1. User + accounts (JOIN FETCH)
+     * 2. Funds (загружаются автоматически при доступе через SUBSELECT)
+     * 
      * Избегаем N+1 problem, но не грузим chat messages (они большие).
      */
     @Query("""
         SELECT DISTINCT u FROM UserJpaEntity u
         LEFT JOIN FETCH u.accounts
-        LEFT JOIN FETCH u.funds
         WHERE u.telegramId = :telegramId
     """)
     Optional<UserJpaEntity> findByTelegramIdWithAccountsAndFunds(@Param("telegramId") String telegramId);

@@ -1,6 +1,7 @@
 package com.github.dimka9910.sheets.ai.dto.actions;
 
 import com.fasterxml.jackson.annotation.JsonAlias;
+import com.fasterxml.jackson.annotation.JsonProperty;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
@@ -38,7 +39,10 @@ public class FinancialAction extends AgentAction {
     /**
      * Unique identifier for this financial action.
      * Used for tracking and editing operations.
-     * Generated when action is created.
+     * 
+     * IMPORTANT:
+     * - For NEW operations (EXPENSE/INCOME/TRANSFER): Backend generates this field. LLM should NOT set it.
+     * - For MODIFY/DELETE: LLM MUST include this field (extracted from conversation history/enriched context).
      */
     private UUID id;
     
