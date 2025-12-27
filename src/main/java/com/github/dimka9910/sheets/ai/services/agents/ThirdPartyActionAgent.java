@@ -14,7 +14,6 @@ import org.springframework.ai.chat.prompt.Prompt;
 import org.springframework.ai.chat.prompt.PromptTemplate;
 import org.springframework.ai.converter.BeanOutputConverter;
 import org.springframework.ai.openai.OpenAiChatOptions;
-import org.springframework.ai.openai.api.OpenAiApi;
 import org.springframework.stereotype.Component;
 
 import java.util.HashMap;
@@ -264,6 +263,8 @@ public class ThirdPartyActionAgent {
         You are a high-precision parser for THIRD-PARTY financial actions.
         Your task is to extract operations involving OTHER PEOPLE (linked users).
         
+        **ALWAYS respond in the SAME language as the user's input message unless other instructions provided.**
+        
         ## CRITICAL: Complete Data Rule
         **If you return a FINANCIAL action, ALL required fields MUST be filled.**
         - Use defaults from User Context if not explicitly specified
@@ -316,7 +317,7 @@ public class ThirdPartyActionAgent {
         - Must be a number. If missing or unclear → PENDING_CLARIFICATION.
         
         ### Currency (MANDATORY):
-        - Priority: explicit → context → **default currency** → clarify
+        - Priority: explicit → infer from colloquial/slang terms → **default currency** → clarify
         
         ### userName and targetPerson (MANDATORY for TRANSFER):
         - **CRITICAL: Must be EXACT userName from "Linked users" list OR current user userName!**

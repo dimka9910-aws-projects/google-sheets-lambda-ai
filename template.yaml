@@ -44,10 +44,9 @@ Resources:
       Handler: com.github.dimka9910.sheets.ai.SQSHandler::handleRequest
       CodeUri: .
       Description: Spring Boot Lambda - processes Telegram requests from SQS, parses with AI, sends responses
-      # SnapStart temporarily disabled for debugging initialization error
-      # SnapStart:
-      #   ApplyOn: PublishedVersions
-      # AutoPublishAlias: live
+      SnapStart:
+        ApplyOn: PublishedVersions
+      AutoPublishAlias: live
       Environment:
         Variables:
           ENVIRONMENT: !Ref Environment

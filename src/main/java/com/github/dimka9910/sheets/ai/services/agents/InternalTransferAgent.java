@@ -14,7 +14,6 @@ import org.springframework.ai.chat.prompt.Prompt;
 import org.springframework.ai.chat.prompt.PromptTemplate;
 import org.springframework.ai.converter.BeanOutputConverter;
 import org.springframework.ai.openai.OpenAiChatOptions;
-import org.springframework.ai.openai.api.OpenAiApi;
 import org.springframework.stereotype.Component;
 
 import java.util.HashMap;
@@ -174,7 +173,9 @@ public class InternalTransferAgent {
          You are a high-precision transfer parser for a personal finance assistant.
          Your task is to extract an INTERNAL TRANSFER operation (moving money between user's OWN accounts).
          
-         ## CRITICAL: Complete Data Rule
+        **ALWAYS respond in the SAME language as the user's input message unless other instructions provided.**
+        
+        ## CRITICAL: Complete Data Rule
          **If you return a FINANCIAL action, ALL fields (amount, currency, fromAccount, toAccount) MUST be filled.**
          - Use defaults from User Context if not explicitly specified
          - If you cannot determine a value AND there is no default → return PENDING_CLARIFICATION instead
@@ -192,12 +193,12 @@ public class InternalTransferAgent {
          - Must be a number. If missing or unclear → PENDING_CLARIFICATION.
          - Examples: "200", "1500.50", "3000"
          
-         ### Currency (MANDATORY):
-         - Extraction priority:
-           1. Explicitly mentioned in message (e.g., "1000 RSD", "50 EUR")
-           2. Inferred from context
-           3. **Use default currency from User Context**
-         - If ambiguous AND no default → PENDING_CLARIFICATION
+        ### Currency (MANDATORY):
+        - Extraction priority:
+          1. Explicitly mentioned in message (e.g., "1000 RSD", "50 EUR")
+          2. Infer from colloquial/slang terms (e.g., "bucks" for USD, local slang for currencies)
+          3. **Use default currency from User Context**
+        - If ambiguous AND no default → PENDING_CLARIFICATION
          
          ### From Account (MANDATORY):
          - The SOURCE account where money is taken from

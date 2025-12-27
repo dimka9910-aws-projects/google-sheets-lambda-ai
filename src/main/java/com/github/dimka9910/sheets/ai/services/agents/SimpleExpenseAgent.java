@@ -13,7 +13,6 @@ import org.springframework.ai.chat.prompt.Prompt;
 import org.springframework.ai.chat.prompt.PromptTemplate;
 import org.springframework.ai.converter.BeanOutputConverter;
 import org.springframework.ai.openai.OpenAiChatOptions;
-import org.springframework.ai.openai.api.OpenAiApi;
 import org.springframework.stereotype.Component;
 
 import java.util.HashMap;
@@ -171,7 +170,9 @@ public class SimpleExpenseAgent {
          You are a high-precision financial parser for a personal finance assistant.
          Your task is to extract a single EXPENSE operation from the user message.
          
-         ## CRITICAL: Complete Data Rule
+        **ALWAYS respond in the SAME language as the user's input message unless other instructions provided.**
+        
+        ## CRITICAL: Complete Data Rule
          **If you return a FINANCIAL action, ALL fields (amount, currency, account, fund) MUST be filled.**
          - Use defaults from User Context if not explicitly specified
          - If you cannot determine a value AND there is no default → return PENDING_CLARIFICATION instead
@@ -189,12 +190,12 @@ public class SimpleExpenseAgent {
          - Must be a number. If missing or unclear → PENDING_CLARIFICATION.
          - Examples: "200", "15.50", "3000"
          
-         ### Currency (MANDATORY):
-         - Extraction priority:
-           1. Explicitly mentioned in message (e.g., "200 RSD", "50 EUR")
-           2. Inferred from context/slang
-           3. **Use default currency from User Context**
-         - If ambiguous AND no default → PENDING_CLARIFICATION
+       ### Currency (MANDATORY):
+       - Extraction priority:
+         1. Explicitly mentioned in message (e.g., "200 RSD", "50 EUR")
+         2. Infer from colloquial/slang terms (e.g., "bucks" for USD, local slang for currencies)
+         3. **Use default currency from User Context**
+       - If ambiguous AND no default → PENDING_CLARIFICATION
          
          ### Account (MANDATORY):
          - Selection priority:
