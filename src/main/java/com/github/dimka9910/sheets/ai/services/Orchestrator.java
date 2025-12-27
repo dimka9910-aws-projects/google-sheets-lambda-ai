@@ -1,6 +1,8 @@
 package com.github.dimka9910.sheets.ai.services;
 
+import com.github.dimka9910.sheets.ai.dto.actions.AgentAction;
 import com.github.dimka9910.sheets.ai.dto.actions.MainAgentResponse;
+import com.github.dimka9910.sheets.ai.dto.actions.PendingClarificationAction;
 import com.github.dimka9910.sheets.ai.dto.actions.RedirectToAgentAction;
 import com.github.dimka9910.sheets.ai.dto.telegram.TelegramChatRequest;
 import com.github.dimka9910.sheets.ai.dto.telegram.TelegramChatResponse;
@@ -17,6 +19,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
+import java.util.ArrayList;
 import java.util.List;
 
 /**
@@ -188,7 +191,30 @@ public class Orchestrator {
                 specializedResponse.getActions().size(), 
                 specializedResponse.hasPendingClarifications());
         
-        return specializedResponse;
+        // IMPORTANT: Merge ALL actions from BOTH MainAgent and specialized agent
+        // MainAgent might have created pending clarifications BEFORE redirecting
+        // Specialized agent might have created NEW pending/financial/utils actions during processing
+        // We need to collect ALL actions from the entire chain
+        List<AgentAction> allActions = new ArrayList<>();
+        
+        // Add pending clarifications from original MainAgent response (if any)
+        // These might exist if MainAgent asked for clarification while also redirecting
+        if (agentResponse.getPendingClarifications() != null && !agentResponse.getPendingClarifications().isEmpty()) {
+            allActions.addAll(agentResponse.getPendingClarifications());
+            log.debug("  → Merged {} pending from MainAgent", agentResponse.getPendingClarifications().size());
+        }
+        
+        // Add ALL actions from specialized agent response
+        if (specializedResponse.getActions() != null) {
+            allActions.addAll(specializedResponse.getActions());
+        }
+        
+        // Return merged response
+        // Use specialized agent's response text, but merged actions
+        return MainAgentResponse.builder()
+                .actions(allActions)  // MERGED actions from entire chain
+                .response(specializedResponse.getResponse())
+                .build();
     }
 
     // ═══════════════════════════════════════════════════════════════════════════
