@@ -67,13 +67,23 @@ public class Orchestrator {
                 return buildSetupRequiredResponse(request, userContext);
             }
             
-            // Step 1: Classify into ONE category
-            boolean hasLinkedUsers = userContext.getLinkedUsers() != null && !userContext.getLinkedUsers().isEmpty();
-            Category category = classifierAgent.classify(message, hasLinkedUsers);
-
-            log.info("Classification: category={}", category);
+            // Step 1: Check for pending clarifications
+            // If user has pending clarifications, they are likely answering them
+            // → Route to MainAgent to understand context and resolve pending
+            boolean hasPending = userContext.getPendingActions() != null && !userContext.getPendingActions().isEmpty();
             
-            // Step 2: Route to appropriate agent and handle result
+            Category category;
+            if (hasPending) {
+                log.info("User has {} pending clarifications → routing to MainAgent", userContext.getPendingActions().size());
+                category = Category.COMPLEX_ACTION;  // Force MainAgent
+            } else {
+                // Step 2: Classify into ONE category
+                boolean hasLinkedUsers = userContext.getLinkedUsers() != null && !userContext.getLinkedUsers().isEmpty();
+                category = classifierAgent.classify(message, hasLinkedUsers);
+                log.info("Classification: category={}", category);
+            }
+            
+            // Step 3: Route to appropriate agent and handle result
             MainAgentResponse agentResponse = switch (category) {
                 case SIMPLE_EXPENSE -> {
                     log.info("→ Routing to SimpleExpenseAgent");
@@ -104,7 +114,7 @@ public class Orchestrator {
                     agentResponse.hasPendingClarifications(),
                     agentResponse.hasRedirects());
             
-            // Step 3: Handle redirects if any
+            // Step 4: Handle redirects if any
             if (agentResponse.hasRedirects()) {
                 agentResponse = handleRedirects(agentResponse, userContext);
             }
