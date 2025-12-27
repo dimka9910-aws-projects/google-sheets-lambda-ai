@@ -337,16 +337,7 @@ public class MainAgent {
         params.put("formatInstructions", outputConverter.getFormat());
         
         PromptTemplate template = new PromptTemplate(promptTemplate);
-        String rendered = Objects.requireNonNull(template.render(params), "Prompt template render returned null");
-        
-        // DEBUG: Log conversation history section
-        if (context.getConversationHistory() != null && !context.getConversationHistory().isEmpty()) {
-            log.debug("📜 Conversation history passed to MainAgent ({} messages):", context.getConversationHistory().size());
-            String historySection = contextMapper.formatConversationHistoryWithActions(context.getConversationHistory(), 10);
-            log.debug(historySection);
-        }
-        
-        return rendered;
+        return Objects.requireNonNull(template.render(params), "Prompt template render returned null");
     }
 
     private String truncate(String s, int maxLen) {
