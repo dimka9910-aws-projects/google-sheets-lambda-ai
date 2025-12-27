@@ -73,6 +73,7 @@ public class MainAgent {
             4. **CONVERSATION**: Provide user response yourself (in their language)
             
             ## CRITICAL RULES:
+            - **TIMESTAMP PRIORITY**: When user says "it"/"last"/"this", ALWAYS pick operation with NEWEST timestamp ("just now" > "5 minutes ago" > "1 hour ago"). NEVER pick old operations when newer ones exist.
             - NEVER execute FINANCIAL actions. Only REDIRECT.
             - NEVER execute SETTINGS (UTILS). REDIRECT to CUSTOM_INSTRUCTION.
             - Use PENDING_CLARIFICATION only if inference + history + defaults = zero clues.
