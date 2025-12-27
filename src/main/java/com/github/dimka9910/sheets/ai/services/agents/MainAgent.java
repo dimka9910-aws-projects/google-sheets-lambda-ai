@@ -67,7 +67,7 @@ public class MainAgent {
             ## Message Category: {categoryInfo}
             
             ## OPERATIONAL PIPELINE:
-            1. **ID TRACING**: If user corrects/deletes/says "it"/"last", find UUID in conversation history
+            1. **ID TRACING**: If user corrects/deletes/says "it"/"last", find UUID in conversation history using TIMESTAMP (newest = "just now")
             2. **DECOMPOSITION**: Split "A and B" into multiple REDIRECT actions
             3. **TICKET ENRICHMENT**: Pack `message` field with ALL context for specialized agent
             4. **CONVERSATION**: Provide user response yourself (in their language)
