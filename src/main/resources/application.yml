@@ -2,6 +2,10 @@ spring:
   application:
     name: finance-tracker-ai
   
+  # CRITICAL: Disable web server for Lambda
+  main:
+    web-application-type: none  # Lambda doesn't need web server
+  
   # Cloud Function configuration
   cloud:
     function:
