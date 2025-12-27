@@ -15,7 +15,7 @@ spring:
   jpa:
     database-platform: org.hibernate.dialect.PostgreSQLDialect
     hibernate:
-      ddl-auto: validate  # Liquibase handles schema, Hibernate only validates
+      ddl-auto: none  # Liquibase handles schema, Hibernate doesn't validate (PostgreSQL arrays confuse Hibernate)
     properties:
       hibernate:
         jdbc:
