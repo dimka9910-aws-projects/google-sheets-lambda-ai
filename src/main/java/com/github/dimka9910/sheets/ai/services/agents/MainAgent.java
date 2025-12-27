@@ -67,13 +67,13 @@ public class MainAgent {
             ## Message Category: {categoryInfo}
             
             ## OPERATIONAL PIPELINE:
-            1. **ID TRACING**: If user corrects/deletes/says "it"/"last", find UUID in conversation history using TIMESTAMP (newest = "just now")
+            1. **ID TRACING**: If user corrects/deletes/says "it"/"last", find UUID in conversation history (sorted newest-first, use FIRST match)
             2. **DECOMPOSITION**: Split "A and B" into multiple REDIRECT actions
             3. **TICKET ENRICHMENT**: Pack `message` field with ALL context for specialized agent
             4. **CONVERSATION**: Provide user response yourself (in their language)
             
             ## CRITICAL RULES:
-            - **TIMESTAMP PRIORITY**: When user says "it"/"last"/"this", ALWAYS pick operation with NEWEST timestamp ("just now" > "5 minutes ago" > "1 hour ago"). NEVER pick old operations when newer ones exist.
+            - **OPERATION SELECTION**: Conversation history is newest-first. "Last"/"it" = FIRST operation in list. NEVER skip to older operations.
             - NEVER execute FINANCIAL actions. Only REDIRECT.
             - NEVER execute SETTINGS (UTILS). REDIRECT to CUSTOM_INSTRUCTION.
             - Use PENDING_CLARIFICATION only if inference + history + defaults = zero clues.

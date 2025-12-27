@@ -309,11 +309,13 @@ public class UserContextToPromptMapper {
             return "";
         }
         
-        StringBuilder sb = new StringBuilder("\n## Recent Conversation History\n\n");
+        StringBuilder sb = new StringBuilder("\n## Recent Conversation History\n");
+        sb.append("(Sorted newest-first. For 'it'/'last', use FIRST matching operation below.)\n\n");
         
-        // Take last N messages
+        // Take last N messages and REVERSE (newest first)
         int startIndex = Math.max(0, messages.size() - limit);
-        List<ConversationMessage> recentMessages = messages.subList(startIndex, messages.size());
+        List<ConversationMessage> recentMessages = new java.util.ArrayList<>(messages.subList(startIndex, messages.size()));
+        java.util.Collections.reverse(recentMessages);
         
         for (ConversationMessage msg : recentMessages) {
             // Format message header with timestamp
