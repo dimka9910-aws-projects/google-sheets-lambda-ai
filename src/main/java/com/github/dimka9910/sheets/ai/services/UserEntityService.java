@@ -86,11 +86,61 @@ public class UserEntityService {
     }
 
     /**
-     * Save user context to PostgreSQL.
+     * Save ONLY conversation history + AI context (pending actions, custom instructions).
+     * Does NOT modify accounts, funds, or linked users.
+     * Use this method after processing a message to avoid constraint violations.
+     */
+    @Transactional
+    public void saveConversationAndAiContext(UserEntity context) {
+        log.debug("Saving conversation history + AI context for userName: {}", context.getUserName());
+        
+        // 1. Find user
+        UserJpaEntity userJpa = userRepository.findByUsername(context.getUserName())
+                .orElseThrow(() -> new IllegalStateException("User not found: " + context.getUserName()));
+
+        UUID userId = userJpa.getId();
+
+        // 2. Update AI context (custom instructions, pending actions)
+        Map<String, Object> aiContext = new HashMap<>();
+        if (context.getCustomInstructions() != null && !context.getCustomInstructions().isEmpty()) {
+            aiContext.put("customInstructions", context.getCustomInstructions());
+        }
+        if (context.getPendingActions() != null && !context.getPendingActions().isEmpty()) {
+            aiContext.put("pendingActions", context.getPendingActions());
+        }
+        userJpa.setAiContext(aiContext);
+        userRepository.save(userJpa);
+
+        // 3. Save conversation history (append new messages)
+        if (context.getConversationHistory() != null) {
+            // Get existing message count
+            int existingCount = chatMessageRepository.findLastNMessages(userId, 1000).size();
+            int newCount = context.getConversationHistory().size();
+            
+            // Only save new messages (if count increased)
+            if (newCount > existingCount) {
+                List<ConversationMessage> newMessages = context.getConversationHistory()
+                        .subList(existingCount, newCount);
+                
+                for (ConversationMessage msgDto : newMessages) {
+                    ChatMessageJpaEntity msgJpa = mapper.toJpaChatMessage(msgDto, userId);
+                    chatMessageRepository.save(msgJpa);
+                }
+                
+                log.debug("Saved {} new chat messages", newMessages.size());
+            }
+        }
+        
+        log.debug("✅ Saved conversation history + AI context for userName: {}", context.getUserName());
+    }
+
+    /**
+     * Save FULL user context to PostgreSQL (accounts, funds, linked users, chat history).
+     * Use this method for onboarding or when user explicitly modifies their configuration.
      */
     @Transactional
     public void saveContext(UserEntity context) {
-        log.info("Saving context for userName: {}", context.getUserName());
+        log.info("Saving FULL context for userName: {}", context.getUserName());
         
         // 1. Find or create user
         UserJpaEntity userJpa = userRepository.findByUsername(context.getUserName())
@@ -190,7 +240,7 @@ public class UserEntityService {
         // Save user again to update default FK references
         userRepository.save(userJpa);
         
-        log.info("✅ Saved context for userName: {}", context.getUserName());
+        log.info("✅ Saved FULL context for userName: {}", context.getUserName());
     }
 
     // ═══════════════════════════════════════════════════════════════════════════

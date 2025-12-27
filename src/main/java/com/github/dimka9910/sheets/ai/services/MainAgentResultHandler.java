@@ -121,8 +121,8 @@ public class MainAgentResultHandler {
                 .relatedFinancialActions(successfulActions)
                 .build());
         
-        // Save context before processing custom instructions
-        userContextService.saveContext(userContext);
+        // Save ONLY conversation history + AI context (NOT accounts/funds to avoid constraint violations)
+        userContextService.saveConversationAndAiContext(userContext);
         
         // Process CUSTOM_INSTRUCTION actions AFTER returning main response
         // If CustomInstructionAgent needs clarification, it will send a SECOND message

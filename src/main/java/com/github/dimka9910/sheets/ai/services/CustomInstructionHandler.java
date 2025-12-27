@@ -71,8 +71,8 @@ public class CustomInstructionHandler {
                 }
             }
             
-            // Save updated context
-            userEntityService.saveContext(userEntity);
+            // Save updated custom instructions (NOT accounts/funds)
+            userEntityService.saveConversationAndAiContext(userEntity);
             
             // If clarification needed, send SECOND message
             if (!clarifications.isEmpty()) {
@@ -226,8 +226,8 @@ public class CustomInstructionHandler {
                 .wasClarification(true)
                 .build());
         
-        // Save context with pending actions
-        userEntityService.saveContext(userEntity);
+        // Save pending actions + conversation history (NOT accounts/funds)
+        userEntityService.saveConversationAndAiContext(userEntity);
         
         // Send SECOND message via SQS
         TelegramChatResponse clarificationResponse = TelegramChatResponse.builder()
