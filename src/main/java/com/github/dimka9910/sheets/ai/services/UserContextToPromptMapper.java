@@ -316,8 +316,15 @@ public class UserContextToPromptMapper {
         List<ConversationMessage> recentMessages = messages.subList(startIndex, messages.size());
         
         for (ConversationMessage msg : recentMessages) {
-            // Format message header
-            sb.append("**").append(msg.getRole().toUpperCase()).append("**: ");
+            // Format message header with timestamp
+            sb.append("**").append(msg.getRole().toUpperCase()).append("**");
+            
+            // Add timestamp (relative time: "2 minutes ago", "just now")
+            if (msg.getTimestamp() != null) {
+                String timeAgo = formatTimeAgo(msg.getTimestamp());
+                sb.append(" (").append(timeAgo).append(")");
+            }
+            sb.append(": ");
             sb.append(truncate(msg.getContent(), 200)).append("\n");
             
             // If assistant message has related financial actions, show them
@@ -370,6 +377,33 @@ public class UserContextToPromptMapper {
     private String truncate(String s, int maxLen) {
         if (s == null) return "";
         return s.length() <= maxLen ? s : s.substring(0, maxLen) + "...";
+    }
+    
+    /**
+     * Format timestamp as relative time: "just now", "2 minutes ago", etc.
+     */
+    private String formatTimeAgo(long timestamp) {
+        long now = System.currentTimeMillis();
+        long diffMs = now - timestamp;
+        
+        if (diffMs < 0) {
+            return "just now"; // future timestamp (clock skew)
+        }
+        
+        long seconds = diffMs / 1000;
+        long minutes = seconds / 60;
+        long hours = minutes / 60;
+        long days = hours / 24;
+        
+        if (seconds < 60) {
+            return "just now";
+        } else if (minutes < 60) {
+            return minutes + (minutes == 1 ? " minute ago" : " minutes ago");
+        } else if (hours < 24) {
+            return hours + (hours == 1 ? " hour ago" : " hours ago");
+        } else {
+            return days + (days == 1 ? " day ago" : " days ago");
+        }
     }
 }
 

@@ -80,17 +80,28 @@ public class MainAgent {
             
             ## TICKET ENRICHMENT (the `message` field)
             
+            ### Example 1: Amount correction
             Bad Ticket: "not 200 but 300"
-            Good Ticket: "Modify operation ID=xxx. Original: EXPENSE 200 RSD from CARD_VISA to FOOD, comment='coffee'. User correction: amount to 300. Keep other fields."
+            Good Ticket: "Modify operation ID=b94edbe0-252e-4685-ab18-60f0fdfda97d (from conversation history). Original: EXPENSE 200 RSD from CARD_VISA to FOOD, comment='coffee'. User correction: change amount to 300. Keep all other fields unchanged."
             
+            ### Example 2: Account correction (CRITICAL)
+            User says: "не бро, это по карте я там оплатил"
+            History shows: EXPENSE 200 RSD from CASH to FOOD (ID=abc123...)
+            
+            ❌ BAD Ticket: "Transfer 1000 from card to cash" (HALLUCINATION!)
+            ✅ GOOD Ticket: "Modify operation ID=abc123... (from conversation history). Original: EXPENSE 200 RSD from CASH to FOOD. User correction: account should be CARD not CASH. Keep: amount=200, currency=RSD, fund=FOOD."
+            
+            ### Example 3: Duplicate expense
             Bad Ticket: "same but taxi"
             Good Ticket: "New expense like previous (ID=xxx, 200 RSD coffee from CARD_VISA to FOOD). Changes: comment='taxi', fund=TRANSPORT. Keep: amount=200, currency=RSD, account=CARD_VISA."
             
+            ### Example 4: New expense (no history)
             Bad Ticket: "coffee"
-            Good Ticket: "Expense: coffee. Inferred: fund=FOOD. Missing: amount. Defaults: currency=RSD, account=CARD_VISA."
+            Good Ticket: "New expense: coffee. Inferred: fund=FOOD. Missing: amount. Defaults: currency=RSD, account=CARD_VISA."
             
+            ### Example 5: Delete operation
             Bad Ticket: "delete it"
-            Good Ticket: "Delete last operation. From history: ID=xxx, EXPENSE 200 RSD coffee, CARD_VISA to FOOD, 1 min ago. User says 'delete it'."
+            Good Ticket: "Delete operation ID=xxx (from conversation history). Details: EXPENSE 200 RSD coffee, CARD_VISA to FOOD. User explicitly requested deletion."
             
             ## AVAILABLE AGENTS:
             - `SIMPLE_EXPENSE`: Single expense
@@ -122,24 +133,74 @@ public class MainAgent {
             
             # REASONING RULES
             
-            ## Analyze Conversation History
-            Look for:
-            - Last operations (find UUIDs for "it"/"last")
-            - Previous requests and responses
-            - Custom instructions
-            - Corrections
+            ## Step 1: Extract Facts from Conversation History
             
-            ## Identify Request Type
-            - **Correction**: "No", "Wrong", "Not X but Y", "Delete" → REDIRECT to CORRECTION with UUID
-            - **Multi-Step**: "and", "also" → Multiple REDIRECT actions
-            - **Info Query**: "show settings" → NO actions, just response
-            - **Partial**: Some info → REDIRECT with what you know
+            **CRITICAL: Conversation history contains `relatedFinancialActions` - EXACT operations created.**
             
-            ## Infer & Apply Defaults
+            Each ASSISTANT message includes timestamp and may include operations:
+            ```
+            **ASSISTANT** (2 minutes ago): Recorded expense...
+              → Created operations:
+                • ID: <UUID>
+                  Type: EXPENSE/INCOME/TRANSFER
+                  Amount: <number> <currency>
+                  Account: <accountId>
+                  Fund: <fundId>
+                  Comment: <text>
+            ```
+            
+            **RULES:**
+            - These UUIDs are REAL and must be used AS-IS for corrections
+            - NEVER invent operation IDs, amounts, or details not in history
+            - **"last operation" = MOST RECENT by timestamp (e.g., "just now" > "5 minutes ago")**
+            - **"it" / "that" = operation from MOST RECENT ASSISTANT message**
+            - If multiple operations exist, ALWAYS choose the one from the NEWEST message
+            
+            ## Step 2: Identify Request Type
+            
+            **Correction Indicators:**
+            - "No", "Wrong", "Not X but Y", "Actually", "Mistake"
+            - "Delete", "Remove", "Cancel"
+            - User contradicts previous response
+            
+            **Action:** REDIRECT to CORRECTION with:
+            - UUID from `relatedFinancialActions` (DO NOT INVENT)
+            - EXACT original operation details from history
+            - User's requested changes
+            
+            **Multi-Step Indicators:**
+            - "and", "also", "plus"
+            - Multiple distinct actions mentioned
+            
+            **Action:** Multiple REDIRECT actions (one per sub-task)
+            
+            **Info Query:**
+            - "show", "list", "what are"
+            - NO financial operation
+            
+            **Action:** NO actions, just text response
+            
+            ## Step 3: Infer & Apply Defaults
             - Keywords: "coffee" → FOOD, "taxi" → TRANSPORT
-            - Context: "same but..." → copy from previous
+            - Context: "same but..." → copy from previous operation (from history)
             - Instructions: Check custom rules
             - Defaults: Mention in Ticket if used
+            
+            ## ⚠️ ANTI-HALLUCINATION GUARD
+            
+            **FORBIDDEN:**
+            - ❌ Inventing operation UUIDs not in conversation history
+            - ❌ Creating "transfer" when user says "correct account"
+            - ❌ Assuming amounts not mentioned by user
+            - ❌ Inferring operation types user didn't request
+            - ❌ Using UUID from OLD message when NEWER one exists (check timestamps!)
+            
+            **When user says "last" / "it" / "that":**
+            1. Find ASSISTANT message with MOST RECENT timestamp
+            2. Extract UUID from that message's `relatedFinancialActions`
+            3. Use ONLY that UUID, not older ones
+            
+            **If uncertain about UUID or details:** Ask user OR check history AGAIN.
             
             {formatInstructions}
             
@@ -276,7 +337,16 @@ public class MainAgent {
         params.put("formatInstructions", outputConverter.getFormat());
         
         PromptTemplate template = new PromptTemplate(promptTemplate);
-        return Objects.requireNonNull(template.render(params), "Prompt template render returned null");
+        String rendered = Objects.requireNonNull(template.render(params), "Prompt template render returned null");
+        
+        // DEBUG: Log conversation history section
+        if (context.getConversationHistory() != null && !context.getConversationHistory().isEmpty()) {
+            log.debug("📜 Conversation history passed to MainAgent ({} messages):", context.getConversationHistory().size());
+            String historySection = contextMapper.formatConversationHistoryWithActions(context.getConversationHistory(), 10);
+            log.debug(historySection);
+        }
+        
+        return rendered;
     }
 
     private String truncate(String s, int maxLen) {
