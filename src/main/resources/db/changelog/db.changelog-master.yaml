@@ -11,5 +11,5 @@ databaseChangeLog:
       file: db/changelog/migrations/005-refactor-financial-operations.yaml
   - include:
       file: db/changelog/migrations/006-change-related-operations-to-jsonb.yaml
-
-
+  - include:
+      file: db/changelog/migrations/007-remove-was-clarification-column.yaml

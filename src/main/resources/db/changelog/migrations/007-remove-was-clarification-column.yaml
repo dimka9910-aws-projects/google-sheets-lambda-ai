@@ -1,0 +1,11 @@
+databaseChangeLog:
+  - changeSet:
+      id: 007-remove-was-clarification
+      author: dimka9910
+      comment: "Remove unused was_clarification column from chat_messages table"
+      changes:
+        - dropColumn:
+            tableName: chat_messages
+            columnName: was_clarification
+
+

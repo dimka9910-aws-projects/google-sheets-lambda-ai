@@ -304,7 +304,6 @@ public class UserEntityService {
                     .map(jpa -> ConversationMessage.builder()
                             .role(jpa.getRole().name())
                             .content(jpa.getContent())
-                            .wasClarification(jpa.getWasClarification())
                             .relatedFinancialActions(jpa.getRelatedFinancialActions())
                             .timestamp(jpa.getCreatedAt() != null ? jpa.getCreatedAt().toEpochMilli() : null)
                             .build())

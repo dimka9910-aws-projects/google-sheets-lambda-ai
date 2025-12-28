@@ -223,7 +223,6 @@ public class CustomInstructionHandler {
         userEntity.addToHistory(ConversationMessage.builder()
                 .role("assistant")
                 .content(clarificationMsg.toString())
-                .wasClarification(true)
                 .build());
         
         // Save pending actions + conversation history (NOT accounts/funds)

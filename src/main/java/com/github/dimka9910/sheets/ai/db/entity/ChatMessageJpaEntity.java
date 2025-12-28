@@ -37,9 +37,6 @@ public class ChatMessageJpaEntity {
     @Column(name = "content", nullable = false, columnDefinition = "text")
     private String content;
 
-    @Column(name = "was_clarification")
-    private Boolean wasClarification;
-
     @Type(JsonBinaryType.class)
     @Column(name = "related_financial_actions", columnDefinition = "jsonb")
     private List<FinancialAction> relatedFinancialActions;
@@ -51,9 +48,6 @@ public class ChatMessageJpaEntity {
     protected void onCreate() {
         if (createdAt == null) {
             createdAt = Instant.now();
-        }
-        if (wasClarification == null) {
-            wasClarification = false;
         }
         if (relatedFinancialActions == null) {
             relatedFinancialActions = new ArrayList<>();

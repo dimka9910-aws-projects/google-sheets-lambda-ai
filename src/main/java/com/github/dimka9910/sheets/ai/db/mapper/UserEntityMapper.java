@@ -128,7 +128,6 @@ public class UserEntityMapper {
         return ConversationMessage.builder()
                 .role(jpa.getRole().name())
                 .content(jpa.getContent())
-                .wasClarification(jpa.getWasClarification())
                 .relatedFinancialActions(jpa.getRelatedFinancialActions())
                 .timestamp(jpa.getCreatedAt() != null ? jpa.getCreatedAt().toEpochMilli() : null)
                 .build();
@@ -217,7 +216,6 @@ public class UserEntityMapper {
                 .userId(userId)
                 .role(ChatMessageJpaEntity.MessageRole.valueOf(dto.getRole()))
                 .content(dto.getContent())
-                .wasClarification(dto.getWasClarification())
                 .relatedFinancialActions(dto.getRelatedFinancialActions())
                 .build();
     }

@@ -113,11 +113,9 @@ public class MainAgentResultHandler {
 
         
         // Add assistant response to history with related financial actions
-        boolean wasClarification = !pendingActions.isEmpty();
         userContext.addToHistory(ConversationMessage.builder()
                 .role("assistant")
                 .content(agentResponse.getResponse())
-                .wasClarification(wasClarification)
                 .relatedFinancialActions(successfulActions)
                 .build());
         

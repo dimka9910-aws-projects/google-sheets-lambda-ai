@@ -207,11 +207,6 @@ public class UserEntity {
         return msg != null ? msg.getContent() : null;
     }
     
-    public boolean isAwaitingClarification() {
-        ConversationMessage last = getLastAssistantMessage();
-        return last != null && Boolean.TRUE.equals(last.getWasClarification());
-    }
-    
     // ═══════════════════════════════════════════════════════════════════════════
     // PENDING ACTIONS
     // ═══════════════════════════════════════════════════════════════════════════

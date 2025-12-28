@@ -22,9 +22,6 @@ public class ConversationMessage {
     private String content;   // текст сообщения
     private Long timestamp;   // epoch millis
     
-    // Флаг что это был уточняющий вопрос
-    private Boolean wasClarification;
-    
     // FinancialAction объекты созданные как результат этого сообщения
     // (для аудита, отмены, и контекста для corrections)
     private List<FinancialAction> relatedFinancialActions;
@@ -34,7 +31,6 @@ public class ConversationMessage {
                 .role("user")
                 .content(content)
                 .timestamp(System.currentTimeMillis())
-                .wasClarification(false)
                 .build();
     }
 }
