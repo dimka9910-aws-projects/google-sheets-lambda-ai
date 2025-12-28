@@ -104,15 +104,18 @@ public class MessageClassifierAgent {
             
             ## Rules
             - Return ONLY ONE category
+            - If message contains NEGATION ("не", "not", "нет") with person name → COMPLEX_ACTION (correction, not third party)
             - If unclear or doesn't fit simple patterns → COMPLEX_ACTION
             - When in doubt → COMPLEX_ACTION (safe default)
             """;
     
     private static final String THIRD_PARTY_CATEGORY_TEXT = """
-            **THIRD_PARTY_ACTION** - Involves another person (linked user)
-            - Mentions person by name or relationship (Sarah, girlfriend, wife, partner)
-            - Paying FOR someone, receiving FROM someone, transfers to/from people
-            - Examples: "to Sarah 200", "for girlfriend 1500", "from partner 500"
+            **THIRD_PARTY_ACTION** - Involves SPECIFIC linked user (rare!)
+            - EXPLICIT name or EXPLICIT relationship keyword matching linked users
+            - Generic words like "friends", "brothers", "guys" → NOT third party (use SIMPLE_EXPENSE with comment)
+            - Only use if message CLEARLY identifies a specific person
+            - Examples: "to Sarah 200" (if Sarah is linked), "for girlfriend" (if girlfriend is linked)
+            - Counter-examples: "for friends 500" → SIMPLE_EXPENSE, "закинул братьям" → SIMPLE_EXPENSE
             """;
     
     // ═══════════════════════════════════════════════════════════════════════════
