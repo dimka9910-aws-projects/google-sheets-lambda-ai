@@ -57,7 +57,17 @@ public class FinancialAgent {
     // ═══════════════════════════════════════════════════════════════════════════
     
     public FinancialAgentResponse process(String message, UserEntity userContext) {
-        log.info("🔷 FinancialAgent processing: \"{}\"", message);
+        return process(message, userContext, true);
+    }
+    
+    /**
+     * Process financial operation with optional linked users context.
+     * 
+     * @param includeLinkedUsersContext If true, includes linked users in prompt (for third-party operations).
+     *                                   If false, omits linked users to save tokens (for simple operations).
+     */
+    public FinancialAgentResponse process(String message, UserEntity userContext, boolean includeLinkedUsersContext) {
+        log.info("🔷 FinancialAgent processing: \"{}\" (includeLinkedUsers={})", message, includeLinkedUsersContext);
         
         if (message == null || message.isBlank()) {
             return FinancialAgentResponse.builder()
@@ -68,7 +78,7 @@ public class FinancialAgent {
         
         try {
             // Build prompt and append JSON schema
-            String systemPrompt = buildSystemPrompt(userContext);
+            String systemPrompt = buildSystemPrompt(userContext, includeLinkedUsersContext);
             String userPrompt = "User message: " + message;
             
             // Add JSON schema to prompt (cached, no reflection overhead)
@@ -391,7 +401,7 @@ public class FinancialAgent {
         - "500 to friend" → {{"context": "User wants to send 500 RSD to friend. Unclear: friend is not in linked users list. Is this a linked user or regular expense?"}}
     """;
     
-    private String buildSystemPrompt(UserEntity context) {
+    private String buildSystemPrompt(UserEntity context, boolean includeLinkedUsersContext) {
         Map<String, Object> params = new HashMap<>();
         params.put("currentUser", context.getUserName() != null ? context.getUserName() : "USER");
         params.put("currency", context.getDefaultCurrency() != null ? context.getDefaultCurrency() : "RSD");
@@ -402,13 +412,19 @@ public class FinancialAgent {
         
         String accountsList = contextMapper.formatAccountsList(context.getAccounts());
         String fundsList = contextMapper.formatFundsList(context.getFunds());
-        String linkedUsersList = contextMapper.formatLinkedUsersList(context.getLinkedUsers());
         String customInstructions = contextMapper.formatCustomInstructionsSection(context.getCustomInstructions());
         
         params.put("accounts", accountsList != null ? accountsList : "(No accounts)");
         params.put("funds", fundsList != null ? fundsList : "(No funds)");
-        params.put("linkedUsers", linkedUsersList != null ? linkedUsersList : "(No linked users)");
         params.put("customInstructions", customInstructions != null ? customInstructions : "");
+        
+        // Include linked users context only if requested (token optimization)
+        if (includeLinkedUsersContext) {
+            String linkedUsersList = contextMapper.formatLinkedUsersList(context.getLinkedUsers());
+            params.put("linkedUsers", linkedUsersList != null ? linkedUsersList : "(No linked users)");
+        } else {
+            params.put("linkedUsers", "");  // Empty - not included in prompt
+        }
         
         PromptTemplate template = new PromptTemplate(PROMPT_TEMPLATE);
         return Objects.requireNonNull(template.render(params), "Prompt template render returned null");

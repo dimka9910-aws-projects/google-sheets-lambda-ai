@@ -26,9 +26,10 @@ import java.util.List;
  * Spring Service for orchestrating message processing.
  * 
  * Simplified flow:
- * 1. ClassifierAgent — determine category (SIMPLE_FINANCIAL vs COMPLEX_ACTION)
+ * 1. ClassifierAgent — determine category (SIMPLE_FINANCIAL vs THIRD_PARTY_FINANCIAL vs COMPLEX_ACTION)
  * 2. Route to appropriate handler:
- *    - SIMPLE_FINANCIAL → FinancialAgent (expenses, transfers, third-party actions)
+ *    - SIMPLE_FINANCIAL → FinancialAgent (without linked users context - token optimization)
+ *    - THIRD_PARTY_FINANCIAL → FinancialAgent (with linked users context)
  *    - COMPLEX_ACTION → MainAgent (corrections, multi-step, custom instructions)
  */
 @Slf4j
@@ -91,8 +92,12 @@ public class Orchestrator {
             // Step 3: Route to appropriate agent and handle result
             BaseAgentResponse agentResponse = switch (category) {
                 case SIMPLE_FINANCIAL -> {
-                    log.info("→ Routing to FinancialAgent");
-                    yield financialAgent.process(message, userContext);
+                    log.info("→ Routing to FinancialAgent (no linked users context)");
+                    yield financialAgent.process(message, userContext, false);  // Token optimization: exclude linked users
+                }
+                case THIRD_PARTY_FINANCIAL -> {
+                    log.info("→ Routing to FinancialAgent (with linked users context)");
+                    yield financialAgent.process(message, userContext, true);   // Include linked users context
                 }
                 case COMPLEX_ACTION -> {
                     log.info("→ Routing to MainAgent (COMPLEX_ACTION)");
@@ -170,8 +175,12 @@ public class Orchestrator {
                         .build();
             }
             case FINANCIAL -> {
-                log.info("  ↳ Calling FinancialAgent");
-                yield financialAgent.process(message, userContext);
+                log.info("  ↳ Calling FinancialAgent (no linked users)");
+                yield financialAgent.process(message, userContext, false);
+            }
+            case THIRD_PARTY_FINANCIAL -> {
+                log.info("  ↳ Calling FinancialAgent (with linked users)");
+                yield financialAgent.process(message, userContext, true);
             }
             case CORRECTION -> {
                 log.info("  ↳ Calling ExpenseEditAndDeletionAgent");

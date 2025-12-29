@@ -24,7 +24,7 @@ public class MainAgentRedirectAction {
     /**
      * Type of agent to redirect to.
      */
-    @JsonPropertyDescription("Type of specialized agent to handle this request. Options: CUSTOM_INSTRUCTION (for settings/preferences), FINANCIAL (for any financial operation: expenses, transfers, income), CORRECTION (for modifying or deleting existing operations).")
+    @JsonPropertyDescription("Type of specialized agent to handle this request. Options: CUSTOM_INSTRUCTION (for settings/preferences), FINANCIAL (for financial operations without linked users), THIRD_PARTY_FINANCIAL (for operations with linked users), CORRECTION (for modifying or deleting existing operations).")
     private AgentType agentType;
     
     /**
@@ -51,11 +51,18 @@ public class MainAgentRedirectAction {
         CUSTOM_INSTRUCTION,
         
         /**
-         * FinancialAgent - handles ALL financial operations.
-         * Covers: expenses, internal transfers, transfers to/from linked users, income.
-         * Examples: "200 on coffee", "transfer 1000 from card to cash", "sent 500 to Bob"
+         * FinancialAgent - handles financial operations WITHOUT linked users (token optimized).
+         * Covers: expenses, internal transfers, income.
+         * Examples: "200 on coffee", "transfer 1000 from card to cash"
          */
         FINANCIAL,
+        
+        /**
+         * FinancialAgent - handles financial operations WITH linked users.
+         * Covers: transfers to/from linked users, expenses for linked users.
+         * Examples: "sent 500 to Bob", "bought coffee for Sarah 200"
+         */
+        THIRD_PARTY_FINANCIAL,
         
         /**
          * ExpenseEditAndDeletionAgent - handles corrections (MODIFY/DELETE) of existing operations.

@@ -97,7 +97,8 @@ public class MainAgent {
             Good Ticket: "Delete last operation. From history: ID=xxx, EXPENSE 200 RSD coffee, CARD_VISA to FOOD, 1 min ago. User says 'delete it'."
             
             ## AVAILABLE AGENTS:
-            - `FINANCIAL`: Any financial operation (expenses, transfers, income) - handles ALL simple financial operations
+            - `FINANCIAL`: Financial operations WITHOUT linked users (expenses, internal transfers, income)
+            - `THIRD_PARTY_FINANCIAL`: Financial operations WITH linked users (transfers to/from linked users, expenses for linked users)
             - `CUSTOM_INSTRUCTION`: Settings changes
             - `CORRECTION`: Modify/delete existing operations
             
@@ -113,7 +114,7 @@ public class MainAgent {
             
             ```json
             {
-              "agentType": "FINANCIAL | CUSTOM_INSTRUCTION | CORRECTION",
+              "agentType": "FINANCIAL | THIRD_PARTY_FINANCIAL | CUSTOM_INSTRUCTION | CORRECTION",
               "message": "Enriched Ticket with full context (UUID, inferred values, defaults)",
               "reason": "Optional debug note"
             }

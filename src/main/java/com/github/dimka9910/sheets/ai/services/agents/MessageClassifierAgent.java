@@ -53,10 +53,11 @@ public class MessageClassifierAgent {
     
     /**
      * Message categories (ONLY ONE per message).
-     * Simplified to 2 categories for clearer routing.
+     * Split financial operations for token optimization.
      */
     public enum Category {
-        SIMPLE_FINANCIAL,         // Single straightforward financial operation → FinancialAgent (fast, cheap)
+        SIMPLE_FINANCIAL,         // Financial operation WITHOUT linked users → FinancialAgent (minimal context, cheap)
+        THIRD_PARTY_FINANCIAL,    // Financial operation WITH linked users → FinancialAgent (with linked users context)
         COMPLEX_ACTION            // Everything else → MainAgent with full context (corrections, multi-step, custom instructions)
     }
 
@@ -73,18 +74,26 @@ public class MessageClassifierAgent {
             
             ## Categories (choose EXACTLY ONE)
             
-            **SIMPLE_FINANCIAL** - Single straightforward financial operation
+            **SIMPLE_FINANCIAL** - Financial operation WITHOUT linked users
             This includes:
             - Simple expenses: "coffee 200", "taxi 500", "groceries 3000"
             - Transfers between own accounts: "transfer 1000 from card to cash", "withdrew 500"
+            - Expenses with generic person mentions (not specific linked users): "for friends", "brothers", "guys"
+            
+            Characteristics:
+            - ONE clear operation (not multiple)
+            - No specific linked users mentioned
+            - All information is straightforward
+            
+            **THIRD_PARTY_FINANCIAL** - Financial operation WITH specific linked users
+            This includes:
             - Transfers to/from specific linked users: "sent 500 to {linkedUsersExample}", "got 200 from {linkedUsersExample}"
             - Expenses for specific linked users: "bought coffee for {linkedUsersExample} 200"
             
             Characteristics:
             - ONE clear operation (not multiple)
-            - All information is straightforward (amount, what, where)
-            - No corrections to previous operations
-            - No custom instructions or settings
+            - Explicitly mentions SPECIFIC linked user by name or alias
+            - All information is straightforward
             
             **COMPLEX_ACTION** - Everything else (default fallback)
             This includes:
@@ -98,7 +107,7 @@ public class MessageClassifierAgent {
             
             ## Special Rules
             - If message contains NEGATION ("не", "not", "нет", "actually") → COMPLEX_ACTION (likely a correction)
-            - If person mentioned is NOT in linked users list → could be SIMPLE_FINANCIAL (treated as expense with comment)
+            - If person mentioned is NOT in linked users list → SIMPLE_FINANCIAL (treated as expense with comment)
             - Generic words like "friends", "brothers", "guys" (not specific names) → SIMPLE_FINANCIAL (expense with comment)
             - When in doubt → COMPLEX_ACTION (safe default)
             
