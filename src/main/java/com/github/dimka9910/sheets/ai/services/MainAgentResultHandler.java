@@ -163,13 +163,12 @@ public class MainAgentResultHandler {
      * Handle single InstructionAction.
      */
     private void handleInstructionAction(InstructionAction action, UserEntity userContext) {
-        String actionType = action.getActionType();
         log.info("Instruction action: {} (entity={}, entityId={})", 
-                actionType, action.getEntityType(), action.getEntityId());
+                action.getActionType(), action.getEntityType(), action.getEntityId());
         
         // TODO: Implement instruction action handling
         // This will be done when we update CustomInstructionAgent to use CustomInstructionAgentResponse
-        log.warn("⚠️ Instruction action handling not yet implemented: {}", actionType);
+        log.warn("⚠️ Instruction action handling not yet implemented: {}", action.getActionType());
     }
 
     // ═══════════════════════════════════════════════════════════════════════════

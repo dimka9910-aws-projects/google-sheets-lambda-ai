@@ -25,11 +25,22 @@ import lombok.NoArgsConstructor;
 @AllArgsConstructor
 public class InstructionAction {
     
+    public enum ActionType {
+        ADD_LINKED_USER_ALIAS,
+        REMOVE_LINKED_USER_ALIAS,
+        ADD_ACCOUNT_ALIAS,
+        REMOVE_ACCOUNT_ALIAS,
+        ADD_FUND_ALIAS,
+        REMOVE_FUND_ALIAS,
+        ADD_CUSTOM_INSTRUCTION,
+        REMOVE_CUSTOM_INSTRUCTION,
+        UPDATE_DEFAULT
+    }
+    
     /**
      * Action type identifier.
-     * Examples: "ADD_LINKED_USER_ALIAS", "REMOVE_ACCOUNT_ALIAS", "UPDATE_DEFAULT"
      */
-    private String actionType;
+    private ActionType actionType;
     
     /**
      * Entity type being modified.
@@ -57,16 +68,23 @@ public class InstructionAction {
     
     @JsonIgnore
     public boolean isAdd() {
-        return actionType != null && actionType.startsWith("ADD_");
+        return actionType != null && actionType.name().startsWith("ADD_");
     }
     
     @JsonIgnore
     public boolean isRemove() {
-        return actionType != null && actionType.startsWith("REMOVE_");
+        return actionType != null && actionType.name().startsWith("REMOVE_");
     }
     
     @JsonIgnore
     public boolean isUpdate() {
-        return actionType != null && actionType.startsWith("UPDATE_");
+        return actionType != null && actionType.name().startsWith("UPDATE_");
+    }
+    
+    /**
+     * Get action type as string (for backward compatibility with prompts).
+     */
+    public String getActionTypeString() {
+        return actionType != null ? actionType.name() : null;
     }
 }

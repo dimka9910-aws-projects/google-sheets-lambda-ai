@@ -82,7 +82,6 @@ public class CustomInstructionHandler {
      * Uses universal InstructionAction structure instead of separate classes.
      */
     private void applyInstructionAction(InstructionAction action, UserEntity userEntity) {
-        String actionType = action.getActionType();
         String entityType = action.getEntityType();
         String entityId = action.getEntityId();
         String value = action.getValue();
@@ -170,7 +169,7 @@ public class CustomInstructionHandler {
             return;
         }
         
-        log.warn("Unknown instruction action type: {}", actionType);
+        log.warn("Unknown instruction action type: {}", action.getActionType());
     }
 
 //     /**
