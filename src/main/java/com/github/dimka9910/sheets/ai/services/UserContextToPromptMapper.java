@@ -271,6 +271,8 @@ public class UserContextToPromptMapper {
             UserEntity linkedUserEntity = linkedUserEntitys.get(lu.getUserName());
             
             // Defaults (important for fallback logic)
+            sb.append("\n  Preferred Language: ").append(linkedUserEntity.getPreferredLanguage() != null ? 
+                    linkedUserEntity.getPreferredLanguage() : "not set");
             sb.append("\n  Defaults: ");
             sb.append("Currency: ").append(linkedUserEntity.getDefaultCurrency() != null ? 
                     linkedUserEntity.getDefaultCurrency() : "not set");
