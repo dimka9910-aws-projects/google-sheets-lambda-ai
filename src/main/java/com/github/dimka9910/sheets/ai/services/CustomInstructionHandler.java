@@ -82,94 +82,55 @@ public class CustomInstructionHandler {
      * Uses universal InstructionAction structure instead of separate classes.
      */
     private void applyInstructionAction(InstructionAction action, UserEntity userEntity) {
-        String entityType = action.getEntityType();
         String entityId = action.getEntityId();
         String value = action.getValue();
         
-        // Handle ADD operations
-        if (action.isAdd()) {
-            switch (entityType) {
-                case "linkedUser" -> {
-                    addLinkedUserAlias(userEntity, entityId, value);
-                }
-                case "account" -> {
-                    addAccountAlias(userEntity, entityId, value);
-                }
-                case "fund" -> {
-                    addFundAlias(userEntity, entityId, value);
-                }
-                case "customInstruction" -> {
-                    userEntity.addInstruction(value);
-                    log.info("Added custom instruction: {}", value);
-                }
-                default -> log.warn("Unknown entity type for ADD: {}", entityType);
+        switch (action.getActionType()) {
+            case ADD_LINKED_USER_ALIAS -> addLinkedUserAlias(userEntity, entityId, value);
+            case ADD_ACCOUNT_ALIAS -> addAccountAlias(userEntity, entityId, value);
+            case ADD_FUND_ALIAS -> addFundAlias(userEntity, entityId, value);
+            case ADD_CUSTOM_INSTRUCTION -> {
+                userEntity.addInstruction(value);
+                log.info("Added custom instruction: {}", value);
             }
-            return;
-        }
-        
-        // Handle REMOVE operations
-        if (action.isRemove()) {
-            switch (entityType) {
-                case "linkedUser" -> {
-                    removeLinkedUserAlias(userEntity, entityId, value);
+            
+            case REMOVE_LINKED_USER_ALIAS -> removeLinkedUserAlias(userEntity, entityId, value);
+            case REMOVE_ACCOUNT_ALIAS -> removeAccountAlias(userEntity, entityId, value);
+            case REMOVE_FUND_ALIAS -> removeFundAlias(userEntity, entityId, value);
+            case REMOVE_CUSTOM_INSTRUCTION -> {
+                Integer index = action.getIndex();
+                if (index != null) {
+                    userEntity.removeInstruction(index);
+                    log.info("Removed custom instruction at index: {}", index);
+                } else {
+                    log.warn("REMOVE_CUSTOM_INSTRUCTION requires index field");
                 }
-                case "account" -> {
-                    removeAccountAlias(userEntity, entityId, value);
-                }
-                case "fund" -> {
-                    removeFundAlias(userEntity, entityId, value);
-                }
-                case "customInstruction" -> {
-                    Integer index = action.getIndex();
-                    if (index != null) {
-                        userEntity.removeInstruction(index);
-                        log.info("Removed custom instruction at index: {}", index);
-                    } else {
-                        log.warn("REMOVE_CUSTOM_INSTRUCTION requires index field");
-                    }
-                }
-                default -> log.warn("Unknown entity type for REMOVE: {}", entityType);
             }
-            return;
-        }
-        
-        // Handle UPDATE operations
-        if (action.isUpdate()) {
-            if ("default".equals(entityType)) {
+            
+            case UPDATE_DEFAULT -> {
                 switch (entityId) {
                     case "currency" -> {
                         userEntity.setDefaultCurrency(value);
                         log.info("Updated default currency: {}", value);
                     }
-                    case "account" -> {
-                        // Find account by ID or alias
-                        userEntity.findAccountByAlias(value).ifPresentOrElse(
-                                account -> {
-                                    userEntity.setDefaultAccount(account);
-                                    log.info("Updated default account: {}", account.getAccountId());
-                                },
-                                () -> log.warn("Account not found: {}", value)
-                        );
-                    }
-                    case "fund" -> {
-                        // Find fund by ID or alias
-                        userEntity.findFundByAlias(value).ifPresentOrElse(
-                                fund -> {
-                                    userEntity.setDefaultFund(fund);
-                                    log.info("Updated default fund: {}", fund.getFundId());
-                                },
-                                () -> log.warn("Fund not found: {}", value)
-                        );
-                    }
+                    case "account" -> userEntity.findAccountByAlias(value).ifPresentOrElse(
+                            account -> {
+                                userEntity.setDefaultAccount(account);
+                                log.info("Updated default account: {}", account.getAccountId());
+                            },
+                            () -> log.warn("Account not found: {}", value)
+                    );
+                    case "fund" -> userEntity.findFundByAlias(value).ifPresentOrElse(
+                            fund -> {
+                                userEntity.setDefaultFund(fund);
+                                log.info("Updated default fund: {}", fund.getFundId());
+                            },
+                            () -> log.warn("Fund not found: {}", value)
+                    );
                     default -> log.warn("Unknown default type: {}", entityId);
                 }
-            } else {
-                log.warn("Unknown entity type for UPDATE: {}", entityType);
             }
-            return;
         }
-        
-        log.warn("Unknown instruction action type: {}", action.getActionType());
     }
 
 //     /**

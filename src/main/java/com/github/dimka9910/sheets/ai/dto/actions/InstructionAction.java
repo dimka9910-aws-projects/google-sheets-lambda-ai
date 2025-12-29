@@ -65,26 +65,4 @@ public class InstructionAction {
      * Optional, only used for REMOVE_CUSTOM_INSTRUCTION.
      */
     private Integer index;
-    
-    @JsonIgnore
-    public boolean isAdd() {
-        return actionType != null && actionType.name().startsWith("ADD_");
-    }
-    
-    @JsonIgnore
-    public boolean isRemove() {
-        return actionType != null && actionType.name().startsWith("REMOVE_");
-    }
-    
-    @JsonIgnore
-    public boolean isUpdate() {
-        return actionType != null && actionType.name().startsWith("UPDATE_");
-    }
-    
-    /**
-     * Get action type as string (for backward compatibility with prompts).
-     */
-    public String getActionTypeString() {
-        return actionType != null ? actionType.name() : null;
-    }
 }
