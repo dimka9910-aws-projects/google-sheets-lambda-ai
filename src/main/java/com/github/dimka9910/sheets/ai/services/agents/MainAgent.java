@@ -114,7 +114,7 @@ public class MainAgent {
             
             ```json
             {
-              "agentType": "FINANCIAL | THIRD_PARTY_FINANCIAL | CUSTOM_INSTRUCTION | CORRECTION",
+              "agentType": "FINANCIAL or THIRD_PARTY_FINANCIAL or CUSTOM_INSTRUCTION or CORRECTION",
               "message": "Enriched Ticket with full context (UUID, inferred values, defaults)",
               "reason": "Optional debug note"
             }
