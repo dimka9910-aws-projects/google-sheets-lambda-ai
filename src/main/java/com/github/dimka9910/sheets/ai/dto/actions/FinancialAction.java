@@ -31,10 +31,7 @@ import java.util.UUID;
 @Builder
 @NoArgsConstructor
 @AllArgsConstructor
-@EqualsAndHashCode(callSuper = false)
-public class FinancialAction extends AgentAction {
-    
-    public static final String TYPE = "FINANCIAL";
+public class FinancialAction {
     
     /**
      * Unique identifier for this financial action.
@@ -113,11 +110,6 @@ public class FinancialAction extends AgentAction {
      */
     @Builder.Default
     private boolean correction = false;
-    
-    @Override
-    public String getType() {
-        return TYPE;
-    }
     
     /**
      * Operation types for financial actions

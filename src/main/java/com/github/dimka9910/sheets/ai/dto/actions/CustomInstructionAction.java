@@ -1,6 +1,5 @@
 package com.github.dimka9910.sheets.ai.dto.actions;
 
-import com.fasterxml.jackson.annotation.JsonIgnore;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
@@ -23,7 +22,7 @@ import lombok.NoArgsConstructor;
 @Builder
 @NoArgsConstructor
 @AllArgsConstructor
-public class InstructionAction {
+public class CustomInstructionAction {
     
     public enum ActionType {
         ADD_LINKED_USER_ALIAS,

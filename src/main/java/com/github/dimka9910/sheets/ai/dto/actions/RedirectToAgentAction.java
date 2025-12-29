@@ -20,10 +20,7 @@ import lombok.NoArgsConstructor;
 @Builder
 @NoArgsConstructor
 @AllArgsConstructor
-@EqualsAndHashCode(callSuper = false)
-public class RedirectToAgentAction extends AgentAction {
-    
-    public static final String TYPE = "REDIRECT_TO_AGENT";
+public class RedirectToAgentAction {
     
     /**
      * Type of agent to redirect to.
@@ -43,11 +40,6 @@ public class RedirectToAgentAction extends AgentAction {
      */
     @JsonPropertyDescription("Optional explanation of why this request is being redirected (for debugging). Example: 'Simple expense, no complexity'.")
     private String reason;
-    
-    @Override
-    public String getType() {
-        return TYPE;
-    }
     
     /**
      * Enum of specialized agent types.

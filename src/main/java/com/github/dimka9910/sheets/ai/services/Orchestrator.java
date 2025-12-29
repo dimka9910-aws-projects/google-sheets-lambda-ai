@@ -4,7 +4,6 @@ import com.github.dimka9910.sheets.ai.dto.actions.PendingClarificationAction;
 import com.github.dimka9910.sheets.ai.dto.actions.RedirectToAgentAction;
 import com.github.dimka9910.sheets.ai.dto.response.BaseAgentResponse;
 import com.github.dimka9910.sheets.ai.dto.response.MainAgentResponse;
-import com.github.dimka9910.sheets.ai.dto.response.FinancialAgentResponse;
 import com.github.dimka9910.sheets.ai.dto.response.CustomInstructionAgentResponse;
 import com.github.dimka9910.sheets.ai.dto.telegram.TelegramChatRequest;
 import com.github.dimka9910.sheets.ai.dto.telegram.TelegramChatResponse;
@@ -176,7 +175,7 @@ public class Orchestrator {
                 // Convert CustomInstructionAgent.Response to CustomInstructionAgentResponse
                 // TODO: Update CustomInstructionAgent to return CustomInstructionAgentResponse directly
                 yield CustomInstructionAgentResponse.builder()
-                        .instructionActions(List.of())
+                        .customInstructionActions(List.of())
                         .message(ciResponse.explanation() != null ? ciResponse.explanation() : "Settings updated")
                         .build();
             }

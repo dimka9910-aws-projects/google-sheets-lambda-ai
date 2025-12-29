@@ -1,10 +1,8 @@
 package com.github.dimka9910.sheets.ai.services;
 
 import com.github.dimka9910.sheets.ai.dto.telegram.TelegramChatRequest;
-import com.github.dimka9910.sheets.ai.dto.telegram.TelegramChatResponse;
 import com.github.dimka9910.sheets.ai.dto.actions.*;
 import com.github.dimka9910.sheets.ai.dto.user.AccountEntry;
-import com.github.dimka9910.sheets.ai.dto.user.ConversationMessage;
 import com.github.dimka9910.sheets.ai.dto.user.FundEntry;
 import com.github.dimka9910.sheets.ai.dto.user.LinkedUserEntry;
 import com.github.dimka9910.sheets.ai.dto.user.UserEntity;
@@ -60,7 +58,7 @@ public class CustomInstructionHandler {
                     agentResponse.explanation());
             
             // Apply all instruction actions
-            for (InstructionAction action : agentResponse.actions()) {
+            for (CustomInstructionAction action : agentResponse.actions()) {
                 applyInstructionAction(action, userEntity);
             }
             
@@ -81,7 +79,7 @@ public class CustomInstructionHandler {
      * Apply a single InstructionAction to UserEntity.
      * Uses universal InstructionAction structure instead of separate classes.
      */
-    private void applyInstructionAction(InstructionAction action, UserEntity userEntity) {
+    private void applyInstructionAction(CustomInstructionAction action, UserEntity userEntity) {
         String entityId = action.getEntityId();
         String value = action.getValue();
         

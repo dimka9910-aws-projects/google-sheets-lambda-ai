@@ -5,7 +5,7 @@ import com.github.dimka9910.sheets.ai.dto.actions.*;
 import com.github.dimka9910.sheets.ai.dto.response.BaseAgentResponse;
 import com.github.dimka9910.sheets.ai.dto.response.FinancialAgentResponse;
 import com.github.dimka9910.sheets.ai.dto.response.CustomInstructionAgentResponse;
-import com.github.dimka9910.sheets.ai.dto.actions.InstructionAction;
+import com.github.dimka9910.sheets.ai.dto.actions.CustomInstructionAction;
 import com.github.dimka9910.sheets.ai.dto.telegram.TelegramChatRequest;
 import com.github.dimka9910.sheets.ai.dto.telegram.TelegramChatResponse;
 import com.github.dimka9910.sheets.ai.dto.user.ConversationMessage;
@@ -18,7 +18,6 @@ import org.springframework.stereotype.Service;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
-import java.util.UUID;
 
 /**
  * Spring Service for handling MainAgentResponse results.
@@ -68,7 +67,7 @@ public class MainAgentResultHandler {
         
         // Extract actions based on response type
         List<FinancialAction> financialActions = new ArrayList<>();
-        List<InstructionAction> instructionActions = new ArrayList<>();
+        List<CustomInstructionAction> customInstructionActions = new ArrayList<>();
         List<PendingClarificationAction> pendingActions = agentResponse.getPendingClarifications() != null 
                 ? agentResponse.getPendingClarifications() 
                 : new ArrayList<>();
@@ -80,11 +79,11 @@ public class MainAgentResultHandler {
             log.info("Processing FinancialAgentResponse: {} financial actions, {} pending", 
                     financialActions.size(), pendingActions.size());
         } else if (agentResponse instanceof CustomInstructionAgentResponse instructionResponse) {
-            instructionActions = instructionResponse.getInstructionActions() != null 
-                    ? instructionResponse.getInstructionActions() 
+            customInstructionActions = instructionResponse.getCustomInstructionActions() != null
+                    ? instructionResponse.getCustomInstructionActions()
                     : new ArrayList<>();
             log.info("Processing CustomInstructionAgentResponse: {} instruction actions, {} pending", 
-                    instructionActions.size(), pendingActions.size());
+                    customInstructionActions.size(), pendingActions.size());
         } else {
             // MainAgentResponse - pure conversational, no actions
             log.info("Processing MainAgentResponse: conversational only, {} pending", pendingActions.size());
@@ -99,8 +98,8 @@ public class MainAgentResultHandler {
         }
         
         // Handle instruction actions (settings updates)
-        if (!instructionActions.isEmpty()) {
-            handleInstructionActions(instructionActions, userContext);
+        if (!customInstructionActions.isEmpty()) {
+            handleInstructionActions(customInstructionActions, userContext);
         }
         
         // Handle financial actions
@@ -151,10 +150,10 @@ public class MainAgentResultHandler {
      * Handle instruction actions from CustomInstructionAgent.
      * These actions modify user settings: aliases, defaults, custom instructions.
      */
-    private void handleInstructionActions(List<InstructionAction> actions, UserEntity userContext) {
+    private void handleInstructionActions(List<CustomInstructionAction> actions, UserEntity userContext) {
         log.info("Processing {} instruction actions", actions.size());
         
-        for (InstructionAction action : actions) {
+        for (CustomInstructionAction action : actions) {
             handleInstructionAction(action, userContext);
         }
     }
@@ -162,7 +161,7 @@ public class MainAgentResultHandler {
     /**
      * Handle single InstructionAction.
      */
-    private void handleInstructionAction(InstructionAction action, UserEntity userContext) {
+    private void handleInstructionAction(CustomInstructionAction action, UserEntity userContext) {
         log.info("Instruction action: {} (entity={}, entityId={})", 
                 action.getActionType(), action.getEntityType(), action.getEntityId());
         

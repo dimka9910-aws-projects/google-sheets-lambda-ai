@@ -23,10 +23,7 @@ import lombok.NoArgsConstructor;
 @Builder
 @NoArgsConstructor
 @AllArgsConstructor
-@EqualsAndHashCode(callSuper = false)
-public class PendingClarificationAction extends AgentAction {
-    
-    public static final String TYPE = "PENDING_CLARIFICATION";
+public class PendingClarificationAction {
     
     /**
      * Model's description of what needs clarification.
@@ -38,10 +35,5 @@ public class PendingClarificationAction extends AgentAction {
      * - "User wants to set default currency but didn't specify which one."
      */
     private String context;
-    
-    @Override
-    public String getType() {
-        return TYPE;
-    }
 }
 

@@ -2,7 +2,7 @@ package com.github.dimka9910.sheets.ai.dto.response;
 
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonPropertyDescription;
-import com.github.dimka9910.sheets.ai.dto.actions.InstructionAction;
+import com.github.dimka9910.sheets.ai.dto.actions.CustomInstructionAction;
 import com.github.dimka9910.sheets.ai.dto.actions.PendingClarificationAction;
 import lombok.Data;
 import lombok.EqualsAndHashCode;
@@ -28,16 +28,16 @@ public class CustomInstructionAgentResponse extends BaseAgentResponse {
      * List of custom instruction actions to perform.
      */
     @JsonPropertyDescription("List of instruction actions: ADD_LINKED_USER_ALIAS, REMOVE_LINKED_USER_ALIAS, ADD_ACCOUNT_ALIAS, REMOVE_ACCOUNT_ALIAS, ADD_FUND_ALIAS, REMOVE_FUND_ALIAS, ADD_CUSTOM_INSTRUCTION, REMOVE_CUSTOM_INSTRUCTION, UPDATE_DEFAULT")
-    private List<InstructionAction> instructionActions;
+    private List<CustomInstructionAction> customInstructionActions;
     
     /**
      * Constructor for Jackson
      */
     public CustomInstructionAgentResponse(String message,
                                           List<PendingClarificationAction> pendingClarifications,
-                                          List<InstructionAction> instructionActions) {
+                                          List<CustomInstructionAction> customInstructionActions) {
         super(message, pendingClarifications);
-        this.instructionActions = instructionActions != null ? instructionActions : new ArrayList<>();
+        this.customInstructionActions = customInstructionActions != null ? customInstructionActions : new ArrayList<>();
     }
 }
 
