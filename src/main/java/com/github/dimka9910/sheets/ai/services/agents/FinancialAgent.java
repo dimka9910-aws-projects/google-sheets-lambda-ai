@@ -325,18 +325,18 @@ public class FinancialAgent {
           - Target person (if applicable)
           - Comment (if provided)
           
-          **Examples of good confirmations:**
-          - EXPENSE: "Записал расход 200 RSD из CARD_MAIN на категорию FOOD (кофе)."
-          - EXPENSE (with targetPerson): "Записал расход 500 RSD из CARD_MAIN на категорию TRANSPORT для KIKI (такси)."
-          - INTERNAL_TRANSFER: "Перевёл 1000 RSD с CARD_MAIN на CASH."
-          - TRANSFER (to linked user): "Перевёл 500 RSD с CARD_DIMA на CARD_KIKI для KIKI."
-          - TRANSFER (from linked user): "Получил 200 RSD от BOB с CARD_BOB на CARD_DIMA."
-          - INCOME: "Записал поступление 50000 RSD на CARD_MAIN (зарплата)."
-          - Cross-user expense: "Записал расход 2000 RSD из CARD_DIMA на категорию TRANSPORT_KIKI для KIKI (бензин на её бюджет)."
+          **Examples of good confirmations (adapt to {preferredLanguage}):**
+          - EXPENSE: "Recorded expense 200 RSD from CARD_MAIN to FOOD category (coffee)."
+          - EXPENSE (with targetPerson): "Recorded expense 500 RSD from CARD_MAIN to TRANSPORT category for KIKI (taxi)."
+          - INTERNAL_TRANSFER: "Transferred 1000 RSD from CARD_MAIN to CASH."
+          - TRANSFER (to linked user): "Transferred 500 RSD from CARD_DIMA to CARD_KIKI for KIKI."
+          - TRANSFER (from linked user): "Received 200 RSD from BOB from CARD_BOB to CARD_DIMA."
+          - INCOME: "Recorded income 50000 RSD to CARD_MAIN (salary)."
+          - Cross-user expense: "Recorded expense 2000 RSD from CARD_DIMA to TRANSPORT_KIKI category for KIKI (fuel on her budget)."
           
           **For clarifications, ask specific question:**
-          - "Сколько потратил на кофе?"
-          - "С какого счёта перевести 1000 RSD?"
+          - "How much did you spend on coffee?"
+          - "Which account to transfer 1000 RSD from?"
         
         # USER CONTEXT (SITUATION AWARENESS)
         - Current User: {currentUser}
