@@ -23,8 +23,7 @@ import com.fasterxml.jackson.annotation.JsonTypeInfo;
     @JsonSubTypes.Type(value = InstructionAction.class, name = "REMOVE_FUND_ALIAS"),
     @JsonSubTypes.Type(value = InstructionAction.class, name = "ADD_CUSTOM_INSTRUCTION"),
     @JsonSubTypes.Type(value = InstructionAction.class, name = "REMOVE_CUSTOM_INSTRUCTION"),
-    @JsonSubTypes.Type(value = InstructionAction.class, name = "UPDATE_DEFAULT"),
-    @JsonSubTypes.Type(value = AskClarificationAction.class, name = "ASK_CLARIFICATION")
+    @JsonSubTypes.Type(value = InstructionAction.class, name = "UPDATE_DEFAULT")
 })
 public interface CustomInstructionActionBase {
     String getActionType();

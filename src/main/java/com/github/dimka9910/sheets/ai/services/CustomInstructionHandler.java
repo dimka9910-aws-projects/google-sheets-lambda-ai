@@ -59,12 +59,9 @@ public class CustomInstructionHandler {
                     agentResponse.actions().size(),
                     agentResponse.explanation());
             
-            // Apply all actions and collect clarification requests
-            List<AskClarificationAction> clarifications = new ArrayList<>();
+            // Apply all instruction actions
             for (var action : agentResponse.actions()) {
-                if (action instanceof AskClarificationAction askAction) {
-                    clarifications.add(askAction);
-                } else if (action instanceof InstructionAction instructionAction) {
+                if (action instanceof InstructionAction instructionAction) {
                     applyInstructionAction(instructionAction, userEntity);
                 } else {
                     log.warn("Unknown action type: {}", action.getClass().getName());
@@ -74,12 +71,9 @@ public class CustomInstructionHandler {
             // Save updated custom instructions (NOT accounts/funds)
             userEntityService.saveConversationAndAiContext(userEntity);
             
-            // If clarification needed, send SECOND message
-            if (!clarifications.isEmpty()) {
-                sendClarificationMessage(clarifications, userEntity, request);
-            } else {
-                log.info("CustomInstructionAgent completed successfully, no clarification needed");
-            }
+            // TODO: Handle pending clarifications from CustomInstructionAgent
+            // CustomInstructionAgent should now return pendingClarifications in response
+            log.info("CustomInstructionAgent completed successfully");
         } catch (Exception e) {
             log.error("Fatal error processing custom instructions - changes may be lost", e);
             // Don't rethrow - this is async processing, first message already sent
@@ -183,61 +177,61 @@ public class CustomInstructionHandler {
         log.warn("Unknown instruction action type: {}", actionType);
     }
 
-    /**
-     * Send SECOND message to user with clarification questions.
-     * Model generates the question text itself, we just send it as-is.
-     */
-    private void sendClarificationMessage(List<AskClarificationAction> clarifications, 
-                                          UserEntity userEntity, TelegramChatRequest request) {
-        // Model already generated the question text - use it as-is
-        StringBuilder clarificationMsg = new StringBuilder();
-        
-        for (int i = 0; i < clarifications.size(); i++) {
-            if (i > 0) {
-                clarificationMsg.append("\n\n");
-            }
-            clarificationMsg.append(clarifications.get(i).getQuestion());
-        }
-        
-        log.info("Sending clarification message to user: {}", clarificationMsg);
-        
-        // IMPORTANT: Add to EXISTING pending actions, don't replace!
-        // MainAgent might have already added some pending clarifications
-        List<PendingClarificationAction> existingPending = userEntity.getPendingActions();
-        if (existingPending == null) {
-            existingPending = new ArrayList<>();
-        } else {
-            existingPending = new ArrayList<>(existingPending); // copy to avoid mutation
-        }
-        
-        // Add clarifications from CustomInstructionAgent
-        for (AskClarificationAction clarification : clarifications) {
-            existingPending.add(PendingClarificationAction.builder()
-                    .context(clarification.getContext())
-                    .build());
-        }
-        
-        userEntity.setPendingActions(existingPending);
-        
-        // Add clarification message to conversation history
-        userEntity.addToHistory(ConversationMessage.builder()
-                .role("assistant")
-                .content(clarificationMsg.toString())
-                .build());
-        
-        // Save pending actions + conversation history (NOT accounts/funds)
-        userEntityService.saveConversationAndAiContext(userEntity);
-        
-        // Send SECOND message via SQS
-        TelegramChatResponse clarificationResponse = TelegramChatResponse.builder()
-                .chatId(request.getResponseChatId())
-                .success(true)
-                .message(clarificationMsg.toString())
-                .build();
-        
-        sqsPublisher.sendResponse(clarificationResponse);
-        log.info("Sent clarification message as SECOND response");
-    }
+//     /**
+//      * Send SECOND message to user with clarification questions.
+//      * Model generates the question text itself, we just send it as-is.
+//      */
+//     private void sendClarificationMessage(List<AskClarificationAction> clarifications, 
+//                                           UserEntity userEntity, TelegramChatRequest request) {
+//         // Model already generated the question text - use it as-is
+//         StringBuilder clarificationMsg = new StringBuilder();
+//         
+//         for (int i = 0; i < clarifications.size(); i++) {
+//             if (i > 0) {
+//                 clarificationMsg.append("\n\n");
+//             }
+//             clarificationMsg.append(clarifications.get(i).getQuestion());
+//         }
+//         
+//         log.info("Sending clarification message to user: {}", clarificationMsg);
+//         
+//         // IMPORTANT: Add to EXISTING pending actions, don't replace!
+//         // MainAgent might have already added some pending clarifications
+//         List<PendingClarificationAction> existingPending = userEntity.getPendingActions();
+//         if (existingPending == null) {
+//             existingPending = new ArrayList<>();
+//         } else {
+//             existingPending = new ArrayList<>(existingPending); // copy to avoid mutation
+//         }
+//         
+//         // Add clarifications from CustomInstructionAgent
+//         for (AskClarificationAction clarification : clarifications) {
+//             existingPending.add(PendingClarificationAction.builder()
+//                     .context(clarification.getContext())
+//                     .build());
+//         }
+//         
+//         userEntity.setPendingActions(existingPending);
+//         
+//         // Add clarification message to conversation history
+//         userEntity.addToHistory(ConversationMessage.builder()
+//                 .role("assistant")
+//                 .content(clarificationMsg.toString())
+//                 .build());
+//         
+//         // Save pending actions + conversation history (NOT accounts/funds)
+//         userEntityService.saveConversationAndAiContext(userEntity);
+//         
+//         // Send SECOND message via SQS
+//         TelegramChatResponse clarificationResponse = TelegramChatResponse.builder()
+//                 .chatId(request.getResponseChatId())
+//                 .success(true)
+//                 .message(clarificationMsg.toString())
+//                 .build();
+//         
+//         sqsPublisher.sendResponse(clarificationResponse);
+//         log.info("Sent clarification message as SECOND response");
+//     }
 
     // ═══════════════════════════════════════════════════════════════════════════
     // ALIAS MANAGEMENT - Linked Users

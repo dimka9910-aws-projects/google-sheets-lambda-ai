@@ -2,7 +2,7 @@ package com.github.dimka9910.sheets.ai.services.agents;
 
 import com.github.dimka9910.sheets.ai.dto.actions.FinancialAction;
 import com.github.dimka9910.sheets.ai.dto.actions.FinancialAction.OperationType;
-import com.github.dimka9910.sheets.ai.dto.actions.MainAgentResponse;
+import com.github.dimka9910.sheets.ai.dto.response.FinancialAgentResponse;
 import com.github.dimka9910.sheets.ai.dto.user.UserEntity;
 import com.github.dimka9910.sheets.ai.services.UserContextToPromptMapper;
 import lombok.extern.slf4j.Slf4j;
@@ -40,13 +40,13 @@ public class ThirdPartyActionAgent {
     private final UserContextToPromptMapper contextMapper;
     
     // Cache converter to avoid reflection overhead on each call
-    private final BeanOutputConverter<MainAgentResponse> outputConverter;
+    private final BeanOutputConverter<FinancialAgentResponse> outputConverter;
     
     public ThirdPartyActionAgent(ChatModel chatModel, UserContextToPromptMapper contextMapper) {
         this.chatModel = chatModel;
         this.contextMapper = contextMapper;
         // Initialize converter once (expensive reflection operation)
-        this.outputConverter = new BeanOutputConverter<>(MainAgentResponse.class);
+        this.outputConverter = new BeanOutputConverter<>(FinancialAgentResponse.class);
     }
     
     // ═══════════════════════════════════════════════════════════════════════════
@@ -62,13 +62,13 @@ public class ThirdPartyActionAgent {
     // PROCESS
     // ═══════════════════════════════════════════════════════════════════════════
     
-    public MainAgentResponse process(String message, UserEntity userContext) {
+    public FinancialAgentResponse process(String message, UserEntity userContext) {
         log.info("🔷 ThirdPartyActionAgent processing: \"{}\"", message);
         
         if (message == null || message.isBlank()) {
-            return MainAgentResponse.builder()
-                    .actions(List.of())
-                    .response("Error: Empty message")
+            return FinancialAgentResponse.builder()
+                    .financialActions(List.of())
+                    .message("Error: Empty message")
                     .build();
         }
         
@@ -102,29 +102,29 @@ public class ThirdPartyActionAgent {
             
             if (content == null || content.isBlank()) {
                 log.error("❌ Empty response from LLM");
-                return MainAgentResponse.builder()
-                        .actions(List.of())
-                        .response("Error: Empty response from AI model")
+                return FinancialAgentResponse.builder()
+                        .financialActions(List.of())
+                        .message("Error: Empty response from AI model")
                         .build();
             }
             
-            // Parse MainAgentResponse using BeanOutputConverter
+            // Parse FinancialAgentResponse using BeanOutputConverter
             // This handles @JsonSubTypes polymorphic deserialization automatically
-            MainAgentResponse result = outputConverter.convert(content);
+            FinancialAgentResponse result = outputConverter.convert(content);
             
             // Validate that model followed instructions (all fields must be filled)
             validateResult(result, userContext);
             
             log.info("✅ ThirdPartyActionAgent result: {} actions, pending={}", 
-                    result.getActions().size(), result.hasPendingClarifications());
+                    result.getFinancialActions().size(), result.hasPendingClarifications());
             
             return result;
             
         } catch (Exception e) {
             log.error("❌ ThirdPartyActionAgent error: {}", e.getMessage(), e);
-            return MainAgentResponse.builder()
-                    .actions(List.of())
-                    .response("Error processing third-party action: " + e.getMessage())
+            return FinancialAgentResponse.builder()
+                    .financialActions(List.of())
+                    .message("Error processing third-party action: " + e.getMessage())
                     .build();
         }
     }
@@ -142,11 +142,10 @@ public class ThirdPartyActionAgent {
      * - amount, currency, account, fund
      * - targetPerson (who the expense is FOR - must be EXACT userName)
      */
-    private void validateResult(MainAgentResponse response, UserEntity userContext) {
-        if (response.getActions() == null) return;
+    private void validateResult(FinancialAgentResponse response, UserEntity userContext) {
+        if (response.getFinancialActions() == null) return;
         
-        for (var action : response.getActions()) {
-            if (action instanceof FinancialAction financial) {
+        for (FinancialAction financial : response.getFinancialActions()) {
                 
                 // Validate TRANSFER to/from linked user
                 if (financial.getOperationType() == OperationType.TRANSFER) {
@@ -251,7 +250,6 @@ public class ThirdPartyActionAgent {
                         financial.getTargetPerson(), financial.getAmount(), 
                         financial.getCurrency(), financial.getFund());
                 }
-            }
         }
     }
     

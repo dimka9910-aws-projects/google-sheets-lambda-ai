@@ -1,9 +1,11 @@
 package com.github.dimka9910.sheets.ai.services;
 
-import com.github.dimka9910.sheets.ai.dto.actions.AgentAction;
-import com.github.dimka9910.sheets.ai.dto.actions.MainAgentResponse;
 import com.github.dimka9910.sheets.ai.dto.actions.PendingClarificationAction;
 import com.github.dimka9910.sheets.ai.dto.actions.RedirectToAgentAction;
+import com.github.dimka9910.sheets.ai.dto.response.BaseAgentResponse;
+import com.github.dimka9910.sheets.ai.dto.response.MainAgentResponse;
+import com.github.dimka9910.sheets.ai.dto.response.FinancialAgentResponse;
+import com.github.dimka9910.sheets.ai.dto.response.CustomInstructionAgentResponse;
 import com.github.dimka9910.sheets.ai.dto.telegram.TelegramChatRequest;
 import com.github.dimka9910.sheets.ai.dto.telegram.TelegramChatResponse;
 import com.github.dimka9910.sheets.ai.dto.user.UserEntity;
@@ -84,7 +86,7 @@ public class Orchestrator {
             }
             
             // Step 3: Route to appropriate agent and handle result
-            MainAgentResponse agentResponse = switch (category) {
+            BaseAgentResponse agentResponse = switch (category) {
                 case SIMPLE_EXPENSE -> {
                     log.info("→ Routing to SimpleExpenseAgent");
                     yield simpleExpenseAgent.process(message, userContext);
@@ -109,14 +111,14 @@ public class Orchestrator {
                 }
             };
             
-            log.info("Agent parsed: {} actions, pending={}, redirects={}", 
-                    agentResponse.getActions().size(), 
-                    agentResponse.hasPendingClarifications(),
-                    agentResponse.hasRedirects());
+            log.info("Agent returned: type={}, pending={}", 
+                    agentResponse.getClass().getSimpleName(),
+                    agentResponse.hasPendingClarifications());
             
-            // Step 4: Handle redirects if any
-            if (agentResponse.hasRedirects()) {
-                agentResponse = handleRedirects(agentResponse, userContext);
+            // Step 4: Handle redirects if MainAgent returned redirects
+            if (agentResponse instanceof MainAgentResponse mainResponse && mainResponse.hasRedirects()) {
+                log.info("MainAgent returned {} redirects", mainResponse.getRedirects().size());
+                agentResponse = handleRedirects(mainResponse, userContext);
             }
             
             return mainAgentResultHandler.handle(request, agentResponse, userContext);
@@ -138,22 +140,20 @@ public class Orchestrator {
     /**
      * Handle REDIRECT_TO_AGENT actions by calling the appropriate specialized agent.
      * 
-     * MainAgent (or any agent) can return REDIRECT_TO_AGENT actions to offload
-     * simple requests to faster, cheaper specialized agents.
+     * MainAgent can return redirects to offload simple requests to faster, cheaper specialized agents.
      * 
-     * @param agentResponse Response containing REDIRECT_TO_AGENT actions
+     * @param mainResponse MainAgentResponse containing redirects
      * @param userContext User context for the specialized agent
-     * @return New response from the specialized agent
+     * @return Response from the specialized agent (with merged pending clarifications from MainAgent)
      */
-    private MainAgentResponse handleRedirects(MainAgentResponse agentResponse, UserEntity userContext) {
-        List<RedirectToAgentAction> redirects = agentResponse.getRedirectActions();
+    private BaseAgentResponse handleRedirects(MainAgentResponse mainResponse, UserEntity userContext) {
+        List<RedirectToAgentAction> redirects = mainResponse.getRedirects();
         
         if (redirects.isEmpty()) {
-            return agentResponse;
+            return mainResponse;
         }
         
         // Currently we only support single redirect per response
-        // (MainAgent should not return multiple redirects in one response)
         if (redirects.size() > 1) {
             log.warn("Multiple redirects found ({}), processing only the first one", redirects.size());
         }
@@ -165,18 +165,18 @@ public class Orchestrator {
                 redirect.getAgentType(), truncate(message, 60));
         
         // Route to specialized agent based on agentType
-        MainAgentResponse specializedResponse = switch (redirect.getAgentType()) {
+        BaseAgentResponse specializedResponse = switch (redirect.getAgentType()) {
             case CUSTOM_INSTRUCTION -> {
                 log.info("  ↳ Calling CustomInstructionAgent");
                 // CustomInstructionAgent expects List<String> instructions, so wrap message in list
                 var ciRequest = new CustomInstructionAgent.Request(List.of(message), userContext);
                 var ciResponse = customInstructionAgent.process(ciRequest);
                 
-                // Convert CustomInstructionAgent.Response to MainAgentResponse
-                // For now, just return a simple response (TODO: proper conversion if needed)
-                yield MainAgentResponse.builder()
-                        .actions(List.of()) // CustomInstructionAgent handles actions differently
-                        .response(ciResponse.explanation() != null ? ciResponse.explanation() : "Settings updated")
+                // Convert CustomInstructionAgent.Response to CustomInstructionAgentResponse
+                // TODO: Update CustomInstructionAgent to return CustomInstructionAgentResponse directly
+                yield CustomInstructionAgentResponse.builder()
+                        .instructionActions(List.of())
+                        .message(ciResponse.explanation() != null ? ciResponse.explanation() : "Settings updated")
                         .build();
             }
             case SIMPLE_EXPENSE -> {
@@ -197,34 +197,22 @@ public class Orchestrator {
             }
         };
         
-        log.info("  ✅ Specialized agent returned: {} actions, pending={}", 
-                specializedResponse.getActions().size(), 
+        log.info("  ✅ Specialized agent returned: type={}, pending={}", 
+                specializedResponse.getClass().getSimpleName(),
                 specializedResponse.hasPendingClarifications());
         
-        // IMPORTANT: Merge ALL actions from BOTH MainAgent and specialized agent
-        // MainAgent might have created pending clarifications BEFORE redirecting
-        // Specialized agent might have created NEW pending/financial/utils actions during processing
-        // We need to collect ALL actions from the entire chain
-        List<AgentAction> allActions = new ArrayList<>();
-        
-        // Add pending clarifications from original MainAgent response (if any)
-        // These might exist if MainAgent asked for clarification while also redirecting
-        if (agentResponse.getPendingClarifications() != null && !agentResponse.getPendingClarifications().isEmpty()) {
-            allActions.addAll(agentResponse.getPendingClarifications());
-            log.debug("  → Merged {} pending from MainAgent", agentResponse.getPendingClarifications().size());
+        // IMPORTANT: Merge pending clarifications from MainAgent (if any) into specialized response
+        // MainAgent might have asked for clarification while also redirecting
+        if (mainResponse.getPendingClarifications() != null && !mainResponse.getPendingClarifications().isEmpty()) {
+            List<PendingClarificationAction> mergedPending = new ArrayList<>(mainResponse.getPendingClarifications());
+            if (specializedResponse.getPendingClarifications() != null) {
+                mergedPending.addAll(specializedResponse.getPendingClarifications());
+            }
+            specializedResponse.setPendingClarifications(mergedPending);
+            log.debug("  → Merged {} pending from MainAgent", mainResponse.getPendingClarifications().size());
         }
         
-        // Add ALL actions from specialized agent response
-        if (specializedResponse.getActions() != null) {
-            allActions.addAll(specializedResponse.getActions());
-        }
-        
-        // Return merged response
-        // Use specialized agent's response text, but merged actions
-        return MainAgentResponse.builder()
-                .actions(allActions)  // MERGED actions from entire chain
-                .response(specializedResponse.getResponse())
-                .build();
+        return specializedResponse;
     }
 
     // ═══════════════════════════════════════════════════════════════════════════

@@ -1,6 +1,6 @@
 package com.github.dimka9910.sheets.ai.services.agents;
 
-import com.github.dimka9910.sheets.ai.dto.actions.MainAgentResponse;
+import com.github.dimka9910.sheets.ai.dto.response.FinancialAgentResponse;
 import com.github.dimka9910.sheets.ai.dto.actions.FinancialAction;
 import com.github.dimka9910.sheets.ai.dto.user.UserEntity;
 import com.github.dimka9910.sheets.ai.services.UserContextToPromptMapper;
@@ -40,19 +40,19 @@ public class ExpenseEditAndDeletionAgent {
     private final UserContextToPromptMapper contextMapper;
     
     // Cache converter for performance
-    private final BeanOutputConverter<MainAgentResponse> outputConverter;
+    private final BeanOutputConverter<FinancialAgentResponse> outputConverter;
 
     public ExpenseEditAndDeletionAgent(ChatModel chatModel, UserContextToPromptMapper contextMapper) {
         this.chatModel = chatModel;
         this.contextMapper = contextMapper;
-        this.outputConverter = new BeanOutputConverter<>(MainAgentResponse.class);
+        this.outputConverter = new BeanOutputConverter<>(FinancialAgentResponse.class);
     }
 
     /**
      * Process edit/deletion request.
-     * Returns MainAgentResponse with FINANCIAL action (correction=true) or PENDING_CLARIFICATION.
+     * Returns FinancialAgentResponse with FINANCIAL action (correction=true) or PENDING_CLARIFICATION.
      */
-    public MainAgentResponse process(String message, UserEntity userContext) {
+    public FinancialAgentResponse process(String message, UserEntity userContext) {
         log.info("✏️ ExpenseEditAndDeletionAgent processing: \"{}\"", truncate(message, 60));
 
         try {
@@ -74,26 +74,23 @@ public class ExpenseEditAndDeletionAgent {
             ChatResponse chatResponse = chatModel.call(prompt);
             String content = chatResponse.getResult().getOutput().getText();
 
-            MainAgentResponse result = outputConverter.convert(content);
+            FinancialAgentResponse result = outputConverter.convert(content);
 
             // Validate if FINANCIAL action is present
-            if (result != null && result.getActions() != null) {
-                result.getActions().stream()
-                        .filter(action -> action instanceof FinancialAction)
-                        .map(action -> (FinancialAction) action)
-                        .forEach(this::validateFinancialAction);
+            if (result != null && result.getFinancialActions() != null) {
+                result.getFinancialActions().forEach(this::validateFinancialAction);
             }
 
-            log.info("✅ ExpenseEditAndDeletionAgent parsed: {} actions", 
-                    result.getActions() != null ? result.getActions().size() : 0);
+            log.info("✅ ExpenseEditAndDeletionAgent parsed: {} financial actions", 
+                    result.getFinancialActions() != null ? result.getFinancialActions().size() : 0);
 
             return result;
 
         } catch (Exception e) {
             log.error("❌ ExpenseEditAndDeletionAgent error: {}", e.getMessage(), e);
-            return MainAgentResponse.builder()
-                    .actions(List.of())
-                    .response("Sorry, could not process the correction. Please try again.")
+            return FinancialAgentResponse.builder()
+                    .financialActions(List.of())
+                    .message("Sorry, could not process the correction. Please try again.")
                     .build();
         }
     }

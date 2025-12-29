@@ -2,6 +2,9 @@ package com.github.dimka9910.sheets.ai.services;
 
 import com.github.dimka9910.sheets.ai.db.service.FinancialOperationService;
 import com.github.dimka9910.sheets.ai.dto.actions.*;
+import com.github.dimka9910.sheets.ai.dto.response.BaseAgentResponse;
+import com.github.dimka9910.sheets.ai.dto.response.FinancialAgentResponse;
+import com.github.dimka9910.sheets.ai.dto.response.CustomInstructionAgentResponse;
 import com.github.dimka9910.sheets.ai.dto.telegram.TelegramChatRequest;
 import com.github.dimka9910.sheets.ai.dto.telegram.TelegramChatResponse;
 import com.github.dimka9910.sheets.ai.dto.user.ConversationMessage;
@@ -45,41 +48,45 @@ public class MainAgentResultHandler {
     }
 
     /**
-     * Process MainAgentResponse and return TelegramChatResponse.
+     * Process agent response and return TelegramChatResponse.
+     * 
+     * Handles different response types:
+     * - FinancialAgentResponse: save financial operations
+     * - CustomInstructionAgentResponse: update user settings
+     * - MainAgentResponse: pure conversational (no actions)
      * 
      * NOTE: CUSTOM_INSTRUCTION actions are processed asynchronously.
      * If CustomInstructionAgent needs clarification, it will send a SECOND message to user.
      */
-    public TelegramChatResponse handle(TelegramChatRequest request, MainAgentResponse agentResponse, UserEntity userContext) {
+    public TelegramChatResponse handle(TelegramChatRequest request, BaseAgentResponse agentResponse, UserEntity userContext) {
         String chatId = request.getResponseChatId();
         String message = request.getMessage();
         
         // Add user message to history
         userContext.addToHistory(ConversationMessage.userMessage(message));
         
-        // Process all actions
-        List<FinancialAction> financialActions = agentResponse.getFinancialActions();
-        List<UtilsAction> utilsActions = agentResponse.getUtilsActions();
-        List<PendingClarificationAction> pendingActions = agentResponse.getPendingClarifications();
+        // Extract actions based on response type
+        List<FinancialAction> financialActions = new ArrayList<>();
+        List<CustomInstructionActionBase> instructionActions = new ArrayList<>();
+        List<PendingClarificationAction> pendingActions = agentResponse.getPendingClarifications() != null 
+                ? agentResponse.getPendingClarifications() 
+                : new ArrayList<>();
         
-        log.info("Processing: {} financial, {} utils, {} pending", 
-                financialActions.size(), utilsActions.size(), pendingActions.size());
-        
-        // Separate CUSTOM_INSTRUCTION actions for async processing
-        List<UtilsAction> customInstructionActions = new ArrayList<>();
-        List<UtilsAction> otherUtilsActions = new ArrayList<>();
-        
-        for (UtilsAction action : utilsActions) {
-            if (action.getCommand() == UtilsAction.Command.CUSTOM_INSTRUCTION) {
-                customInstructionActions.add(action);
-            } else {
-                otherUtilsActions.add(action);
-            }
-        }
-        
-        // Handle non-CUSTOM_INSTRUCTION utils actions synchronously
-        for (UtilsAction action : otherUtilsActions) {
-            handleUtilsAction(action, userContext, request);
+        if (agentResponse instanceof FinancialAgentResponse financialResponse) {
+            financialActions = financialResponse.getFinancialActions() != null 
+                    ? financialResponse.getFinancialActions() 
+                    : new ArrayList<>();
+            log.info("Processing FinancialAgentResponse: {} financial actions, {} pending", 
+                    financialActions.size(), pendingActions.size());
+        } else if (agentResponse instanceof CustomInstructionAgentResponse instructionResponse) {
+            instructionActions = instructionResponse.getInstructionActions() != null 
+                    ? instructionResponse.getInstructionActions() 
+                    : new ArrayList<>();
+            log.info("Processing CustomInstructionAgentResponse: {} instruction actions, {} pending", 
+                    instructionActions.size(), pendingActions.size());
+        } else {
+            // MainAgentResponse - pure conversational, no actions
+            log.info("Processing MainAgentResponse: conversational only, {} pending", pendingActions.size());
         }
         
         // Handle pending clarifications
@@ -88,6 +95,11 @@ public class MainAgentResultHandler {
             log.info("Saved {} pending clarifications", pendingActions.size());
         } else {
             userContext.clearPendingActions();
+        }
+        
+        // Handle instruction actions (settings updates)
+        if (!instructionActions.isEmpty()) {
+            handleInstructionActions(instructionActions, userContext);
         }
         
         // Handle financial actions
@@ -115,105 +127,52 @@ public class MainAgentResultHandler {
         // Add assistant response to history with related financial actions
         userContext.addToHistory(ConversationMessage.builder()
                 .role("assistant")
-                .content(agentResponse.getResponse())
+                .content(agentResponse.getMessage())
                 .relatedFinancialActions(successfulActions)
                 .build());
         
         // Save ONLY conversation history + AI context (NOT accounts/funds to avoid constraint violations)
         userContextService.saveConversationAndAiContext(userContext);
         
-        // Process CUSTOM_INSTRUCTION actions AFTER returning main response
-        // If CustomInstructionAgent needs clarification, it will send a SECOND message
-        if (!customInstructionActions.isEmpty()) {
-            // Collect all instruction values into a list
-            List<String> instructions = customInstructionActions.stream()
-                    .map(UtilsAction::getValue)
-                    .filter(v -> v != null && !v.isBlank())
-                    .toList();
-            
-            if (!instructions.isEmpty()) {
-                customInstructionHandler.processAsync(instructions, userContext, request);
-            }
-        }
-        
         return TelegramChatResponse.builder()
                 .chatId(chatId)
                 .success(isSuccess)
-                .message(agentResponse.getResponse())
+                .message(agentResponse.getMessage())
                 .operationsCount(operationsCount)
                 .build();
     }
 
     // ═══════════════════════════════════════════════════════════════════════════
-    // SETTINGS ACTIONS
+    // INSTRUCTION ACTIONS (Settings/Aliases/Defaults)
     // ═══════════════════════════════════════════════════════════════════════════
 
-    private void handleUtilsAction(UtilsAction action, UserEntity userContext, TelegramChatRequest request) {
-        UtilsAction.Command command = action.getCommand();
-        String value = action.getValue();
+    /**
+     * Handle instruction actions from CustomInstructionAgent.
+     * These actions modify user settings: aliases, defaults, custom instructions.
+     */
+    private void handleInstructionActions(List<CustomInstructionActionBase> actions, UserEntity userContext) {
+        log.info("Processing {} instruction actions", actions.size());
         
-        log.info("Settings action: {} = {}", command, value);
-        
-        switch (command) {
-            
-            case ADD_ACCOUNT -> {
-                if (value != null && !value.isBlank()) {
-                    userContext.addAccount(value.toUpperCase().replaceAll("\\s+", "_"));
-                }
+        for (CustomInstructionActionBase action : actions) {
+            if (action instanceof InstructionAction instructionAction) {
+                handleInstructionAction(instructionAction, userContext);
+            } else {
+                log.warn("Unknown instruction action type: {}", action.getClass().getSimpleName());
             }
-            
-            case ADD_FUND -> {
-                if (value != null && !value.isBlank()) {
-                    userContext.addFund(value.toUpperCase().replaceAll("\\s+", "_"));
-                }
-            }
-            
-            case CUSTOM_INSTRUCTION -> {
-                // Handled separately in handle() method asynchronously
-                log.debug("CUSTOM_INSTRUCTION action - will be processed asynchronously");
-            }
-            
-            case SET_DEFAULT_CURRENCY -> {
-                if (value != null && !value.isBlank()) {
-                    userContext.setDefaultCurrency(value.toUpperCase());
-                }
-            }
-            
-            case SET_DEFAULT_ACCOUNT -> {
-                if (value != null && !value.isBlank()) {
-                    // Find account by ID or alias
-                    userContext.findAccountByAlias(value.toUpperCase())
-                            .ifPresent(userContext::setDefaultAccount);
-                }
-            }
-            
-            case SET_DEFAULT_FUND -> {
-                if (value != null && !value.isBlank()) {
-                    // Find fund by ID or alias
-                    userContext.findFundByAlias(value.toUpperCase())
-                            .ifPresent(userContext::setDefaultFund);
-                }
-            }
-            
-            case UNDO -> handleUndo(userContext);
-            
-            case CANCEL_PENDING -> {
-                userContext.clearPendingActions();
-            }
-            
-            case HELP -> {
-                // Response is already generated by model
-            }
-            
-            default -> log.warn("Unknown settings command: {}", command);
         }
     }
-
-    private void handleUndo(UserEntity userContext) {
-        // UNDO никогда не работал в legacy коде, теперь это заглушка
-        log.warn("⚠️ UNDO not implemented - feature disabled");
-        // TODO: Implement undo for database operations when needed
-        // Need to soft delete the operation by setting deleted_at timestamp
+    
+    /**
+     * Handle single InstructionAction.
+     */
+    private void handleInstructionAction(InstructionAction action, UserEntity userContext) {
+        String actionType = action.getActionType();
+        log.info("Instruction action: {} (entity={}, entityId={})", 
+                actionType, action.getEntityType(), action.getEntityId());
+        
+        // TODO: Implement instruction action handling
+        // This will be done when we update CustomInstructionAgent to use CustomInstructionAgentResponse
+        log.warn("⚠️ Instruction action handling not yet implemented: {}", actionType);
     }
 
     // ═══════════════════════════════════════════════════════════════════════════

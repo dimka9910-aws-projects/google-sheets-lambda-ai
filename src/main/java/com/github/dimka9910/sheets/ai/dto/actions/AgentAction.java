@@ -19,7 +19,6 @@ import com.fasterxml.jackson.annotation.JsonTypeInfo;
 )
 @JsonSubTypes({
     @JsonSubTypes.Type(value = FinancialAction.class, name = "FINANCIAL"),
-    @JsonSubTypes.Type(value = UtilsAction.class, name = "UTILS"),
     @JsonSubTypes.Type(value = PendingClarificationAction.class, name = "PENDING_CLARIFICATION"),
     @JsonSubTypes.Type(value = RedirectToAgentAction.class, name = "REDIRECT_TO_AGENT")
 })

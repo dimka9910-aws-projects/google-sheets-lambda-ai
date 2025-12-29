@@ -1,6 +1,6 @@
 package com.github.dimka9910.sheets.ai.services.agents;
 
-import com.github.dimka9910.sheets.ai.dto.actions.*;
+import com.github.dimka9910.sheets.ai.dto.response.MainAgentResponse;
 import com.github.dimka9910.sheets.ai.dto.user.UserEntity;
 import com.github.dimka9910.sheets.ai.services.UserContextToPromptMapper;
 import com.github.dimka9910.sheets.ai.services.agents.MessageClassifierAgent.Category;
@@ -67,10 +67,11 @@ public class MainAgent {
             ## Message Category: {categoryInfo}
             
             ## OPERATIONAL PIPELINE:
-            1. **ID TRACING**: If user corrects/deletes/says "it"/"last", find UUID in conversation history (sorted newest-first, use FIRST match)
-            2. **DECOMPOSITION**: Split "A and B" into multiple REDIRECT actions
-            3. **TICKET ENRICHMENT**: Pack `message` field with ALL context for specialized agent
-            4. **CONVERSATION**: Provide user response yourself (in their language)
+            1. **DECOMPOSITION**: Split "A and B" into multiple REDIRECT actions
+            2. **TICKET ENRICHMENT**: Pack `message` field with ALL context for specialized agent
+            3. **CONVERSATION**: Provide user response yourself (in their language)
+            4. **ID TRACING**: If user corrects/deletes/says "it"/"last", find UUID in conversation history (sorted newest-first, use FIRST match)
+            
             
             ## CRITICAL RULES:
             - **OPERATION SELECTION**: Conversation history is newest-first. "Last"/"it" = FIRST operation in list. NEVER skip to older operations.
@@ -215,9 +216,10 @@ public class MainAgent {
             
             MainAgentResponse result = outputConverter.convert(content);
             
-            log.info("✅ Parsed: {} actions, response='{}'", 
-                    result.getActions().size(), 
-                    truncate(result.getResponse(), 50));
+            log.info("✅ Parsed: redirects={}, pending={}, response='{}'", 
+                    result.hasRedirects() ? result.getRedirects().size() : 0,
+                    result.hasPendingClarifications() ? result.getPendingClarifications().size() : 0,
+                    truncate(result.getMessage(), 50));
             
             return new Response(result, null);
             
