@@ -102,7 +102,20 @@ public class Orchestrator {
                 case COMPLEX_ACTION -> {
                     log.info("→ Routing to MainAgent (COMPLEX_ACTION)");
                     var agentRequest = new MainAgent.Request(message, userContext, category);
-                    yield mainAgent.process(agentRequest).result();
+                    var mainResponse = mainAgent.process(agentRequest);
+                    
+                    // Check if MainAgent succeeded
+                    if (!mainResponse.isSuccess()) {
+                        log.error("❌ MainAgent failed: {}", mainResponse.errorMessage());
+                        // Create error response and yield it
+                        yield MainAgentResponse.builder()
+                                .redirects(List.of())
+                                .pendingClarifications(List.of())
+                                .message("Error: " + mainResponse.errorMessage())
+                                .build();
+                    }
+                    
+                    yield mainResponse.result();
                 }
             };
             
