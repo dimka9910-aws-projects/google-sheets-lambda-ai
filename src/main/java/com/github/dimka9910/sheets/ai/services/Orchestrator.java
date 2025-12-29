@@ -106,6 +106,15 @@ public class Orchestrator {
                 }
             };
             
+            if (agentResponse == null) {
+                log.error("❌ Agent returned NULL response!");
+                return TelegramChatResponse.builder()
+                        .chatId(request.getResponseChatId())
+                        .success(false)
+                        .message("Internal error: Agent returned no response")
+                        .build();
+            }
+            
             log.info("Agent returned: type={}, pending={}", 
                     agentResponse.getClass().getSimpleName(),
                     !CollectionUtils.isEmpty(agentResponse.getPendingClarifications()));
