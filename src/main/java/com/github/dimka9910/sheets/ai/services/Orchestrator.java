@@ -30,11 +30,10 @@ import java.util.List;
  * New simplified flow:
  * 1. ClassifierAgent — determine category (SIMPLE vs COMPLEX)
  * 2. Route to appropriate handler:
- *    - SIMPLE_EXPENSE → SimpleExpenseHandler (TODO)
- *    - INTERNAL_TRANSFER → InternalTransferHandler (TODO)
- *    - THIRD_PARTY_ACTION → ThirdPartyHandler (TODO)
- *    - SIMPLE_CUSTOM_INSTRUCTION → CustomInstructionAgent (existing)
- *    - COMPLEX_ACTION → MainAgent (with full context)
+ *    - SIMPLE_EXPENSE → SimpleExpenseAgent
+ *    - INTERNAL_TRANSFER → InternalTransferAgent
+ *    - THIRD_PARTY_ACTION → ThirdPartyActionAgent
+ *    - COMPLEX_ACTION → MainAgent (with full context, including custom instructions)
  */
 @Slf4j
 @Service
@@ -108,11 +107,6 @@ public class Orchestrator {
                 case THIRD_PARTY_ACTION -> {
                     log.info("→ Routing to ThirdPartyActionAgent");
                     yield thirdPartyActionAgent.process(message, userContext);
-                }
-                case SIMPLE_CUSTOM_INSTRUCTION -> {
-                    log.info("→ Routing to MainAgent (SIMPLE_CUSTOM_INSTRUCTION)");
-                    var agentRequest = new MainAgent.Request(message, userContext, category);
-                    yield mainAgent.process(agentRequest).result();
                 }
                 case COMPLEX_ACTION -> {
                     log.info("→ Routing to MainAgent (COMPLEX_ACTION)");

@@ -58,8 +58,7 @@ public class MessageClassifierAgent {
         SIMPLE_EXPENSE,           // Single expense: "кофе 200", "такси 500"
         INTERNAL_TRANSFER,        // Transfer between own accounts: "перевод 1000 с визы на кеш"
         THIRD_PARTY_ACTION,       // Operations with linked users: "Ксюше 200", "за девушку"
-        SIMPLE_CUSTOM_INSTRUCTION, // Custom instruction: "Ксюша = KIKI", "запомни райф это виза"
-        COMPLEX_ACTION            // Everything else → MainAgent with full context
+        COMPLEX_ACTION            // Everything else → MainAgent with full context (including custom instructions)
     }
 
     // ═══════════════════════════════════════════════════════════════════════════
@@ -88,16 +87,11 @@ public class MessageClassifierAgent {
             
             {thirdPartyCategory}
             
-            **SIMPLE_CUSTOM_INSTRUCTION** - Remember/alias instructions
-            - User wants to save a setting, alias, or custom instruction
-            - Keywords: remember, btw, by the way, just so you know (any language)
-            - Setting aliases: "Sarah = USER_X", "card nickname = bank account"
-            - Examples: "remember that Sarah is USER_X", "main card is account Y"
-            
             **COMPLEX_ACTION** - Everything else (default fallback)
             - Multiple operations in one message
             - Questions about settings, help, show data
             - Corrections to previous transactions
+            - Custom instructions, aliases, settings (e.g. "remember Sarah is USER_X", "main card is account Y")
             - Math expressions, calculations
             - Unclear, ambiguous, slang
             - When in doubt → COMPLEX_ACTION
