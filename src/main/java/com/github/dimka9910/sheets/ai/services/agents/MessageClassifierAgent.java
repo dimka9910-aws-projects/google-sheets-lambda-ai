@@ -53,12 +53,11 @@ public class MessageClassifierAgent {
     
     /**
      * Message categories (ONLY ONE per message).
+     * Simplified to 2 categories for clearer routing.
      */
     public enum Category {
-        SIMPLE_EXPENSE,           // Single expense: "кофе 200", "такси 500"
-        INTERNAL_TRANSFER,        // Transfer between own accounts: "перевод 1000 с визы на кеш"
-        THIRD_PARTY_ACTION,       // Operations with linked users: "Ксюше 200", "за девушку"
-        COMPLEX_ACTION            // Everything else → MainAgent with full context (including custom instructions)
+        SIMPLE_FINANCIAL,         // Single straightforward financial operation → FinancialAgent (fast, cheap)
+        COMPLEX_ACTION            // Everything else → MainAgent with full context (corrections, multi-step, custom instructions)
     }
 
     // ═══════════════════════════════════════════════════════════════════════════
@@ -71,45 +70,39 @@ public class MessageClassifierAgent {
             
             ## Your Task
             Classify the message into EXACTLY ONE category.
-            Choose the most specific category that matches.
             
             ## Categories (choose EXACTLY ONE)
             
-            **SIMPLE_EXPENSE** - Single straightforward expense
-            - One amount + optional item name
-            - Examples: "coffee 200", "taxi 500", "groceries 3000", "200"
-            - NO person names, NO transfers between accounts
+            **SIMPLE_FINANCIAL** - Single straightforward financial operation
+            This includes:
+            - Simple expenses: "coffee 200", "taxi 500", "groceries 3000"
+            - Transfers between own accounts: "transfer 1000 from card to cash", "withdrew 500"
+            - Transfers to/from specific linked users: "sent 500 to {linkedUsersExample}", "got 200 from {linkedUsersExample}"
+            - Expenses for specific linked users: "bought coffee for {linkedUsersExample} 200"
             
-            **INTERNAL_TRANSFER** - Transfer between user's OWN accounts
-            - Keywords: transfer, move, withdraw, deposit, top up (any language)
-            - From/to user's accounts (not to other people)
-            - Examples: "transfer 1000 from card A to cash", "withdrew 500 from card"
-            
-            {thirdPartyCategory}
+            Characteristics:
+            - ONE clear operation (not multiple)
+            - All information is straightforward (amount, what, where)
+            - No corrections to previous operations
+            - No custom instructions or settings
             
             **COMPLEX_ACTION** - Everything else (default fallback)
+            This includes:
             - Multiple operations in one message
+            - Corrections to previous transactions (keywords: "не", "not", "actually", "изменить", "change")
             - Questions about settings, help, show data
-            - Corrections to previous transactions
-            - Custom instructions, aliases, settings (e.g. "remember Sarah is USER_X", "main card is account Y")
+            - Custom instructions, aliases, settings (e.g. "remember Sarah is USER_X")
             - Math expressions, calculations
-            - Unclear, ambiguous, slang
+            - Unclear, ambiguous, or slang-heavy messages
             - When in doubt → COMPLEX_ACTION
             
-            ## Rules
-            - Return ONLY ONE category
-            - If message contains NEGATION ("не", "not", "нет") with person name → COMPLEX_ACTION (correction, not third party)
-            - If unclear or doesn't fit simple patterns → COMPLEX_ACTION
+            ## Special Rules
+            - If message contains NEGATION ("не", "not", "нет", "actually") → COMPLEX_ACTION (likely a correction)
+            - If person mentioned is NOT in linked users list → could be SIMPLE_FINANCIAL (treated as expense with comment)
+            - Generic words like "friends", "brothers", "guys" (not specific names) → SIMPLE_FINANCIAL (expense with comment)
             - When in doubt → COMPLEX_ACTION (safe default)
-            """;
-    
-    private static final String THIRD_PARTY_CATEGORY_TEMPLATE = """
-            **THIRD_PARTY_ACTION** - Involves SPECIFIC linked user (rare!)
-            - User has these linked users: {linkedUsers}
-            - ONLY use if message mentions one of these EXACT names/aliases
-            - Generic words like "friends", "brothers", "guys" → NOT third party (use SIMPLE_EXPENSE with comment)
-            - Examples: "to {firstLinkedUser} 200" → THIRD_PARTY_ACTION, "for girlfriend" → SIMPLE_EXPENSE (unless girlfriend is in list)
-            - Counter-examples: "for friends 500" → SIMPLE_EXPENSE, "закинул братьям" → SIMPLE_EXPENSE
+            
+            {linkedUsersContext}
             """;
     
     // ═══════════════════════════════════════════════════════════════════════════
@@ -213,19 +206,23 @@ public class MessageClassifierAgent {
     private String buildSystemPrompt(Request request) {
         Map<String, Object> params = new HashMap<>();
         
-        // Only include THIRD_PARTY_ACTION category if user has linked users
+        // Include linked users context if available (for better classification)
         if (request.linkedUserNamesAndAliases() != null && !request.linkedUserNamesAndAliases().isEmpty()) {
-            // Build third party category text with actual linked user names
             String linkedUsersStr = String.join(", ", request.linkedUserNamesAndAliases());
-            String firstLinkedUser = request.linkedUserNamesAndAliases().get(0);
+            String linkedUsersExample = request.linkedUserNamesAndAliases().get(0);
             
-            String thirdPartyCategory = THIRD_PARTY_CATEGORY_TEMPLATE
-                    .replace("{linkedUsers}", linkedUsersStr)
-                    .replace("{firstLinkedUser}", firstLinkedUser);
+            String linkedUsersContext = String.format(
+                "## Linked Users\nUser has these linked users: %s\n" +
+                "Messages mentioning these specific names/aliases can be SIMPLE_FINANCIAL.\n" +
+                "Generic terms (friends, brothers, etc.) → SIMPLE_FINANCIAL (expense with comment).",
+                linkedUsersStr
+            );
             
-            params.put("thirdPartyCategory", thirdPartyCategory);
+            params.put("linkedUsersContext", linkedUsersContext);
+            params.put("linkedUsersExample", linkedUsersExample);
         } else {
-            params.put("thirdPartyCategory", "");
+            params.put("linkedUsersContext", "## Linked Users\nUser has no linked users.");
+            params.put("linkedUsersExample", "friend");
         }
         
         PromptTemplate template = new PromptTemplate(PROMPT_TEMPLATE);

@@ -11,9 +11,7 @@ import com.github.dimka9910.sheets.ai.dto.user.UserEntity;
 import com.github.dimka9910.sheets.ai.services.agents.MainAgent;
 import com.github.dimka9910.sheets.ai.services.agents.MessageClassifierAgent;
 import com.github.dimka9910.sheets.ai.services.agents.MessageClassifierAgent.Category;
-import com.github.dimka9910.sheets.ai.services.agents.SimpleExpenseAgent;
-import com.github.dimka9910.sheets.ai.services.agents.InternalTransferAgent;
-import com.github.dimka9910.sheets.ai.services.agents.ThirdPartyActionAgent;
+import com.github.dimka9910.sheets.ai.services.agents.FinancialAgent;
 import com.github.dimka9910.sheets.ai.services.agents.CustomInstructionAgent;
 import com.github.dimka9910.sheets.ai.services.agents.ExpenseEditAndDeletionAgent;
 import lombok.RequiredArgsConstructor;
@@ -27,13 +25,11 @@ import java.util.List;
 /**
  * Spring Service for orchestrating message processing.
  * 
- * New simplified flow:
- * 1. ClassifierAgent — determine category (SIMPLE vs COMPLEX)
+ * Simplified flow:
+ * 1. ClassifierAgent — determine category (SIMPLE_FINANCIAL vs COMPLEX_ACTION)
  * 2. Route to appropriate handler:
- *    - SIMPLE_EXPENSE → SimpleExpenseAgent
- *    - INTERNAL_TRANSFER → InternalTransferAgent
- *    - THIRD_PARTY_ACTION → ThirdPartyActionAgent
- *    - COMPLEX_ACTION → MainAgent (with full context, including custom instructions)
+ *    - SIMPLE_FINANCIAL → FinancialAgent (expenses, transfers, third-party actions)
+ *    - COMPLEX_ACTION → MainAgent (corrections, multi-step, custom instructions)
  */
 @Slf4j
 @Service
@@ -41,9 +37,7 @@ import java.util.List;
 public class Orchestrator {
     
     private final MessageClassifierAgent classifierAgent;
-    private final SimpleExpenseAgent simpleExpenseAgent;
-    private final InternalTransferAgent internalTransferAgent;
-    private final ThirdPartyActionAgent thirdPartyActionAgent;
+    private final FinancialAgent financialAgent;
     private final CustomInstructionAgent customInstructionAgent;
     private final ExpenseEditAndDeletionAgent expenseEditAndDeletionAgent;
     private final MainAgent mainAgent;
@@ -96,17 +90,9 @@ public class Orchestrator {
             
             // Step 3: Route to appropriate agent and handle result
             BaseAgentResponse agentResponse = switch (category) {
-                case SIMPLE_EXPENSE -> {
-                    log.info("→ Routing to SimpleExpenseAgent");
-                    yield simpleExpenseAgent.process(message, userContext);
-                }
-                case INTERNAL_TRANSFER -> {
-                    log.info("→ Routing to InternalTransferAgent");
-                    yield internalTransferAgent.process(message, userContext);
-                }
-                case THIRD_PARTY_ACTION -> {
-                    log.info("→ Routing to ThirdPartyActionAgent");
-                    yield thirdPartyActionAgent.process(message, userContext);
+                case SIMPLE_FINANCIAL -> {
+                    log.info("→ Routing to FinancialAgent");
+                    yield financialAgent.process(message, userContext);
                 }
                 case COMPLEX_ACTION -> {
                     log.info("→ Routing to MainAgent (COMPLEX_ACTION)");
@@ -183,17 +169,9 @@ public class Orchestrator {
                         .message(ciResponse.explanation() != null ? ciResponse.explanation() : "Settings updated")
                         .build();
             }
-            case SIMPLE_EXPENSE -> {
-                log.info("  ↳ Calling SimpleExpenseAgent");
-                yield simpleExpenseAgent.process(message, userContext);
-            }
-            case INTERNAL_TRANSFER -> {
-                log.info("  ↳ Calling InternalTransferAgent");
-                yield internalTransferAgent.process(message, userContext);
-            }
-            case THIRD_PARTY_ACTION -> {
-                log.info("  ↳ Calling ThirdPartyActionAgent");
-                yield thirdPartyActionAgent.process(message, userContext);
+            case SIMPLE_EXPENSE, INTERNAL_TRANSFER, THIRD_PARTY_ACTION -> {
+                log.info("  ↳ Calling FinancialAgent ({})", redirect.getAgentType());
+                yield financialAgent.process(message, userContext);
             }
             case CORRECTION -> {
                 log.info("  ↳ Calling ExpenseEditAndDeletionAgent");
