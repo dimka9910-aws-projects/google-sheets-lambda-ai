@@ -169,8 +169,8 @@ public class Orchestrator {
                         .message(ciResponse.explanation() != null ? ciResponse.explanation() : "Settings updated")
                         .build();
             }
-            case SIMPLE_EXPENSE, INTERNAL_TRANSFER, THIRD_PARTY_ACTION -> {
-                log.info("  ↳ Calling FinancialAgent ({})", redirect.getAgentType());
+            case FINANCIAL -> {
+                log.info("  ↳ Calling FinancialAgent");
                 yield financialAgent.process(message, userContext);
             }
             case CORRECTION -> {

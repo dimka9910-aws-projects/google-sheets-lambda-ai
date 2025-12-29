@@ -10,7 +10,7 @@ import lombok.NoArgsConstructor;
  * Action to redirect the request to a specialized lightweight agent.
  * 
  * MainAgent can decide that a request is better handled by a specialized agent
- * (e.g., SimpleExpenseAgent for simple expenses, CustomInstructionAgent for settings).
+ * (e.g., FinancialAgent for financial operations, CustomInstructionAgent for settings).
  * 
  * This allows MainAgent to offload simple requests to faster, cheaper agents
  * while handling complex multi-action scenarios itself.
@@ -24,7 +24,7 @@ public class MainAgentRedirectAction {
     /**
      * Type of agent to redirect to.
      */
-    @JsonPropertyDescription("Type of specialized agent to handle this request. Options: CUSTOM_INSTRUCTION (for settings/preferences), SIMPLE_EXPENSE (for straightforward expenses), INTERNAL_TRANSFER (for transfers between own accounts), THIRD_PARTY_ACTION (for operations with linked users), CORRECTION (for modifying or deleting existing operations).")
+    @JsonPropertyDescription("Type of specialized agent to handle this request. Options: CUSTOM_INSTRUCTION (for settings/preferences), FINANCIAL (for any financial operation: expenses, transfers, income), CORRECTION (for modifying or deleting existing operations).")
     private AgentType agentType;
     
     /**
@@ -51,22 +51,11 @@ public class MainAgentRedirectAction {
         CUSTOM_INSTRUCTION,
         
         /**
-         * SimpleExpenseAgent - handles straightforward single expenses.
-         * Examples: "200 on coffee", "bought groceries 1500"
+         * FinancialAgent - handles ALL financial operations.
+         * Covers: expenses, internal transfers, transfers to/from linked users, income.
+         * Examples: "200 on coffee", "transfer 1000 from card to cash", "sent 500 to Bob"
          */
-        SIMPLE_EXPENSE,
-        
-        /**
-         * InternalTransferAgent - handles transfers between user's own accounts.
-         * Examples: "transfer 1000 from card to cash", "withdrew 500"
-         */
-        INTERNAL_TRANSFER,
-        
-        /**
-         * ThirdPartyActionAgent - handles operations with linked users.
-         * Examples: "sent 500 to BOB", "bought coffee for girlfriend 200"
-         */
-        THIRD_PARTY_ACTION,
+        FINANCIAL,
         
         /**
          * ExpenseEditAndDeletionAgent - handles corrections (MODIFY/DELETE) of existing operations.
