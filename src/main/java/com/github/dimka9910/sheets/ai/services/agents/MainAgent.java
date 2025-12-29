@@ -112,13 +112,10 @@ public class MainAgent {
             ## REDIRECT_TO_AGENT
             Delegate to specialized agents with enriched Tickets.
             
-            ```json
-            {
-              "agentType": "FINANCIAL or THIRD_PARTY_FINANCIAL or CUSTOM_INSTRUCTION or CORRECTION",
-              "message": "Enriched Ticket with full context (UUID, inferred values, defaults)",
-              "reason": "Optional debug note"
-            }
-            ```
+            Example redirect action:
+            - agentType: FINANCIAL, THIRD_PARTY_FINANCIAL, CUSTOM_INSTRUCTION, or CORRECTION
+            - message: Enriched Ticket with full context (UUID, inferred values, defaults)
+            - reason: Optional debug note
             
             **The Ticket (`message` field):**
             NOT the raw user message. Must include:
@@ -291,11 +288,13 @@ public class MainAgent {
             params.put("pendingList", contextMapper.formatPendingActionsList(context.getPendingActions()));
         }
         
-        // JSON Schema
-        params.put("formatInstructions", outputConverter.getFormat());
+        // Build prompt without PromptTemplate (to avoid StringTemplate syntax issues with quotes)
+        String finalPrompt = promptTemplate
+                .replace("{formatInstructions}", outputConverter.getFormat())
+                .replace("{pendingClarifications}", (String) params.get("pendingClarifications"))
+                .replace("{userContext}", (String) params.get("userContext"));
         
-        PromptTemplate template = new PromptTemplate(promptTemplate);
-        return Objects.requireNonNull(template.render(params), "Prompt template render returned null");
+        return finalPrompt;
     }
 
     private String truncate(String s, int maxLen) {
