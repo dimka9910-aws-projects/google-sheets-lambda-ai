@@ -72,19 +72,5 @@ public class MainAgentResponse extends BaseAgentResponse {
         super(message, pendingClarifications);
         this.redirects = redirects != null ? redirects : new ArrayList<>();
     }
-    
-    /**
-     * Check if response has redirects
-     */
-    public boolean hasRedirects() {
-        return redirects != null && !redirects.isEmpty();
-    }
-    
-    /**
-     * Check if this is just a conversational response (no redirects, no pending clarifications)
-     */
-    public boolean isConversationalOnly() {
-        return !hasRedirects() && !hasPendingClarifications();
-    }
 }
 

@@ -27,13 +27,6 @@ public abstract class BaseAgentResponse {
     private List<PendingClarificationAction> pendingClarifications;
     
     /**
-     * Check if response has pending clarifications
-     */
-    public boolean hasPendingClarifications() {
-        return pendingClarifications != null && !pendingClarifications.isEmpty();
-    }
-    
-    /**
      * Default constructor for Jackson
      */
     protected BaseAgentResponse() {

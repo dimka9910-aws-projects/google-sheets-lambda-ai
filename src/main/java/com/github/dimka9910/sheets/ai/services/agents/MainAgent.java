@@ -14,6 +14,7 @@ import org.springframework.ai.chat.prompt.PromptTemplate;
 import org.springframework.ai.converter.BeanOutputConverter;
 import org.springframework.ai.openai.OpenAiChatOptions;
 import org.springframework.stereotype.Component;
+import org.apache.commons.collections4.CollectionUtils;
 
 import java.util.HashMap;
 import java.util.List;
@@ -231,8 +232,8 @@ public class MainAgent {
             MainAgentResponse result = outputConverter.convert(content);
             
             log.info("✅ Parsed: redirects={}, pending={}, response='{}'", 
-                    result.hasRedirects() ? result.getRedirects().size() : 0,
-                    result.hasPendingClarifications() ? result.getPendingClarifications().size() : 0,
+                    !CollectionUtils.isEmpty(result.getRedirects()) ? result.getRedirects().size() : 0,
+                    !CollectionUtils.isEmpty(result.getPendingClarifications()) ? result.getPendingClarifications().size() : 0,
                     truncate(result.getMessage(), 50));
             
             return new Response(result, null);

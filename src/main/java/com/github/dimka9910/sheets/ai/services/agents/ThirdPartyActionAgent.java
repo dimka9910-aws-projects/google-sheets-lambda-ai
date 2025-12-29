@@ -15,6 +15,7 @@ import org.springframework.ai.chat.prompt.PromptTemplate;
 import org.springframework.ai.converter.BeanOutputConverter;
 import org.springframework.ai.openai.OpenAiChatOptions;
 import org.springframework.stereotype.Component;
+import org.apache.commons.collections4.CollectionUtils;
 
 import java.util.HashMap;
 import java.util.List;
@@ -116,7 +117,7 @@ public class ThirdPartyActionAgent {
             validateResult(result, userContext);
             
             log.info("✅ ThirdPartyActionAgent result: {} actions, pending={}", 
-                    result.getFinancialActions().size(), result.hasPendingClarifications());
+                    result.getFinancialActions().size(), !CollectionUtils.isEmpty(result.getPendingClarifications()));
             
             return result;
             

@@ -14,6 +14,7 @@ import org.springframework.ai.chat.prompt.PromptTemplate;
 import org.springframework.ai.converter.BeanOutputConverter;
 import org.springframework.ai.openai.OpenAiChatOptions;
 import org.springframework.stereotype.Component;
+import org.apache.commons.collections4.CollectionUtils;
 
 import java.util.HashMap;
 import java.util.List;
@@ -113,8 +114,8 @@ public class SimpleExpenseAgent {
             validateResult(result);
             
             log.info("✅ SimpleExpenseAgent result: {} financial actions, pending={}", 
-                    result.hasFinancialActions() ? result.getFinancialActions().size() : 0, 
-                    result.hasPendingClarifications());
+                    !CollectionUtils.isEmpty(result.getFinancialActions()) ? result.getFinancialActions().size() : 0, 
+                    !CollectionUtils.isEmpty(result.getPendingClarifications()));
             
             return result;
             

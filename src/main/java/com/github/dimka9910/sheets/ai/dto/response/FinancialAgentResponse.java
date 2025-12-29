@@ -43,12 +43,5 @@ public class FinancialAgentResponse extends BaseAgentResponse {
         super(message, pendingClarifications);
         this.financialActions = financialActions != null ? financialActions : new ArrayList<>();
     }
-    
-    /**
-     * Check if response has financial actions
-     */
-    public boolean hasFinancialActions() {
-        return financialActions != null && !financialActions.isEmpty();
-    }
 }
 

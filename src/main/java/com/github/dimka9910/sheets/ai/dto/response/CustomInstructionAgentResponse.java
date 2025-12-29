@@ -39,12 +39,5 @@ public class CustomInstructionAgentResponse extends BaseAgentResponse {
         super(message, pendingClarifications);
         this.instructionActions = instructionActions != null ? instructionActions : new ArrayList<>();
     }
-    
-    /**
-     * Check if response has instruction actions
-     */
-    public boolean hasInstructionActions() {
-        return instructionActions != null && !instructionActions.isEmpty();
-    }
 }
 

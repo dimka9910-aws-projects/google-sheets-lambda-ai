@@ -20,6 +20,7 @@ import com.github.dimka9910.sheets.ai.services.agents.ExpenseEditAndDeletionAgen
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
+import org.apache.commons.collections4.CollectionUtils;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -113,10 +114,10 @@ public class Orchestrator {
             
             log.info("Agent returned: type={}, pending={}", 
                     agentResponse.getClass().getSimpleName(),
-                    agentResponse.hasPendingClarifications());
+                    !CollectionUtils.isEmpty(agentResponse.getPendingClarifications()));
             
             // Step 4: Handle redirects if MainAgent returned redirects
-            if (agentResponse instanceof MainAgentResponse mainResponse && mainResponse.hasRedirects()) {
+            if (agentResponse instanceof MainAgentResponse mainResponse && !CollectionUtils.isEmpty(mainResponse.getRedirects())) {
                 log.info("MainAgent returned {} redirects", mainResponse.getRedirects().size());
                 agentResponse = handleRedirects(mainResponse, userContext);
             }
@@ -199,7 +200,7 @@ public class Orchestrator {
         
         log.info("  ✅ Specialized agent returned: type={}, pending={}", 
                 specializedResponse.getClass().getSimpleName(),
-                specializedResponse.hasPendingClarifications());
+                !CollectionUtils.isEmpty(specializedResponse.getPendingClarifications()));
         
         // IMPORTANT: Merge pending clarifications from MainAgent (if any) into specialized response
         // MainAgent might have asked for clarification while also redirecting
