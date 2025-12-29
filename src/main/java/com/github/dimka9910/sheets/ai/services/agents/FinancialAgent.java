@@ -353,7 +353,12 @@ public class FinancialAgent {
         - "withdrew 500 from card" → TRANSFER from card to cash
         - "put 200 on card" → TRANSFER from cash to card
         
-        ### 3. INCOME - Receiving money (rare)
+        ### 3. TRANSFER - Money to/from linked users
+        **Required fields:** amount, currency, account, targetAccount, userName, targetPerson
+        **CRITICAL:** userName and targetPerson must be EXACT userNames from Linked Users list
+        **Note:** Detailed rules and examples for TRANSFER operations provided below (if linked users context is available)
+        
+        ### 4. INCOME - Receiving money (rare)
         **Required fields:** amount, currency, account
         **Examples:** "salary 50000", "got paid 3000"
         
@@ -373,12 +378,57 @@ public class FinancialAgent {
         - "transfer 1000" → {{"context": "User wants to transfer 1000 RSD. Missing: source account (from where?) and target account (to where?)."}}
         - "500 to friend" → {{"context": "User wants to send 500 RSD to friend. Unclear: friend is not in linked users list. Is this a linked user or regular expense?"}}
     """;
+    
+    // Additional section for TRANSFER operations with linked users (conditionally appended)
+    private static final String THIRD_PARTY_OPERATIONS_SECTION = """
+        
+        ## TRANSFER Operations - Detailed Rules
+        
+        ### When RECEIVING money FROM linked user:
+        - **userName**: linked user's userName (who SENDS)
+        - **targetPerson**: current user's userName (who RECEIVES)
+        - **account**: their account (source)
+        - **targetAccount**: my account (destination)
+        - **Examples:** "Sarah gave me 500", "got 1000 from Bob", "Bob sent me money"
+        
+        ### When SENDING money TO linked user:
+        - **userName**: current user's userName (who SENDS)
+        - **targetPerson**: linked user's userName (who RECEIVES)
+        - **account**: my account (source)
+        - **targetAccount**: their account (destination)
+        - **Examples:** "sent 500 to Sarah", "gave Bob 200", "transfer to girlfriend"
+        
+        ### userName and targetPerson Rules:
+        - **CRITICAL: Must be EXACT userName from Linked Users list!**
+        - Match user's words (names/aliases) to find linked user, then use their EXACT userName
+        - ❌ WRONG: using aliases or nicknames in userName/targetPerson fields
+        - ✅ CORRECT: using userName field value (e.g., "KIKI", "BOB", "DIMA")
+        
+        ### targetPerson for EXPENSE (Optional):
+        - If user spent money FOR a linked user, set targetPerson to their EXACT userName
+        - Example: "bought coffee for Sarah" → if Sarah is linked user with userName=KIKI, use targetPerson="KIKI"
+        
+        ### TRANSFER Examples:
+        - "sent 500 to Sarah" (Sarah's userName is KIKI) → 
+          {{"operationType": "TRANSFER", "amount": 500, "currency": "RSD", "userName": "DIMA", "targetPerson": "KIKI", "account": "CARD_DIMA", "targetAccount": "CARD_KIKI"}}
+        
+        - "Bob gave me 200" (Bob's userName is BOB) → 
+          {{"operationType": "TRANSFER", "amount": 200, "currency": "RSD", "userName": "BOB", "targetPerson": "DIMA", "account": "CARD_BOB", "targetAccount": "CARD_DIMA"}}
+        
+        ### EXPENSE for linked user Examples:
+        - "bought coffee for Sarah 200" (Sarah's userName is KIKI) → 
+          {{"operationType": "EXPENSE", "amount": 200, "currency": "RSD", "account": "CARD_MAIN", "fund": "FOOD", "targetPerson": "KIKI"}}
+        """;
 
     
     private String buildSystemPrompt(UserEntity context, boolean includeLinkedUsersContext) {
         // Step 1: Build complete prompt by concatenating sections
         StringBuilder promptBuilder = new StringBuilder(PROMPT_TEMPLATE);
         
+        // Conditionally append third-party operations section (token optimization)
+        if (includeLinkedUsersContext) {
+            promptBuilder.append(THIRD_PARTY_OPERATIONS_SECTION);
+        }
         
         // Step 2: Prepare data parameters
         Map<String, Object> params = new HashMap<>();
