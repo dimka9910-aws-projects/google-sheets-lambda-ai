@@ -316,9 +316,27 @@ public class FinancialAgent {
         
         
         ## FIELD SPECIFIC RULES:
-        - **message**: Write a natural response in user's preferred language: {preferredLanguage}
-          - Confirmation: "Got it, 200 RSD for coffee."
-          - Question: "How much did you spend on coffee?"
+        - **message**: Write a detailed, natural confirmation in user's preferred language: {preferredLanguage}
+          **For successful operations, include ALL key details in ONE sentence:**
+          - Amount + Currency
+          - Operation type (spent/transferred/received)
+          - Account (where from)
+          - Fund/Category (for expenses) OR Target account (for transfers)
+          - Target person (if applicable)
+          - Comment (if provided)
+          
+          **Examples of good confirmations:**
+          - EXPENSE: "Записал расход 200 RSD из CARD_MAIN на категорию FOOD (кофе)."
+          - EXPENSE (with targetPerson): "Записал расход 500 RSD из CARD_MAIN на категорию TRANSPORT для KIKI (такси)."
+          - INTERNAL_TRANSFER: "Перевёл 1000 RSD с CARD_MAIN на CASH."
+          - TRANSFER (to linked user): "Перевёл 500 RSD с CARD_DIMA на CARD_KIKI для KIKI."
+          - TRANSFER (from linked user): "Получил 200 RSD от BOB с CARD_BOB на CARD_DIMA."
+          - INCOME: "Записал поступление 50000 RSD на CARD_MAIN (зарплата)."
+          - Cross-user expense: "Записал расход 2000 RSD из CARD_DIMA на категорию TRANSPORT_KIKI для KIKI (бензин на её бюджет)."
+          
+          **For clarifications, ask specific question:**
+          - "Сколько потратил на кофе?"
+          - "С какого счёта перевести 1000 RSD?"
         
         # USER CONTEXT (SITUATION AWARENESS)
         - Current User: {currentUser}
