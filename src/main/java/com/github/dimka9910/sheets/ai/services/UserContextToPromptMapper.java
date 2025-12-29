@@ -266,14 +266,46 @@ public class UserContextToPromptMapper {
             sb.append(" [aliases: ").append(String.join(", ", lu.getAliases())).append("]");
         }
         
-        // Show accounts (critical for TRANSFER operations!)
+        // Show full context if available (critical for correct value selection!)
         if (linkedUserEntitys != null && linkedUserEntitys.containsKey(lu.getUserName())) {
             UserEntity linkedUserEntity = linkedUserEntitys.get(lu.getUserName());
+            
+            // Defaults (important for fallback logic)
+            sb.append("\n  Defaults: ");
+            sb.append("Currency: ").append(linkedUserEntity.getDefaultCurrency() != null ? 
+                    linkedUserEntity.getDefaultCurrency() : "not set");
+            sb.append(" | Account: ").append(linkedUserEntity.getDefaultAccount() != null ? 
+                    linkedUserEntity.getDefaultAccount().getAccountId() : "not set");
+            sb.append(" | Fund: ").append(linkedUserEntity.getDefaultFund() != null ? 
+                    linkedUserEntity.getDefaultFund().getFundId() : "not set");
+            
+            // Accounts (critical for TRANSFER operations!)
             if (linkedUserEntity.getAccounts() != null && !linkedUserEntity.getAccounts().isEmpty()) {
                 sb.append("\n  Accounts: ");
                 sb.append(linkedUserEntity.getAccounts().stream()
-                        .map(acc -> acc.getAccountId())
+                        .map(acc -> formatAccountEntry(acc))
                         .collect(Collectors.joining(", ")));
+            } else {
+                sb.append("\n  Accounts: (none)");
+            }
+            
+            // Funds (critical for EXPENSE operations with targetPerson!)
+            if (linkedUserEntity.getFunds() != null && !linkedUserEntity.getFunds().isEmpty()) {
+                sb.append("\n  Funds: ");
+                sb.append(linkedUserEntity.getFunds().stream()
+                        .map(fund -> formatFundEntry(fund))
+                        .collect(Collectors.joining(", ")));
+            } else {
+                sb.append("\n  Funds: (none)");
+            }
+            
+            // Custom instructions (may contain special rules for this linked user)
+            if (linkedUserEntity.getCustomInstructions() != null && !linkedUserEntity.getCustomInstructions().isEmpty()) {
+                sb.append("\n  Custom Instructions:");
+                for (int i = 0; i < linkedUserEntity.getCustomInstructions().size(); i++) {
+                    sb.append("\n    ").append(i + 1).append(". ")
+                            .append(linkedUserEntity.getCustomInstructions().get(i));
+                }
             }
         }
         

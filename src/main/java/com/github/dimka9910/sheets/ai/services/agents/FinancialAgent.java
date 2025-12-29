@@ -257,74 +257,83 @@ public class FinancialAgent {
     // BUILD PROMPT
     // ═══════════════════════════════════════════════════════════════════════════
     
-    private static final String THIRD_PARTY_OPERATIONS_SECTION = """
-        ### 3. TRANSFER (Linked User) - Money to/from another person
-        **Required fields:** amount, currency, account, targetAccount, userName, targetPerson
-        **CRITICAL:** userName and targetPerson must be EXACT userNames from lists below!
-        
-        **When RECEIVING money FROM linked user:**
-        - userName: linked user's userName (who SENDS)
-        - targetPerson: current user's userName (who RECEIVES)
-        - account: their account (source)
-        - targetAccount: my account (destination)
-        - Examples: "Sarah gave me 500", "got 1000 from Bob"
-        
-        **When SENDING money TO linked user:**
-        - userName: current user's userName (who SENDS)
-        - targetPerson: linked user's userName (who RECEIVES)
-        - account: my account (source)
-        - targetAccount: their account (destination)
-        - Examples: "sent 500 to Sarah", "gave Bob 200"
-        """;
-    
-    private static final String LINKED_USER_FIELD_RULES = """
-        ### userName and targetPerson (MANDATORY for linked user TRANSFER):
-        - **CRITICAL: Must be EXACT userName from lists below!**
-        - Match user's words to names/aliases, then use the EXACT userName field
-        - ❌ WRONG: aliases, nicknames ("Ksyusha", "girlfriend")
-        - ✅ CORRECT: userName field (e.g., "KIKI", "DIMA")
-        
-        ### targetPerson (OPTIONAL for EXPENSE):
-        - If user spent money FOR a linked user, set this to their EXACT userName
-        - Examples: "bought coffee for Sarah" → if Sarah is linked user, use her userName
-        """;
-    
-    private static final String LINKED_USER_EXAMPLES = """
-        ### TRANSFER (linked user):
-        - "sent 500 to Sarah" (Sarah's userName is KIKI) → 
-          {{"operationType": "TRANSFER", "amount": 500, "currency": "RSD", "userName": "DIMA", "targetPerson": "KIKI", "account": "CARD_DIMA", "targetAccount": "CARD_KIKI"}}
-        
-        - "Bob gave me 200" (Bob's userName is BOB) → 
-          {{"operationType": "TRANSFER", "amount": 200, "currency": "RSD", "userName": "BOB", "targetPerson": "DIMA", "account": "CARD_BOB", "targetAccount": "CARD_DIMA"}}
-        
-        ### EXPENSE (for linked user):
-        - "bought coffee for Sarah 200" (Sarah's userName is KIKI) → 
-          {{"operationType": "EXPENSE", "amount": 200, "currency": "RSD", "account": "CARD_MAIN", "fund": "FOOD", "targetPerson": "KIKI"}}
-        """;
-    
     private static final String PROMPT_TEMPLATE = """
-        You are a high-precision financial parser for a personal finance assistant.
-        Your task is to extract ONE financial operation from the user message.
+        # ROLE: High-Precision Financial Data Extractor
+        Your goal: Map human language to a structured JSON financial record.
         
-        **ALWAYS respond in the SAME language as the user's input message unless other instructions provided.**
+        ## PARSING PROTOCOL (Follow strictly):
+        1. **Identify OperationType**:\s
+           - INTERNAL_TRANSFER: Movement between OWN accounts (no other people mentioned).
+           - TRANSFER: Movement between current user and LINKED users. 
+           - INCOME: External money coming in.
+           - EXPENSE: Everything else (default).
         
-        ## RESPONSE FORMAT
-        Your response must be a JSON object with:
-        - `financialActions`: Array of FINANCIAL actions (max 1, empty if need clarification)
-        - `pendingClarifications`: Array of PENDING_CLARIFICATION actions (empty if all data available)
-        - `message`: Your response text to the user (in their language) - confirmation or question
+        2. **Map Entities (Priority: Explicit > Inferred > Default)**:
+           - **Amount**: - should be provided Explicitly as number or text or slang.
+           - **Currency**: Match explicit word -> Infer from slang -> Use {currency} default.
+           - **Account**: Match user keyword to exact ID from "Available" lists, or default, or ask
+
+           - **Fund**: Match user keyword to exact ID from "Available" lists.
+             - *Inference*: "amex" -> AMERICAN_EXPRESS, "taxi" -> TRANSPORT, "card" -> CARD_MAIN.
+             - *Fallback*: Use {defaultAccount} / {defaultFund} ONLY if inference fails.
+             
+          **NOTE - (GENERAL RULES FOR MATCHING FIELD VALUES)**:
+          - *Inference*: try to match provided name to listed name or alias, it can be slang, short form of the name or exact match. Examples:
+            - "amex" -> AMERICAN_EXPRESS
+            - "family" -> FAMILY_MONTHLY_BUDGET
+            - "payed with 100 dollar bill" -> clearly refers cash operations so some CASH account should be selected
+          - if user clearly didn't try to refer any value - pick default
+          - if no default available - PENDING_CLARIFICATION
+          - If it seems like user tried to refer some value, but you are NOT 99% sure about what value to pick - better leave a PENDING_CLARIFICATION with your guess if you have any, or just ask.
+          - if user refers some name, which doesn't exist in account list or fund list - leave PENDING_CLARIFICATION explaining that you can't pick one. 
+          - also user's Custom Instructions might have special rules for value matching, so pay attention to them as well
+          
+                  
+        3. **Handle Linked Users (If applicable)**:
+           - if list of Linked Users is not empty - then user's request might be an operation with linked user.
+           - first of all try to identify if user's really refers it's linked user, as user clearly should refer one.
+             - targetPerson should ALWAYS be one of linked users, never invent unlisted one
+             - you should match if it's a linked user by it's name of aliases
+             - if user have a linked user "spouse" and says - he transfer money to wife - you can clearly match a linked user
+             - if user have linked user "Robert" and says he bought something for bob - you can clearly match a linked user
+             - if user have a linked user "Linda" and says he bought a present for mom - it most likely just a simple EXPENSE operation with comment "present for mom" and not a linked user operation.
+             - so don't try to invent anything here, if it clearly doesn't match - it's a simple expense operation with a comment.
+             - Use EXACT `userName` from the list (DIMA, KIKI, etc.).
+             - Never use nicknames or aliases in the `userName` or `targetPerson` fields.
+             - also user's Custom Instructions might have special rules for linked user matching, so pay attention to them as well
+           - So if you clearly identified that operation involves a LINKED_USER there might be two possible scenarios 
+             - Transfer to a linked user, like:
+               - I venmo to Alice for lunch 200 bucks
+               - gave 100 to Tim from my wallet
+               - transfer from my card to Wife 200
+               - my wife gave me 200 euro she had
+             - Payment with your own money for someone else's fund, in that case you have to make a simple EXPENSE, but pick a fund from Linked User's list.
+               - Payed for Alice for her present for mom 200, on her personal budget (here you clearly have to match to some of here personal budgets like MY_DAILY_SPEND)
+               - and also payed for her fuel 2000 (here you have to probably pick one of linked user's defaults)
         
-        ## CRITICAL: Complete Data Rule
-        **If you return a FINANCIAL action, ALL required fields for that operation type MUST be filled.**
-        - Use defaults from User Context if not explicitly specified
-        - If you cannot determine a value AND there is no default → return PENDING_CLARIFICATION instead
-        - NEVER return a FINANCIAL action with null/empty required fields
+        ### Linked Users:
+        {linkedUsers}
         
-        ## CRITICAL: ID Field Rule
-        **ALWAYS set "id": null for new operations.**
-        - The "id" field is ONLY used for editing/deleting existing operations
-        - For new operations, "id" MUST be null (backend will generate UUID)
-        - Do NOT generate or invent UUID values
+        
+        
+        
+        ## FIELD SPECIFIC RULES:
+        - **message**: Write a natural response in USER'S language.
+          - Confirmation: "Got it, 200 RSD for coffee."
+          - Question: "How much did you spend on coffee?"
+        
+        # USER CONTEXT (SITUATION AWARENESS)
+        - Current User: {currentUser}
+        - Defaults: Currency: {currency} | Account: {defaultAccount} | Fund: {defaultFund}
+        
+        ### Available Data:
+        - Accounts: {accounts}
+        - Funds: {funds}
+        - Linked Users: {linkedUsers}
+        
+        # CUSTOM RULES:
+        {customInstructions}
+        
         
         ## Operation Types
         
@@ -387,9 +396,7 @@ public class FinancialAgent {
         
         ### Available Funds:
         {funds}
-        
-        ### Linked Users:
-        {linkedUsers}
+       
         
         ## Examples
         
@@ -406,6 +413,47 @@ public class FinancialAgent {
         - "transfer 1000" → {{"context": "User wants to transfer 1000 RSD. Missing: source account (from where?) and target account (to where?)."}}
         - "500 to friend" → {{"context": "User wants to send 500 RSD to friend. Unclear: friend is not in linked users list. Is this a linked user or regular expense?"}}
     """;
+
+  private static final String THIRD_PARTY_OPERATIONS_SECTION = """
+        ### 3. TRANSFER (Linked User) - Money to/from another person
+        **Required fields:** amount, currency, account, targetAccount, userName, targetPerson
+        **CRITICAL:** userName and targetPerson must be EXACT userNames from lists below!
+        
+        **When RECEIVING money FROM linked user:**
+        - userName: linked user's userName (who SENDS)
+        - targetPerson: current user's userName (who RECEIVES)
+        - account: their account (source)
+        - targetAccount: my account (destination)
+        - Examples: "Sarah gave me 500", "got 1000 from Bob"
+        
+        **When SENDING money TO linked user:**
+        - userName: current user's userName (who SENDS)
+        - targetPerson: linked user's userName (who RECEIVES)
+        - account: my account (source)
+        - targetAccount: their account (destination)
+        - Examples: "sent 500 to Sarah", "gave Bob 200"
+
+        ### userName and targetPerson (MANDATORY for linked user TRANSFER):
+        - **CRITICAL: Must be EXACT userName from lists below!**
+        - Match user's words to names/aliases, then use the EXACT userName field
+        - ❌ WRONG: aliases, nicknames ("Ksyusha", "girlfriend")
+        - ✅ CORRECT: userName field (e.g., "KIKI", "DIMA")
+        
+        ### targetPerson (OPTIONAL for EXPENSE):
+        - If user spent money FOR a linked user, set this to their EXACT userName
+        - Examples: "bought coffee for Sarah" → if Sarah is linked user, use her userName
+
+        ### TRANSFER (linked user):
+        - "sent 500 to Sarah" (Sarah's userName is KIKI) → 
+          {{"operationType": "TRANSFER", "amount": 500, "currency": "RSD", "userName": "DIMA", "targetPerson": "KIKI", "account": "CARD_DIMA", "targetAccount": "CARD_KIKI"}}
+        
+        - "Bob gave me 200" (Bob's userName is BOB) → 
+          {{"operationType": "TRANSFER", "amount": 200, "currency": "RSD", "userName": "BOB", "targetPerson": "DIMA", "account": "CARD_BOB", "targetAccount": "CARD_DIMA"}}
+        
+        ### EXPENSE (for linked user):
+        - "bought coffee for Sarah 200" (Sarah's userName is KIKI) → 
+          {{"operationType": "EXPENSE", "amount": 200, "currency": "RSD", "account": "CARD_MAIN", "fund": "FOOD", "targetPerson": "KIKI"}}
+        """;
     
     private String buildSystemPrompt(UserEntity context, boolean includeLinkedUsersContext) {
         // Step 1: Build complete prompt by concatenating sections
@@ -414,8 +462,6 @@ public class FinancialAgent {
         // Conditionally append third-party sections (token optimization)
         if (includeLinkedUsersContext) {
             promptBuilder.append(THIRD_PARTY_OPERATIONS_SECTION);
-            promptBuilder.append(LINKED_USER_FIELD_RULES);
-            promptBuilder.append(LINKED_USER_EXAMPLES);
         }
         
         // Step 2: Prepare data parameters

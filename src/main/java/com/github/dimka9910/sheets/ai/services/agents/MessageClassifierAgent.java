@@ -104,11 +104,10 @@ public class MessageClassifierAgent {
             - Math expressions, calculations
             - Unclear, ambiguous, or slang-heavy messages
             - When in doubt → COMPLEX_ACTION
+            - if user's tries to add something to previous message like "and also paid..", "а ешё..", "also forgot to say.."
+            - any possible reference to previous messages should be treated like COMPLEX_ACTION
             
             ## Special Rules
-            - If message contains NEGATION ("не", "not", "нет", "actually") → COMPLEX_ACTION (likely a correction)
-            - If person mentioned is NOT in linked users list → SIMPLE_FINANCIAL (treated as expense with comment)
-            - Generic words like "friends", "brothers", "guys" (not specific names) → SIMPLE_FINANCIAL (expense with comment)
             - When in doubt → COMPLEX_ACTION (safe default)
             
             {linkedUsersContext}
