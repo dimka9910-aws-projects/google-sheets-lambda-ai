@@ -432,7 +432,10 @@ public class FinancialAgent {
         
         // Include linked users context only if requested (token optimization)
         if (includeLinkedUsersContext) {
-            String linkedUsersList = contextMapper.formatLinkedUsersList(context.getLinkedUsers());
+            // Include linked users WITH their accounts (critical for TRANSFER operations)
+            String linkedUsersList = contextMapper.formatLinkedUsersListWithAccounts(
+                    context.getLinkedUserEntitys(), 
+                    context.getLinkedUsers());
             params.put("linkedUsers", linkedUsersList != null ? linkedUsersList : "(No linked users)");
             params.put("thirdPartySection", THIRD_PARTY_OPERATIONS_SECTION);
             params.put("linkedUserFieldRules", LINKED_USER_FIELD_RULES);

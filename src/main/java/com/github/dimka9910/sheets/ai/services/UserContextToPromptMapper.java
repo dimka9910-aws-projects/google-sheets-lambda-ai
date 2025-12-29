@@ -204,6 +204,23 @@ public class UserContextToPromptMapper {
      * Each linked user on a new line with "- " prefix.
      * Shows userName (EXACT userName to use in actions), displayName, and aliases.
      */
+    /**
+     * Format linked users list with their accounts (for third-party operations).
+     * Requires Map<String, UserEntity> linkedUserEntitys to be populated.
+     */
+    public String formatLinkedUsersListWithAccounts(Map<String, UserEntity> linkedUserEntitys, List<LinkedUserEntry> linkedUsers) {
+        if (linkedUsers == null || linkedUsers.isEmpty()) {
+            return "(No linked users configured)";
+        }
+
+        return linkedUsers.stream()
+                .map(lu -> "- " + formatLinkedUserEntryWithAccounts(lu, linkedUserEntitys))
+                .collect(Collectors.joining("\n"));
+    }
+    
+    /**
+     * Format linked users list WITHOUT accounts (for display/classifier).
+     */
     public String formatLinkedUsersList(List<LinkedUserEntry> linkedUsers) {
         if (linkedUsers == null || linkedUsers.isEmpty()) {
             return "(No linked users configured)";
@@ -228,6 +245,36 @@ public class UserContextToPromptMapper {
         // Show aliases
         if (lu.getAliases() != null && !lu.getAliases().isEmpty()) {
             sb.append(" [aliases: ").append(String.join(", ", lu.getAliases())).append("]");
+        }
+        
+        return sb.toString();
+    }
+    
+    private String formatLinkedUserEntryWithAccounts(LinkedUserEntry lu, Map<String, UserEntity> linkedUserEntitys) {
+        StringBuilder sb = new StringBuilder();
+        
+        // Show userName (this is the EXACT userName to use in FINANCIAL actions!)
+        sb.append("**").append(lu.getUserName()).append("**");
+        
+        // Show display name if different
+        if (lu.getDisplayName() != null && !lu.getDisplayName().equals(lu.getUserName())) {
+            sb.append(" (").append(lu.getDisplayName()).append(")");
+        }
+        
+        // Show aliases
+        if (lu.getAliases() != null && !lu.getAliases().isEmpty()) {
+            sb.append(" [aliases: ").append(String.join(", ", lu.getAliases())).append("]");
+        }
+        
+        // Show accounts (critical for TRANSFER operations!)
+        if (linkedUserEntitys != null && linkedUserEntitys.containsKey(lu.getUserName())) {
+            UserEntity linkedUserEntity = linkedUserEntitys.get(lu.getUserName());
+            if (linkedUserEntity.getAccounts() != null && !linkedUserEntity.getAccounts().isEmpty()) {
+                sb.append("\n  Accounts: ");
+                sb.append(linkedUserEntity.getAccounts().stream()
+                        .map(acc -> acc.getAccountId())
+                        .collect(Collectors.joining(", ")));
+            }
         }
         
         return sb.toString();

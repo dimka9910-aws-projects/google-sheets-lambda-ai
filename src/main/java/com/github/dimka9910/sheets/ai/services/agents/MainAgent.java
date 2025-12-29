@@ -272,7 +272,9 @@ public class MainAgent {
         // Lists
         params.put("accounts", contextMapper.formatAccountsList(context.getAccounts()));
         params.put("funds", contextMapper.formatFundsList(context.getFunds()));
-        params.put("linkedUsers", contextMapper.formatLinkedUsersList(context.getLinkedUsers()));
+        // Include linked users WITH accounts for creating enriched tickets
+        params.put("linkedUsers", contextMapper.formatLinkedUsersListWithAccounts(
+                context.getLinkedUserEntitys(), context.getLinkedUsers()));
         
         // Custom instructions
         String customInstructions = contextMapper.formatCustomInstructionsSection(context.getCustomInstructions());
