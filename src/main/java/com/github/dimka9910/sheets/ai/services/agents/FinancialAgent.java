@@ -404,9 +404,44 @@ public class FinancialAgent {
         - ❌ WRONG: using aliases or nicknames in userName/targetPerson fields
         - ✅ CORRECT: using userName field value (e.g., "KIKI", "BOB", "DIMA")
         
-        ### targetPerson for EXPENSE (Optional):
-        - If user spent money FOR a linked user, set targetPerson to their EXACT userName
-        - Example: "bought coffee for Sarah" → if Sarah is linked user with userName=KIKI, use targetPerson="KIKI"
+        ### EXPENSE: Paying FOR someone on THEIR fund (Cross-user expense tracking)
+        **This is NOT a TRANSFER! It's an EXPENSE where one person pays but tracks it on another person's budget.**
+        
+        **Scenario 1: I paid for linked user's expense → Track on THEIR fund**
+        - **account**: MY account (I paid from my wallet/card)
+        - **fund**: THEIR fund from their funds list (e.g., KIKI's PERSONAL, KIKI's FOOD)
+        - **targetPerson**: THEIR userName (who benefits)
+        - **Use case**: Tracking expenses per person in shared finances
+        
+        **Scenario 2: Linked user paid for MY expense → Track on MY fund**
+        - **account**: THEIR account (they paid from their wallet/card)
+        - **fund**: MY fund from my funds list (e.g., DIMA's PERSONAL, DIMA's FOOD)
+        - **targetPerson**: MY userName (who benefits)
+        - **Use case**: Partner paid for my groceries, but it's my personal budget
+        
+        **Examples:**
+        - "Paid for Alice's present 200 on her personal budget" (Alice=KIKI) →
+          {{"operationType": "EXPENSE", "amount": 200, "account": "CARD_DIMA", "fund": "PERSONAL_KIKI", "targetPerson": "KIKI", "comment": "present"}}
+          ↑ I (DIMA) paid, but tracked on KIKI's PERSONAL fund
+        
+        - "Paid for girlfriend's fuel 2000" (girlfriend=KIKI, she has default fund) →
+          {{"operationType": "EXPENSE", "amount": 2000, "account": "CARD_DIMA", "fund": "TRANSPORT_KIKI", "targetPerson": "KIKI"}}
+          ↑ I paid, but tracked on KIKI's TRANSPORT fund
+        
+        - "Bob paid for my groceries 500" (Bob=BOB, I=DIMA) →
+          {{"operationType": "EXPENSE", "amount": 500, "account": "CARD_BOB", "fund": "FOOD_DIMA", "targetPerson": "DIMA", "comment": "groceries"}}
+          ↑ BOB paid, but tracked on DIMA's FOOD fund
+        
+        **CRITICAL: Fund matching logic:**
+        - Look for fund in the BENEFICIARY's (targetPerson) fund list, NOT the payer's
+        - If user says "her personal budget" → search in KIKI's funds for PERSONAL
+        - If user says "my food budget" → search in DIMA's funds for FOOD
+        - Use beneficiary's default fund if fund not specified
+        
+        ### EXPENSE: Simple "for someone" (Generic third-party expense)
+        - If user just says "bought coffee for Sarah" without specifying fund → generic expense
+        - Use payer's account and payer's fund (infer from item: coffee→FOOD), set targetPerson
+        - Example: "bought coffee for Sarah" → {{"account": "CARD_DIMA", "fund": "FOOD", "targetPerson": "KIKI"}}
         
         ### TRANSFER Examples:
         - "sent 500 to Sarah" (Sarah's userName is KIKI) → 
@@ -414,10 +449,6 @@ public class FinancialAgent {
         
         - "Bob gave me 200" (Bob's userName is BOB) → 
           {{"operationType": "TRANSFER", "amount": 200, "currency": "RSD", "userName": "BOB", "targetPerson": "DIMA", "account": "CARD_BOB", "targetAccount": "CARD_DIMA"}}
-        
-        ### EXPENSE for linked user Examples:
-        - "bought coffee for Sarah 200" (Sarah's userName is KIKI) → 
-          {{"operationType": "EXPENSE", "amount": 200, "currency": "RSD", "account": "CARD_MAIN", "fund": "FOOD", "targetPerson": "KIKI"}}
         """;
 
     
