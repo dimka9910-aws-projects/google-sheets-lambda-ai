@@ -42,7 +42,7 @@ public class MessageClassifierAgent {
     
     public record Request(
             String message,
-            boolean hasLinkedUsers
+            List<String> linkedUserNamesAndAliases  // All names + aliases of linked users
     ) {}
     
     public record Response(
@@ -109,12 +109,12 @@ public class MessageClassifierAgent {
             - When in doubt → COMPLEX_ACTION (safe default)
             """;
     
-    private static final String THIRD_PARTY_CATEGORY_TEXT = """
+    private static final String THIRD_PARTY_CATEGORY_TEMPLATE = """
             **THIRD_PARTY_ACTION** - Involves SPECIFIC linked user (rare!)
-            - EXPLICIT name or EXPLICIT relationship keyword matching linked users
+            - User has these linked users: {linkedUsers}
+            - ONLY use if message mentions one of these EXACT names/aliases
             - Generic words like "friends", "brothers", "guys" → NOT third party (use SIMPLE_EXPENSE with comment)
-            - Only use if message CLEARLY identifies a specific person
-            - Examples: "to Sarah 200" (if Sarah is linked), "for girlfriend" (if girlfriend is linked)
+            - Examples: "to {firstLinkedUser} 200" → THIRD_PARTY_ACTION, "for girlfriend" → SIMPLE_EXPENSE (unless girlfriend is in list)
             - Counter-examples: "for friends 500" → SIMPLE_EXPENSE, "закинул братьям" → SIMPLE_EXPENSE
             """;
     
@@ -197,9 +197,9 @@ public class MessageClassifierAgent {
     /**
      * Convenience method for direct call.
      */
-    public Category classify(String message, boolean hasLinkedUsers) {
+    public Category classify(String message, List<String> linkedUserNamesAndAliases) {
 
-      var classifierResponse = process(new Request(message, hasLinkedUsers));
+      var classifierResponse = process(new Request(message, linkedUserNamesAndAliases));
 
       if (classifierResponse.errorMessage() != null) {
         log.error("Classification failed: {}", classifierResponse.errorMessage());
@@ -207,7 +207,7 @@ public class MessageClassifierAgent {
       }
 
       Category category = classifierResponse.category();
-      log.info("ClassifierAgent: category={} (hasLinkedUsers={})", category, hasLinkedUsers);
+      log.info("ClassifierAgent: category={} (linkedUsers={})", category, linkedUserNamesAndAliases);
 
       return category;
     }
@@ -220,8 +220,19 @@ public class MessageClassifierAgent {
         Map<String, Object> params = new HashMap<>();
         
         // Only include THIRD_PARTY_ACTION category if user has linked users
-        String thirdPartyCategory = request.hasLinkedUsers() ? THIRD_PARTY_CATEGORY_TEXT : "";
-        params.put("thirdPartyCategory", thirdPartyCategory);
+        if (request.linkedUserNamesAndAliases() != null && !request.linkedUserNamesAndAliases().isEmpty()) {
+            // Build third party category text with actual linked user names
+            String linkedUsersStr = String.join(", ", request.linkedUserNamesAndAliases());
+            String firstLinkedUser = request.linkedUserNamesAndAliases().get(0);
+            
+            String thirdPartyCategory = THIRD_PARTY_CATEGORY_TEMPLATE
+                    .replace("{linkedUsers}", linkedUsersStr)
+                    .replace("{firstLinkedUser}", firstLinkedUser);
+            
+            params.put("thirdPartyCategory", thirdPartyCategory);
+        } else {
+            params.put("thirdPartyCategory", "");
+        }
         
         PromptTemplate template = new PromptTemplate(PROMPT_TEMPLATE);
         return template.render(params);

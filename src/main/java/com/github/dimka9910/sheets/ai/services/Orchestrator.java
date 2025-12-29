@@ -80,9 +80,19 @@ public class Orchestrator {
                 category = Category.COMPLEX_ACTION;  // Force MainAgent
             } else {
                 // Step 2: Classify into ONE category
-                boolean hasLinkedUsers = userContext.getLinkedUsers() != null && !userContext.getLinkedUsers().isEmpty();
-                category = classifierAgent.classify(message, hasLinkedUsers);
-                log.info("Classification: category={}", category);
+                // Collect all linked user names + aliases for precise classification
+                List<String> linkedUserNamesAndAliases = new ArrayList<>();
+                if (userContext.getLinkedUsers() != null) {
+                    for (var linkedUser : userContext.getLinkedUsers()) {
+                        linkedUserNamesAndAliases.add(linkedUser.getUserName());  // e.g. "KIKI"
+                        if (linkedUser.getAliases() != null) {
+                            linkedUserNamesAndAliases.addAll(linkedUser.getAliases());  // e.g. ["Ксюша", "kiki"]
+                        }
+                    }
+                }
+                
+                category = classifierAgent.classify(message, linkedUserNamesAndAliases);
+                log.info("Classification: category={} (linkedUsers={})", category, linkedUserNamesAndAliases);
             }
             
             // Step 3: Route to appropriate agent and handle result
