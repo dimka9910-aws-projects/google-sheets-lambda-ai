@@ -23,7 +23,7 @@ import lombok.NoArgsConstructor;
 @Builder
 @NoArgsConstructor
 @AllArgsConstructor
-public class InstructionAction implements CustomInstructionActionBase {
+public class InstructionAction {
     
     /**
      * Action type identifier.

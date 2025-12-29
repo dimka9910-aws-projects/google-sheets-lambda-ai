@@ -15,15 +15,7 @@ import java.util.List;
 @SuperBuilder
 public abstract class BaseAgentResponse {
     
-    /**
-     * Human-readable message to show the user.
-     * Should be in the same language as user's input.
-     */
     private String message;
-    
-    /**
-     * Pending clarifications - questions that need user response.
-     */
     private List<PendingClarificationAction> pendingClarifications;
     
     /**

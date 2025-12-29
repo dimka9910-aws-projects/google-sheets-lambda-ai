@@ -5,6 +5,7 @@ import com.github.dimka9910.sheets.ai.dto.actions.*;
 import com.github.dimka9910.sheets.ai.dto.response.BaseAgentResponse;
 import com.github.dimka9910.sheets.ai.dto.response.FinancialAgentResponse;
 import com.github.dimka9910.sheets.ai.dto.response.CustomInstructionAgentResponse;
+import com.github.dimka9910.sheets.ai.dto.actions.InstructionAction;
 import com.github.dimka9910.sheets.ai.dto.telegram.TelegramChatRequest;
 import com.github.dimka9910.sheets.ai.dto.telegram.TelegramChatResponse;
 import com.github.dimka9910.sheets.ai.dto.user.ConversationMessage;
@@ -67,7 +68,7 @@ public class MainAgentResultHandler {
         
         // Extract actions based on response type
         List<FinancialAction> financialActions = new ArrayList<>();
-        List<CustomInstructionActionBase> instructionActions = new ArrayList<>();
+        List<InstructionAction> instructionActions = new ArrayList<>();
         List<PendingClarificationAction> pendingActions = agentResponse.getPendingClarifications() != null 
                 ? agentResponse.getPendingClarifications() 
                 : new ArrayList<>();
@@ -150,15 +151,11 @@ public class MainAgentResultHandler {
      * Handle instruction actions from CustomInstructionAgent.
      * These actions modify user settings: aliases, defaults, custom instructions.
      */
-    private void handleInstructionActions(List<CustomInstructionActionBase> actions, UserEntity userContext) {
+    private void handleInstructionActions(List<InstructionAction> actions, UserEntity userContext) {
         log.info("Processing {} instruction actions", actions.size());
         
-        for (CustomInstructionActionBase action : actions) {
-            if (action instanceof InstructionAction instructionAction) {
-                handleInstructionAction(instructionAction, userContext);
-            } else {
-                log.warn("Unknown instruction action type: {}", action.getClass().getSimpleName());
-            }
+        for (InstructionAction action : actions) {
+            handleInstructionAction(action, userContext);
         }
     }
     

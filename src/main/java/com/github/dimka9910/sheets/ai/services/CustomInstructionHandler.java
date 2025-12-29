@@ -60,12 +60,8 @@ public class CustomInstructionHandler {
                     agentResponse.explanation());
             
             // Apply all instruction actions
-            for (var action : agentResponse.actions()) {
-                if (action instanceof InstructionAction instructionAction) {
-                    applyInstructionAction(instructionAction, userEntity);
-                } else {
-                    log.warn("Unknown action type: {}", action.getClass().getName());
-                }
+            for (InstructionAction action : agentResponse.actions()) {
+                applyInstructionAction(action, userEntity);
             }
             
             // Save updated custom instructions (NOT accounts/funds)
