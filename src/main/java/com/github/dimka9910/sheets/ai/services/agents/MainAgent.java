@@ -289,10 +289,13 @@ public class MainAgent {
         }
         
         // Build prompt without PromptTemplate (to avoid StringTemplate syntax issues with quotes)
+        String pendingClarificationsStr = (String) params.get("pendingClarifications");
+        String userContextStr = (String) params.get("userContext");
+        
         String finalPrompt = promptTemplate
                 .replace("{formatInstructions}", outputConverter.getFormat())
-                .replace("{pendingClarifications}", (String) params.get("pendingClarifications"))
-                .replace("{userContext}", (String) params.get("userContext"));
+                .replace("{pendingClarifications}", pendingClarificationsStr != null ? pendingClarificationsStr : "")
+                .replace("{userContext}", userContextStr != null ? userContextStr : "");
         
         return finalPrompt;
     }
