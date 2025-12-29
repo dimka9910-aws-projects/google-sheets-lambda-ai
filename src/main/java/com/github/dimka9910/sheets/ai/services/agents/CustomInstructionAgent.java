@@ -1,7 +1,7 @@
 package com.github.dimka9910.sheets.ai.services.agents;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.github.dimka9910.sheets.ai.dto.actions.CustomInstructionAction;
+import com.github.dimka9910.sheets.ai.dto.response.CustomInstructionAction;
 import com.github.dimka9910.sheets.ai.dto.user.LinkedUserEntry;
 import com.github.dimka9910.sheets.ai.dto.user.UserEntity;
 import com.github.dimka9910.sheets.ai.services.UserContextToPromptMapper;

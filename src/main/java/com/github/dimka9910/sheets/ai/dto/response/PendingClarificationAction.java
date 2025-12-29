@@ -1,9 +1,9 @@
-package com.github.dimka9910.sheets.ai.dto.actions;
+package com.github.dimka9910.sheets.ai.dto.response;
 
+import com.fasterxml.jackson.annotation.JsonPropertyDescription;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
-import lombok.EqualsAndHashCode;
 import lombok.NoArgsConstructor;
 
 /**
@@ -34,6 +34,7 @@ public class PendingClarificationAction {
      * - "Transfer to Kiki requested. Need: amount and source account."
      * - "User wants to set default currency but didn't specify which one."
      */
+    @JsonPropertyDescription("Short description of what's unclear. Example: 'User wrote кофе. Need: amount.' On next request, you'll see this and try to resolve it.")
     private String context;
 }
 

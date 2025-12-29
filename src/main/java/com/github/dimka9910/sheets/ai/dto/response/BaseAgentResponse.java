@@ -1,6 +1,6 @@
 package com.github.dimka9910.sheets.ai.dto.response;
 
-import com.github.dimka9910.sheets.ai.dto.actions.PendingClarificationAction;
+import com.fasterxml.jackson.annotation.JsonPropertyDescription;
 import lombok.Data;
 import lombok.experimental.SuperBuilder;
 
@@ -15,7 +15,10 @@ import java.util.List;
 @SuperBuilder
 public abstract class BaseAgentResponse {
     
+    @JsonPropertyDescription("Response message to user in the SAME language as user's input. Conversational, friendly tone.")
     private String message;
+    
+    @JsonPropertyDescription("List of unresolved questions. If you need clarification, add items here. Empty array if everything is clear.")
     private List<PendingClarificationAction> pendingClarifications;
     
     /**

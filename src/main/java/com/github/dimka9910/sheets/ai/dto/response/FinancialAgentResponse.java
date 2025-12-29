@@ -2,8 +2,6 @@ package com.github.dimka9910.sheets.ai.dto.response;
 
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonPropertyDescription;
-import com.github.dimka9910.sheets.ai.dto.actions.FinancialAction;
-import com.github.dimka9910.sheets.ai.dto.actions.PendingClarificationAction;
 import lombok.Data;
 import lombok.EqualsAndHashCode;
 import lombok.NoArgsConstructor;

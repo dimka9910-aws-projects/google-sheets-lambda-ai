@@ -1,7 +1,7 @@
 package com.github.dimka9910.sheets.ai.services;
 
-import com.github.dimka9910.sheets.ai.dto.actions.PendingClarificationAction;
-import com.github.dimka9910.sheets.ai.dto.actions.RedirectToAgentAction;
+import com.github.dimka9910.sheets.ai.dto.response.PendingClarificationAction;
+import com.github.dimka9910.sheets.ai.dto.response.MainAgentRedirectAction;
 import com.github.dimka9910.sheets.ai.dto.response.BaseAgentResponse;
 import com.github.dimka9910.sheets.ai.dto.response.MainAgentResponse;
 import com.github.dimka9910.sheets.ai.dto.response.CustomInstructionAgentResponse;
@@ -147,7 +147,7 @@ public class Orchestrator {
      * @return Response from the specialized agent (with merged pending clarifications from MainAgent)
      */
     private BaseAgentResponse handleRedirects(MainAgentResponse mainResponse, UserEntity userContext) {
-        List<RedirectToAgentAction> redirects = mainResponse.getRedirects();
+        List<MainAgentRedirectAction> redirects = mainResponse.getRedirects();
         
         if (redirects.isEmpty()) {
             return mainResponse;
@@ -158,7 +158,7 @@ public class Orchestrator {
             log.warn("Multiple redirects found ({}), processing only the first one", redirects.size());
         }
         
-        RedirectToAgentAction redirect = redirects.get(0);
+        MainAgentRedirectAction redirect = redirects.get(0);
         String message = redirect.getMessage();
         
         log.info("→ Redirecting to {} with message: \"{}\"", 

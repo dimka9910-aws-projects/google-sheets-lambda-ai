@@ -1,11 +1,7 @@
 package com.github.dimka9910.sheets.ai.services;
 
 import com.github.dimka9910.sheets.ai.db.service.FinancialOperationService;
-import com.github.dimka9910.sheets.ai.dto.actions.*;
-import com.github.dimka9910.sheets.ai.dto.response.BaseAgentResponse;
-import com.github.dimka9910.sheets.ai.dto.response.FinancialAgentResponse;
-import com.github.dimka9910.sheets.ai.dto.response.CustomInstructionAgentResponse;
-import com.github.dimka9910.sheets.ai.dto.actions.CustomInstructionAction;
+import com.github.dimka9910.sheets.ai.dto.response.*;
 import com.github.dimka9910.sheets.ai.dto.telegram.TelegramChatRequest;
 import com.github.dimka9910.sheets.ai.dto.telegram.TelegramChatResponse;
 import com.github.dimka9910.sheets.ai.dto.user.ConversationMessage;

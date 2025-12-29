@@ -1,6 +1,6 @@
 package com.github.dimka9910.sheets.ai.db.entity;
 
-import com.github.dimka9910.sheets.ai.dto.actions.FinancialAction;
+import com.github.dimka9910.sheets.ai.dto.response.FinancialAction;
 import io.hypersistence.utils.hibernate.type.json.JsonBinaryType;
 import jakarta.persistence.*;
 import lombok.*;

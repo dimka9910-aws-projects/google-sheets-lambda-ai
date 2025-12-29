@@ -1,10 +1,9 @@
-package com.github.dimka9910.sheets.ai.dto.actions;
+package com.github.dimka9910.sheets.ai.dto.response;
 
 import com.fasterxml.jackson.annotation.JsonPropertyDescription;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
-import lombok.EqualsAndHashCode;
 import lombok.NoArgsConstructor;
 
 /**
@@ -20,7 +19,7 @@ import lombok.NoArgsConstructor;
 @Builder
 @NoArgsConstructor
 @AllArgsConstructor
-public class RedirectToAgentAction {
+public class MainAgentRedirectAction {
     
     /**
      * Type of agent to redirect to.

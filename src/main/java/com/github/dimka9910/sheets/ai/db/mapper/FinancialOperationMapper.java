@@ -1,7 +1,7 @@
 package com.github.dimka9910.sheets.ai.db.mapper;
 
 import com.github.dimka9910.sheets.ai.db.entity.FinancialOperation;
-import com.github.dimka9910.sheets.ai.dto.actions.FinancialAction;
+import com.github.dimka9910.sheets.ai.dto.response.FinancialAction;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 

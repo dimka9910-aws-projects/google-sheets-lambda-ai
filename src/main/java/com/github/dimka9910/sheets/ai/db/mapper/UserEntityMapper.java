@@ -3,7 +3,7 @@ package com.github.dimka9910.sheets.ai.db.mapper;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.github.dimka9910.sheets.ai.db.entity.*;
-import com.github.dimka9910.sheets.ai.dto.actions.PendingClarificationAction;
+import com.github.dimka9910.sheets.ai.dto.response.PendingClarificationAction;
 import com.github.dimka9910.sheets.ai.dto.user.*;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;

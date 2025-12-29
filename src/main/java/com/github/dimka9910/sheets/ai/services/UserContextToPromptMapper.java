@@ -1,7 +1,6 @@
 package com.github.dimka9910.sheets.ai.services;
 
-import com.github.dimka9910.sheets.ai.dto.actions.FinancialAction;
-import com.github.dimka9910.sheets.ai.dto.actions.PendingClarificationAction;
+import com.github.dimka9910.sheets.ai.dto.response.PendingClarificationAction;
 import com.github.dimka9910.sheets.ai.dto.user.AccountEntry;
 import com.github.dimka9910.sheets.ai.dto.user.ConversationMessage;
 import com.github.dimka9910.sheets.ai.dto.user.FundEntry;

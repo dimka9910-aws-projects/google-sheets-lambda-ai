@@ -1,6 +1,6 @@
 package com.github.dimka9910.sheets.ai.services.agents;
 
-import com.github.dimka9910.sheets.ai.dto.actions.FinancialAction;
+import com.github.dimka9910.sheets.ai.dto.response.FinancialAction;
 import com.github.dimka9910.sheets.ai.dto.response.FinancialAgentResponse;
 import com.github.dimka9910.sheets.ai.dto.user.UserEntity;
 import com.github.dimka9910.sheets.ai.services.UserContextToPromptMapper;

@@ -3,7 +3,7 @@ package com.github.dimka9910.sheets.ai.db.service;
 import com.github.dimka9910.sheets.ai.db.entity.FinancialOperation;
 import com.github.dimka9910.sheets.ai.db.mapper.FinancialOperationMapper;
 import com.github.dimka9910.sheets.ai.db.repository.FinancialOperationRepository;
-import com.github.dimka9910.sheets.ai.dto.actions.FinancialAction;
+import com.github.dimka9910.sheets.ai.dto.response.FinancialAction;
 import com.github.dimka9910.sheets.ai.dto.user.AccountEntry;
 import com.github.dimka9910.sheets.ai.dto.user.FundEntry;
 import com.github.dimka9910.sheets.ai.dto.user.UserEntity;

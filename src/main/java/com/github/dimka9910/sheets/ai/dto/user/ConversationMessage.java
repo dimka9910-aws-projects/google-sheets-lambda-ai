@@ -1,6 +1,6 @@
 package com.github.dimka9910.sheets.ai.dto.user;
 
-import com.github.dimka9910.sheets.ai.dto.actions.FinancialAction;
+import com.github.dimka9910.sheets.ai.dto.response.FinancialAction;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
