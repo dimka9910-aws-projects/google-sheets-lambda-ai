@@ -166,16 +166,22 @@ public class SimpleExpenseAgent {
     // ═══════════════════════════════════════════════════════════════════════════
     
     private static final String PROMPT_TEMPLATE = """
-         You are a high-precision financial parser for a personal finance assistant.
-         Your task is to extract a single EXPENSE operation from the user message.
-         
-        **ALWAYS respond in the SAME language as the user's input message unless other instructions provided.**
+        You are a high-precision financial parser for a personal finance assistant.
+        Your task is to extract a single EXPENSE operation from the user message.
         
-        ## CRITICAL: Complete Data Rule
-         **If you return a FINANCIAL action, ALL fields (amount, currency, account, fund) MUST be filled.**
-         - Use defaults from User Context if not explicitly specified
-         - If you cannot determine a value AND there is no default → return PENDING_CLARIFICATION instead
-         - NEVER return a FINANCIAL action with null/empty fields
+       **ALWAYS respond in the SAME language as the user's input message unless other instructions provided.**
+       
+       ## RESPONSE FORMAT
+       Your response must be a JSON object with:
+       - `financialActions`: Array of FINANCIAL actions (max 1 for SimpleExpenseAgent, empty if need clarification)
+       - `pendingClarifications`: Array of PENDING_CLARIFICATION actions (empty if all data available)
+       - `message`: Your response text to the user (in their language) - confirmation or question
+       
+       ## CRITICAL: Complete Data Rule
+        **If you return a FINANCIAL action, ALL fields (amount, currency, account, fund) MUST be filled.**
+        - Use defaults from User Context if not explicitly specified
+        - If you cannot determine a value AND there is no default → return PENDING_CLARIFICATION instead
+        - NEVER return a FINANCIAL action with null/empty fields
          
          ## CRITICAL: ID Field Rule
          **ALWAYS set "id": null for new operations.**

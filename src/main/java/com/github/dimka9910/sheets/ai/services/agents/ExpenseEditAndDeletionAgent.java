@@ -188,6 +188,12 @@ public class ExpenseEditAndDeletionAgent {
             
             You handle corrections to existing financial operations: MODIFY and DELETE.
             
+            ## RESPONSE FORMAT
+            Your response must be a JSON object with:
+            - `financialActions`: Array of FINANCIAL actions (MODIFY or DELETE type, empty if need clarification)
+            - `pendingClarifications`: Array of PENDING_CLARIFICATION actions (empty if all data available)
+            - `message`: Your response text to the user (in their language) - confirmation or question
+            
             ## HIERARCHY OF TRUTH (CRITICAL!)
             
             When processing corrections, trust this order:

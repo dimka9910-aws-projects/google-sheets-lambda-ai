@@ -263,6 +263,12 @@ public class ThirdPartyActionAgent {
         
         **ALWAYS respond in the SAME language as the user's input message unless other instructions provided.**
         
+        ## RESPONSE FORMAT
+        Your response must be a JSON object with:
+        - `financialActions`: Array of FINANCIAL actions (max 1 for third-party, empty if need clarification)
+        - `pendingClarifications`: Array of PENDING_CLARIFICATION actions (empty if all data available)
+        - `message`: Your response text to the user (in their language) - confirmation or question
+        
         ## CRITICAL: Complete Data Rule
         **If you return a FINANCIAL action, ALL required fields MUST be filled.**
         - Use defaults from User Context if not explicitly specified

@@ -75,10 +75,11 @@ public class MainAgent {
             
             ## CRITICAL RULES:
             - **OPERATION SELECTION**: Conversation history is newest-first. "Last"/"it" = FIRST operation in list. NEVER skip to older operations.
-            - NEVER execute FINANCIAL actions. Only REDIRECT.
-            - NEVER execute SETTINGS (UTILS). REDIRECT to CUSTOM_INSTRUCTION.
+            - NEVER execute FINANCIAL actions. Only REDIRECT to specialized agents.
+            - NEVER execute SETTINGS. REDIRECT to CUSTOM_INSTRUCTION.
             - Use PENDING_CLARIFICATION only if inference + history + defaults = zero clues.
             - Multi-step ("A and B") = multiple REDIRECT actions.
+            - ALWAYS respond in the SAME language as the user's input message unless other instructions provided.
             
             ## TICKET ENRICHMENT (the `message` field)
             
@@ -101,15 +102,23 @@ public class MainAgent {
             - `CUSTOM_INSTRUCTION`: Settings changes
             - `CORRECTION`: Modify/delete existing operations
             
-            # ACTION SCHEMA (JSON)
+            # RESPONSE FORMAT
             
-            ## 1. REDIRECT_TO_AGENT (Primary)
+            Your response must be a JSON object with:
+            - `redirects`: Array of REDIRECT_TO_AGENT actions (empty for conversational responses)
+            - `pendingClarifications`: Array of PENDING_CLARIFICATION actions (empty if no clarification needed)
+            - `message`: Your response text to the user (in their language)
+            
+            ## REDIRECT_TO_AGENT
             Delegate to specialized agents with enriched Tickets.
             
-            **Fields:**
-            - `agentType`: SIMPLE_EXPENSE, INTERNAL_TRANSFER, THIRD_PARTY_ACTION, CUSTOM_INSTRUCTION, CORRECTION
-            - `message`: Enriched Ticket with full context (required)
-            - `reason`: Optional debug note
+            ```json
+            {
+              "agentType": "SIMPLE_EXPENSE | INTERNAL_TRANSFER | THIRD_PARTY_ACTION | CUSTOM_INSTRUCTION | CORRECTION",
+              "message": "Enriched Ticket with full context (UUID, inferred values, defaults)",
+              "reason": "Optional debug note"
+            }
+            ```
             
             **The Ticket (`message` field):**
             NOT the raw user message. Must include:
@@ -118,9 +127,14 @@ public class MainAgent {
             - Defaults if needed
             - Custom instructions if relevant
             
-            ## 2. PENDING_CLARIFICATION (Fallback)
+            ## PENDING_CLARIFICATION
             Use only if: no history, no defaults, no inference possible.
-            **Field:** `context` - what's missing, why stuck
+            
+            ```json
+            {
+              "context": "What's missing and why you're stuck"
+            }
+            ```
             
             # REASONING RULES
             
