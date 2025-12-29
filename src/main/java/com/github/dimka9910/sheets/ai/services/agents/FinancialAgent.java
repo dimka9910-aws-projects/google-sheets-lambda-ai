@@ -346,8 +346,6 @@ public class FinancialAgent {
         - "withdrew 500 from card" → TRANSFER from card to cash
         - "put 200 on card" → TRANSFER from cash to card
         
-        {thirdPartySection}
-        
         ### 3. INCOME - Receiving money (rare)
         **Required fields:** amount, currency, account
         **Examples:** "salary 50000", "got paid 3000"
@@ -370,8 +368,6 @@ public class FinancialAgent {
         ### targetAccount (MANDATORY for TRANSFER only):
         - For INTERNAL_TRANSFER: match against own accounts
         - For linked user TRANSFER: use their account from "Linked users" list
-        
-        {linkedUserFieldRules}
         
         ## Clarification Logic
         When you CANNOT fill all required fields, return PENDING_CLARIFICATION:
@@ -405,8 +401,6 @@ public class FinancialAgent {
         - "transfer 1000 from card to cash" → {{"operationType": "TRANSFER", "amount": 1000, "currency": "RSD", "account": "CARD_MAIN", "targetAccount": "CASH"}}
         - "withdrew 500" → {{"operationType": "TRANSFER", "amount": 500, "currency": "RSD", "account": "CARD_MAIN", "targetAccount": "CASH"}}
         
-        {linkedUserExamples}
-        
         ### PENDING_CLARIFICATION:
         - "coffee" → {{"context": "User wants to record coffee expense. Missing: amount."}}
         - "transfer 1000" → {{"context": "User wants to transfer 1000 RSD. Missing: source account (from where?) and target account (to where?)."}}
@@ -414,6 +408,17 @@ public class FinancialAgent {
     """;
     
     private String buildSystemPrompt(UserEntity context, boolean includeLinkedUsersContext) {
+        // Step 1: Build complete prompt by concatenating sections
+        StringBuilder promptBuilder = new StringBuilder(PROMPT_TEMPLATE);
+        
+        // Conditionally append third-party sections (token optimization)
+        if (includeLinkedUsersContext) {
+            promptBuilder.append(THIRD_PARTY_OPERATIONS_SECTION);
+            promptBuilder.append(LINKED_USER_FIELD_RULES);
+            promptBuilder.append(LINKED_USER_EXAMPLES);
+        }
+        
+        // Step 2: Prepare data parameters
         Map<String, Object> params = new HashMap<>();
         params.put("currentUser", context.getUserName() != null ? context.getUserName() : "USER");
         params.put("currency", context.getDefaultCurrency() != null ? context.getDefaultCurrency() : "RSD");
@@ -430,25 +435,19 @@ public class FinancialAgent {
         params.put("funds", fundsList != null ? fundsList : "(No funds)");
         params.put("customInstructions", customInstructions != null ? customInstructions : "");
         
-        // Include linked users context only if requested (token optimization)
+        // Include linked users data if requested (token optimization)
         if (includeLinkedUsersContext) {
             // Include linked users WITH their accounts (critical for TRANSFER operations)
             String linkedUsersList = contextMapper.formatLinkedUsersListWithAccounts(
                     context.getLinkedUserEntitys(), 
                     context.getLinkedUsers());
             params.put("linkedUsers", linkedUsersList != null ? linkedUsersList : "(No linked users)");
-            params.put("thirdPartySection", THIRD_PARTY_OPERATIONS_SECTION);
-            params.put("linkedUserFieldRules", LINKED_USER_FIELD_RULES);
-            params.put("linkedUserExamples", LINKED_USER_EXAMPLES);
         } else {
-            // Empty sections - save tokens!
             params.put("linkedUsers", "");
-            params.put("thirdPartySection", "");
-            params.put("linkedUserFieldRules", "");
-            params.put("linkedUserExamples", "");
         }
         
-        PromptTemplate template = new PromptTemplate(PROMPT_TEMPLATE);
+        // Step 3: Render final prompt with data parameters
+        PromptTemplate template = new PromptTemplate(promptBuilder.toString());
         return Objects.requireNonNull(template.render(params), "Prompt template render returned null");
     }
 }
