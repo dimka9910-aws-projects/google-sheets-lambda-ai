@@ -7,6 +7,7 @@ import com.github.dimka9910.sheets.ai.dto.user.FundEntry;
 import com.github.dimka9910.sheets.ai.dto.user.LinkedUserEntry;
 import com.github.dimka9910.sheets.ai.dto.user.UserEntity;
 import com.github.dimka9910.sheets.ai.services.agents.MessageClassifierAgent.Category;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 
 import java.util.List;
@@ -25,6 +26,7 @@ import java.util.stream.Collectors;
  * 
  * Single Responsibility: UserEntity → Prompt String conversion
  */
+@Slf4j
 @Component
 public class UserContextToPromptMapper {
 
@@ -414,8 +416,10 @@ public class UserContextToPromptMapper {
                 msg.getRelatedFinancialActions() != null && 
                 !msg.getRelatedFinancialActions().isEmpty()) {
                 
+                log.debug("📋 Formatting {} financial actions from history", msg.getRelatedFinancialActions().size());
                 sb.append("  → Created operations:\n");
                 for (var action : msg.getRelatedFinancialActions()) {
+                    log.debug("  Action: ID={}, Type={}, Amount={}", action.getId(), action.getOperationType(), action.getAmount());
                     sb.append("    • ID: ").append(action.getId()).append("\n");
                     sb.append("      Type: ").append(action.getOperationType()).append("\n");
                     sb.append("      Amount: ").append(action.getAmount())

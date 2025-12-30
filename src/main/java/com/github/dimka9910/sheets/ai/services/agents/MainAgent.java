@@ -210,6 +210,8 @@ public class MainAgent {
             
             log.debug("System prompt length: {} chars, User prompt length: {} chars", 
                     systemPrompt.length(), userPrompt.length());
+            log.debug("🔍 System prompt preview (last 2000 chars): ...{}", 
+                    systemPrompt.substring(Math.max(0, systemPrompt.length() - 2000)));
             
             Prompt prompt = new Prompt(
                     List.of(
