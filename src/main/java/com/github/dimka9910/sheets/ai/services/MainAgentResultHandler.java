@@ -121,6 +121,14 @@ public class MainAgentResultHandler {
 
         
         // Add assistant response to history with related financial actions
+        log.debug("💾 Adding to history: {} successful actions", successfulActions.size());
+        if (!successfulActions.isEmpty()) {
+            for (var action : successfulActions) {
+                log.debug("  💾 Action: ID={}, Type={}, Amount={}", 
+                    action.getId(), action.getOperationType(), action.getAmount());
+            }
+        }
+        
         userContext.addToHistory(ConversationMessage.builder()
                 .role("assistant")
                 .content(agentResponse.getMessage())

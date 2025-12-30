@@ -391,6 +391,8 @@ public class UserContextToPromptMapper {
             return "";
         }
         
+        log.debug("📚 formatConversationHistoryWithActions: total messages={}, limit={}", messages.size(), limit);
+        
         StringBuilder sb = new StringBuilder("\n## Recent Conversation History\n");
         sb.append("(Sorted newest-first. For 'it'/'last', use FIRST matching operation below.)\n\n");
         
