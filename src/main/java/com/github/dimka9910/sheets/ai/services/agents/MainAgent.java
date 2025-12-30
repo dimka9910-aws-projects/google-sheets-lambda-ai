@@ -67,6 +67,9 @@ public class MainAgent {
             
             ## Message Category: {categoryInfo}
             
+            ## RECENT CONVERSATION HISTORY (for UUID tracing and context):
+            {conversationHistory}
+            
             ## OPERATIONAL PIPELINE:
             1. **DECOMPOSITION**: Split "A and B" into multiple REDIRECT actions
             2. **TICKET ENRICHMENT**: Pack `message` field with ALL context for specialized agent
@@ -82,22 +85,30 @@ public class MainAgent {
             - Multi-step ("A and B") = multiple REDIRECT actions.
             - ALWAYS respond in the SAME language as the user's input message unless other instructions provided.
             
+            ## CRITICAL: FINDING OPERATIONS FOR CORRECTIONS
+            
+            When user says "no", "it was", "change it", "delete it", "modify", "last one":
+            1. Look at **Recent Conversation History** below
+            2. Find the FIRST operation listed (= newest/last operation)
+            3. Copy its UUID into your redirect message
+            4. Example: If history shows "ID: abc-123, Type: EXPENSE, Amount: 300", use "Modify operation ID=abc-123..."
+            
             ## TICKET ENRICHMENT (the `message` field)
             
             Bad Ticket: "not 200 but 300"
-            Good Ticket: "Modify operation ID=xxx. Original: EXPENSE 200 RSD from CARD_VISA to FOOD, comment='coffee'. User correction: amount to 300. Keep other fields."
+            Good Ticket: "Modify operation ID=abc-123. Original: EXPENSE 200 RSD from CARD_VISA to FOOD, comment='coffee'. User correction: amount to 300. Keep other fields."
             
             Bad Ticket: "no, it was 500"
-            Good Ticket: "Modify LAST operation (newest in history, ID=xxx). Original: EXPENSE 300 RSD from CARD_VISA to TRANSPORT, comment='taxi'. User correction: amount to 500. Keep all other fields unchanged."
+            Good Ticket: "Modify operation ID=xyz-789 (LAST operation from history). Original: EXPENSE 300 RSD from CARD_VISA to TRANSPORT, comment='taxi'. User correction: amount to 500. Keep all other fields."
             
             Bad Ticket: "same but taxi"
-            Good Ticket: "New expense like previous (ID=xxx, 200 RSD coffee from CARD_VISA to FOOD). Changes: comment='taxi', fund=TRANSPORT. Keep: amount=200, currency=RSD, account=CARD_VISA."
+            Good Ticket: "New expense like previous (ID=abc-123, 200 RSD coffee from CARD_VISA to FOOD). Changes: comment='taxi', fund=TRANSPORT. Keep: amount=200, currency=RSD, account=CARD_VISA."
             
             Bad Ticket: "coffee"
             Good Ticket: "Expense: coffee. Inferred: fund=FOOD. Missing: amount. Defaults: currency=RSD, account=CARD_VISA."
             
             Bad Ticket: "delete it"
-            Good Ticket: "Delete last operation. From history: ID=xxx, EXPENSE 200 RSD coffee, CARD_VISA to FOOD, 1 min ago. User says 'delete it'."
+            Good Ticket: "Delete operation ID=abc-123 (last operation from history): EXPENSE 200 RSD coffee, CARD_VISA to FOOD, 1 min ago."
             
             ## AVAILABLE AGENTS:
             - `FINANCIAL`: Financial operations WITHOUT linked users (expenses, transfers between own accounts, income, MODIFY/DELETE)
@@ -178,9 +189,6 @@ public class MainAgent {
             
             **Custom Instructions:**
             {customInstructions}
-            
-            **Recent Conversation History (for UUID tracing):**
-            {conversationHistory}
             """;
 
   private static final String PENDING_CLARIFICATIONS_SECTION = """
