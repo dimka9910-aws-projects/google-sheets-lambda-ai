@@ -113,6 +113,8 @@ public class UserEntityService {
 
         // 3. Save conversation history (append new messages)
         if (context.getConversationHistory() != null && !context.getConversationHistory().isEmpty()) {
+            log.debug("💾 Attempting to save conversation history. Total messages in context: {}", context.getConversationHistory().size());
+            
             // Get last saved timestamp to identify where old messages end
             List<ChatMessageJpaEntity> lastMessages = chatMessageRepository.findLastNMessages(userId, 1);
             Long lastSavedTimestamp = lastMessages.isEmpty() ? null : 
@@ -134,6 +136,8 @@ public class UserEntityService {
             List<ConversationMessage> newMessages = context.getConversationHistory().subList(
                 newMessagesStartIdx, context.getConversationHistory().size());
             
+            log.debug("💾 New messages to save: {}", newMessages.size());
+            
             if (!newMessages.isEmpty()) {
                 for (ConversationMessage msgDto : newMessages) {
                     ChatMessageJpaEntity msgJpa = mapper.toJpaChatMessage(msgDto, userId);
@@ -141,6 +145,8 @@ public class UserEntityService {
                 }
                 
                 log.debug("Saved {} new chat messages", newMessages.size());
+            } else {
+                log.debug("💾 No new messages to save");
             }
         }
         
