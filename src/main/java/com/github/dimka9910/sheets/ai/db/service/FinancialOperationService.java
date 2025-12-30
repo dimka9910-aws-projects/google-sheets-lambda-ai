@@ -229,8 +229,24 @@ public class FinancialOperationService {
             return null;
         }
         
+        // Try current user's accounts first
         Optional<AccountEntry> account = userContext.findAccountByAlias(accountReference);
-        return account.map(AccountEntry::getId).orElse(null);
+        if (account.isPresent()) {
+            return account.get().getId();
+        }
+        
+        // Try linked users' accounts
+        if (userContext.getLinkedUserEntitys() != null) {
+            for (UserEntity linkedUser : userContext.getLinkedUserEntitys().values()) {
+                account = linkedUser.findAccountByAlias(accountReference);
+                if (account.isPresent()) {
+                    log.debug("✅ Found account {} in linked user {}", accountReference, linkedUser.getUserName());
+                    return account.get().getId();
+                }
+            }
+        }
+        
+        return null;
     }
     
     /**

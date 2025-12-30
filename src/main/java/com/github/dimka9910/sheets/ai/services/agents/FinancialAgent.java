@@ -25,9 +25,9 @@ import java.util.Objects;
 /**
  * Universal financial agent handling ALL simple financial operations:
  * - EXPENSE (simple spending)
- * - INTERNAL_TRANSFER (between own accounts)
- * - TRANSFER to/from linked users
- * - EXPENSE for linked users
+ * - TRANSFER (between own accounts OR with linked users)
+ * - INCOME (receiving money)
+ * - EXPENSE for linked users (spending on their funds)
  * 
  * Uses gpt-4o-mini for fast, cost-effective processing.
  * Replaces: SimpleExpenseAgent, InternalTransferAgent, ThirdPartyActionAgent
@@ -182,12 +182,12 @@ public class FinancialAgent {
                         log.debug("✅ TRANSFER (linked user) validated: {} → {} (amount={})", 
                             financial.getUserName(), financial.getTargetPerson(), financial.getAmount());
                     } else {
-                        // INTERNAL_TRANSFER: account and targetAccount mandatory
+                        // TRANSFER between own accounts: account and targetAccount mandatory, no userName/targetPerson
                         if (financial.getAccount() == null || financial.getTargetAccount() == null) {
-                            throwValidationError("TRANSFER (internal) requires: amount, currency, account, targetAccount", financial);
+                            throwValidationError("TRANSFER (between own accounts) requires: amount, currency, account, targetAccount. userName/targetPerson must be NULL.", financial);
                         }
                         
-                        log.debug("✅ TRANSFER (internal) validated: {} → {} (amount={})", 
+                        log.debug("✅ TRANSFER (between own accounts) validated: {} → {} (amount={})", 
                             financial.getAccount(), financial.getTargetAccount(), financial.getAmount());
                     }
                 }
@@ -263,8 +263,9 @@ public class FinancialAgent {
         
         ## PARSING PROTOCOL (Follow strictly):
         1. **Identify OperationType**:\s
-           - INTERNAL_TRANSFER: Movement between OWN accounts (no other people mentioned).
-           - TRANSFER: Movement between current user and LINKED users. 
+           - TRANSFER: Movement of money between accounts (own accounts OR with linked users).
+             * Between own accounts: "transfer 1000 from card to cash" → targetAccount required, targetPerson=null
+             * With linked users: "sent 500 to Kiki" → targetAccount+targetPerson required (or just targetPerson if their default account)
            - INCOME: External money coming in.
            - EXPENSE: Everything else (default).
         
@@ -328,7 +329,7 @@ public class FinancialAgent {
           **Examples of good confirmations (adapt to {preferredLanguage}):**
           - EXPENSE: "Recorded expense 200 RSD from CARD_MAIN to FOOD category (coffee)."
           - EXPENSE (with targetPerson): "Recorded expense 500 RSD from CARD_MAIN to TRANSPORT category for KIKI (taxi)."
-          - INTERNAL_TRANSFER: "Transferred 1000 RSD from CARD_MAIN to CASH."
+          - TRANSFER (between own accounts): "Transferred 1000 RSD from CARD_MAIN to CASH."
           - TRANSFER (to linked user): "Transferred 500 RSD from CARD_DIMA to CARD_KIKI for KIKI."
           - TRANSFER (from linked user): "Received 200 RSD from BOB from CARD_BOB to CARD_DIMA."
           - INCOME: "Recorded income 50000 RSD to CARD_MAIN (salary)."
@@ -362,14 +363,14 @@ public class FinancialAgent {
         - "taxi 500 cash" → EXPENSE from CASH account
         - "bought lunch for Sarah 1500" → EXPENSE with targetPerson (if Sarah is linked user)
         
-        ### 2. INTERNAL_TRANSFER - Moving money between OWN accounts
-        **Required fields:** amount, currency, account (from), targetAccount (to)
-        **userName and targetPerson:** MUST BE NULL for internal transfers
-        
-        **Examples:**
-        - "transfer 1000 from card to cash" → TRANSFER between own accounts
-        - "withdrew 500 from card" → TRANSFER from card to cash
-        - "put 200 on card" → TRANSFER from cash to card
+        ### 2. TRANSFER - Moving money between accounts
+        **Case A: Between OWN accounts (no people involved)**
+        - **Required:** amount, currency, account (from), targetAccount (to)
+        - **userName and targetPerson:** MUST BE NULL
+        - **Examples:**
+          - "transfer 1000 from card to cash" → TRANSFER between own accounts
+          - "withdrew 500 from card" → TRANSFER from card to cash
+          - "put 200 on card" → TRANSFER from cash to card
         
         ### 3. TRANSFER - Money to/from linked users
         **Required fields:** amount, currency, account, targetAccount, userName, targetPerson

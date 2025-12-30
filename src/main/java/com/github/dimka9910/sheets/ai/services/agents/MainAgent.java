@@ -87,6 +87,9 @@ public class MainAgent {
             Bad Ticket: "not 200 but 300"
             Good Ticket: "Modify operation ID=xxx. Original: EXPENSE 200 RSD from CARD_VISA to FOOD, comment='coffee'. User correction: amount to 300. Keep other fields."
             
+            Bad Ticket: "no, it was 500"
+            Good Ticket: "Modify LAST operation (newest in history, ID=xxx). Original: EXPENSE 300 RSD from CARD_VISA to TRANSPORT, comment='taxi'. User correction: amount to 500. Keep all other fields unchanged."
+            
             Bad Ticket: "same but taxi"
             Good Ticket: "New expense like previous (ID=xxx, 200 RSD coffee from CARD_VISA to FOOD). Changes: comment='taxi', fund=TRANSPORT. Keep: amount=200, currency=RSD, account=CARD_VISA."
             
@@ -97,10 +100,9 @@ public class MainAgent {
             Good Ticket: "Delete last operation. From history: ID=xxx, EXPENSE 200 RSD coffee, CARD_VISA to FOOD, 1 min ago. User says 'delete it'."
             
             ## AVAILABLE AGENTS:
-            - `FINANCIAL`: Financial operations WITHOUT linked users (expenses, internal transfers, income)
-            - `THIRD_PARTY_FINANCIAL`: Financial operations WITH linked users (transfers to/from linked users, expenses for linked users)
-            - `CUSTOM_INSTRUCTION`: Settings changes
-            - `CORRECTION`: Modify/delete existing operations
+            - `FINANCIAL`: Financial operations WITHOUT linked users (expenses, transfers between own accounts, income, MODIFY/DELETE)
+            - `THIRD_PARTY_FINANCIAL`: Financial operations WITH linked users (transfers to/from linked users, expenses for linked users, MODIFY/DELETE)
+            - `CUSTOM_INSTRUCTION`: Settings changes (defaults, aliases, custom rules)
             
             # RESPONSE FORMAT
             
@@ -113,8 +115,8 @@ public class MainAgent {
             Delegate to specialized agents with enriched Tickets.
             
             Example redirect action:
-            - agentType: FINANCIAL, THIRD_PARTY_FINANCIAL, CUSTOM_INSTRUCTION, or CORRECTION
-            - message: Enriched Ticket with full context (UUID, inferred values, defaults)
+            - agentType: FINANCIAL, THIRD_PARTY_FINANCIAL, or CUSTOM_INSTRUCTION
+            - message: Enriched Ticket with full context (UUID for modifications, inferred values, defaults)
             - reason: Optional debug note
             
             **The Ticket (`message` field):**
