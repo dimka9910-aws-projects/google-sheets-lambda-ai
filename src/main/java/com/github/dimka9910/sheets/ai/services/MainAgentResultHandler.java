@@ -205,43 +205,178 @@ public class MainAgentResultHandler {
     }
     
     private void handleAddLinkedUserAlias(CustomInstructionAction action, UserEntity userContext) {
-        // TODO: Implement when needed
-        log.warn("⚠️ ADD_LINKED_USER_ALIAS not yet implemented");
+        String targetUserName = action.getEntityId(); // e.g., "KIKI"
+        String alias = action.getValue(); // e.g., "girlfriend"
+        
+        if (targetUserName == null || alias == null) {
+            log.warn("⚠️ ADD_LINKED_USER_ALIAS: missing entityId or value");
+            return;
+        }
+        
+        // Update in memory (for current request)
+        var linkedUser = userContext.getLinkedUsers().stream()
+            .filter(lu -> lu.getUserName().equals(targetUserName))
+            .findFirst();
+        
+        if (linkedUser.isPresent()) {
+            if (!linkedUser.get().getAliases().contains(alias)) {
+                linkedUser.get().getAliases().add(alias);
+            }
+        }
+        
+        // Save to database
+        userContextService.addLinkedUserAlias(userContext.getId(), targetUserName, alias);
     }
     
     private void handleRemoveLinkedUserAlias(CustomInstructionAction action, UserEntity userContext) {
-        // TODO: Implement when needed
-        log.warn("⚠️ REMOVE_LINKED_USER_ALIAS not yet implemented");
+        String targetUserName = action.getEntityId(); // e.g., "KIKI"
+        String alias = action.getValue(); // e.g., "girlfriend"
+        
+        if (targetUserName == null || alias == null) {
+            log.warn("⚠️ REMOVE_LINKED_USER_ALIAS: missing entityId or value");
+            return;
+        }
+        
+        // Update in memory
+        var linkedUser = userContext.getLinkedUsers().stream()
+            .filter(lu -> lu.getUserName().equals(targetUserName))
+            .findFirst();
+        
+        if (linkedUser.isPresent()) {
+            linkedUser.get().getAliases().remove(alias);
+        }
+        
+        // Save to database
+        userContextService.removeLinkedUserAlias(userContext.getId(), targetUserName, alias);
     }
     
     private void handleAddAccountAlias(CustomInstructionAction action, UserEntity userContext) {
-        // TODO: Implement when needed
-        log.warn("⚠️ ADD_ACCOUNT_ALIAS not yet implemented");
+        String accountId = action.getEntityId(); // e.g., "CARD_DIMA_VISA_RAIF"
+        String alias = action.getValue(); // e.g., "raif"
+        
+        if (accountId == null || alias == null) {
+            log.warn("⚠️ ADD_ACCOUNT_ALIAS: missing entityId or value");
+            return;
+        }
+        
+        // Update in memory
+        var account = userContext.getAccounts().stream()
+            .filter(acc -> acc.getAccountId().equals(accountId))
+            .findFirst();
+        
+        if (account.isPresent()) {
+            if (!account.get().getAliases().contains(alias)) {
+                account.get().getAliases().add(alias);
+            }
+        }
+        
+        // Save to database
+        userContextService.addAccountAlias(userContext.getId(), accountId, alias);
     }
     
     private void handleRemoveAccountAlias(CustomInstructionAction action, UserEntity userContext) {
-        // TODO: Implement when needed
-        log.warn("⚠️ REMOVE_ACCOUNT_ALIAS not yet implemented");
+        String accountId = action.getEntityId(); // e.g., "CARD_DIMA_VISA_RAIF"
+        String alias = action.getValue(); // e.g., "raif"
+        
+        if (accountId == null || alias == null) {
+            log.warn("⚠️ REMOVE_ACCOUNT_ALIAS: missing entityId or value");
+            return;
+        }
+        
+        // Update in memory
+        var account = userContext.getAccounts().stream()
+            .filter(acc -> acc.getAccountId().equals(accountId))
+            .findFirst();
+        
+        if (account.isPresent()) {
+            account.get().getAliases().remove(alias);
+        }
+        
+        // Save to database
+        userContextService.removeAccountAlias(userContext.getId(), accountId, alias);
     }
     
     private void handleAddFundAlias(CustomInstructionAction action, UserEntity userContext) {
-        // TODO: Implement when needed
-        log.warn("⚠️ ADD_FUND_ALIAS not yet implemented");
+        String fundId = action.getEntityId(); // e.g., "FOOD"
+        String alias = action.getValue(); // e.g., "cafe"
+        
+        if (fundId == null || alias == null) {
+            log.warn("⚠️ ADD_FUND_ALIAS: missing entityId or value");
+            return;
+        }
+        
+        // Update in memory
+        var fund = userContext.getFunds().stream()
+            .filter(f -> f.getFundId().equals(fundId))
+            .findFirst();
+        
+        if (fund.isPresent()) {
+            if (!fund.get().getAliases().contains(alias)) {
+                fund.get().getAliases().add(alias);
+            }
+        }
+        
+        // Save to database
+        userContextService.addFundAlias(userContext.getId(), fundId, alias);
     }
     
     private void handleRemoveFundAlias(CustomInstructionAction action, UserEntity userContext) {
-        // TODO: Implement when needed
-        log.warn("⚠️ REMOVE_FUND_ALIAS not yet implemented");
+        String fundId = action.getEntityId(); // e.g., "FOOD"
+        String alias = action.getValue(); // e.g., "cafe"
+        
+        if (fundId == null || alias == null) {
+            log.warn("⚠️ REMOVE_FUND_ALIAS: missing entityId or value");
+            return;
+        }
+        
+        // Update in memory
+        var fund = userContext.getFunds().stream()
+            .filter(f -> f.getFundId().equals(fundId))
+            .findFirst();
+        
+        if (fund.isPresent()) {
+            fund.get().getAliases().remove(alias);
+        }
+        
+        // Save to database
+        userContextService.removeFundAlias(userContext.getId(), fundId, alias);
     }
     
     private void handleAddCustomInstruction(CustomInstructionAction action, UserEntity userContext) {
-        // TODO: Implement when needed
-        log.warn("⚠️ ADD_CUSTOM_INSTRUCTION not yet implemented");
+        String instruction = action.getValue(); // e.g., "называй меня своим папиком"
+        
+        if (instruction == null || instruction.isBlank()) {
+            log.warn("⚠️ ADD_CUSTOM_INSTRUCTION: missing value");
+            return;
+        }
+        
+        // Add to user context (will be saved by saveConversationAndAiContext)
+        userContext.addInstruction(instruction);
+        log.info("✅ Added custom instruction: '{}'", instruction);
     }
     
     private void handleRemoveCustomInstruction(CustomInstructionAction action, UserEntity userContext) {
-        // TODO: Implement when needed
-        log.warn("⚠️ REMOVE_CUSTOM_INSTRUCTION not yet implemented");
+        Integer index = action.getIndex();
+        String value = action.getValue();
+        
+        // Support removal by index OR by value
+        if (index != null) {
+            userContext.removeInstruction(index);
+            log.info("✅ Removed custom instruction at index {}", index);
+        } else if (value != null) {
+            // Remove by matching value
+            List<String> instructions = userContext.getCustomInstructions();
+            if (instructions != null) {
+                boolean removed = instructions.remove(value);
+                if (removed) {
+                    log.info("✅ Removed custom instruction: '{}'", value);
+                } else {
+                    log.warn("⚠️ Custom instruction not found: '{}'", value);
+                }
+            }
+        } else {
+            log.warn("⚠️ REMOVE_CUSTOM_INSTRUCTION: missing both index and value");
+        }
     }
 
     // ═══════════════════════════════════════════════════════════════════════════

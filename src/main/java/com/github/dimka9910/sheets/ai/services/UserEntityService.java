@@ -404,5 +404,192 @@ public class UserEntityService {
         
         userContext.setLinkedUsers(linkedEntries);
     }
+    
+    // ═══════════════════════════════════════════════════════════════════════════
+    // ALIAS MANAGEMENT (for CustomInstructionActions)
+    // ═══════════════════════════════════════════════════════════════════════════
+    
+    /**
+     * Add alias to account by accountId.
+     */
+    @Transactional
+    public boolean addAccountAlias(UUID userId, String accountId, String alias) {
+        var accountOpt = accountRepository.findByUserIdAndExternalId(userId, accountId);
+        if (accountOpt.isEmpty()) {
+            log.warn("Account not found: userId={}, accountId={}", userId, accountId);
+            return false;
+        }
+        
+        AccountJpaEntity account = accountOpt.get();
+        List<String> aliases = account.getAliases() != null 
+            ? new ArrayList<>(Arrays.asList(account.getAliases())) 
+            : new ArrayList<>();
+        
+        if (!aliases.contains(alias)) {
+            aliases.add(alias);
+            account.setAliases(aliases.toArray(new String[0]));
+            accountRepository.save(account);
+            log.info("✅ Added alias '{}' to account '{}'", alias, accountId);
+            return true;
+        } else {
+            log.info("⚠️ Alias '{}' already exists for account '{}'", alias, accountId);
+            return false;
+        }
+    }
+    
+    /**
+     * Remove alias from account by accountId.
+     */
+    @Transactional
+    public boolean removeAccountAlias(UUID userId, String accountId, String alias) {
+        var accountOpt = accountRepository.findByUserIdAndExternalId(userId, accountId);
+        if (accountOpt.isEmpty()) {
+            log.warn("Account not found: userId={}, accountId={}", userId, accountId);
+            return false;
+        }
+        
+        AccountJpaEntity account = accountOpt.get();
+        if (account.getAliases() == null) {
+            return false;
+        }
+        
+        List<String> aliases = new ArrayList<>(Arrays.asList(account.getAliases()));
+        boolean removed = aliases.remove(alias);
+        
+        if (removed) {
+            account.setAliases(aliases.toArray(new String[0]));
+            accountRepository.save(account);
+            log.info("✅ Removed alias '{}' from account '{}'", alias, accountId);
+        }
+        return removed;
+    }
+    
+    /**
+     * Add alias to fund by fundId.
+     */
+    @Transactional
+    public boolean addFundAlias(UUID userId, String fundId, String alias) {
+        var fundOpt = fundRepository.findByUserIdAndExternalId(userId, fundId);
+        if (fundOpt.isEmpty()) {
+            log.warn("Fund not found: userId={}, fundId={}", userId, fundId);
+            return false;
+        }
+        
+        FundJpaEntity fund = fundOpt.get();
+        List<String> aliases = fund.getAliases() != null 
+            ? new ArrayList<>(Arrays.asList(fund.getAliases())) 
+            : new ArrayList<>();
+        
+        if (!aliases.contains(alias)) {
+            aliases.add(alias);
+            fund.setAliases(aliases.toArray(new String[0]));
+            fundRepository.save(fund);
+            log.info("✅ Added alias '{}' to fund '{}'", alias, fundId);
+            return true;
+        } else {
+            log.info("⚠️ Alias '{}' already exists for fund '{}'", alias, fundId);
+            return false;
+        }
+    }
+    
+    /**
+     * Remove alias from fund by fundId.
+     */
+    @Transactional
+    public boolean removeFundAlias(UUID userId, String fundId, String alias) {
+        var fundOpt = fundRepository.findByUserIdAndExternalId(userId, fundId);
+        if (fundOpt.isEmpty()) {
+            log.warn("Fund not found: userId={}, fundId={}", userId, fundId);
+            return false;
+        }
+        
+        FundJpaEntity fund = fundOpt.get();
+        if (fund.getAliases() == null) {
+            return false;
+        }
+        
+        List<String> aliases = new ArrayList<>(Arrays.asList(fund.getAliases()));
+        boolean removed = aliases.remove(alias);
+        
+        if (removed) {
+            fund.setAliases(aliases.toArray(new String[0]));
+            fundRepository.save(fund);
+            log.info("✅ Removed alias '{}' from fund '{}'", alias, fundId);
+        }
+        return removed;
+    }
+    
+    /**
+     * Add alias to linked user by userName.
+     */
+    @Transactional
+    public boolean addLinkedUserAlias(UUID ownerUserId, String targetUserName, String alias) {
+        // Find target user by username
+        Optional<UserJpaEntity> targetUserOpt = userRepository.findByUsername(targetUserName);
+        if (targetUserOpt.isEmpty()) {
+            log.warn("Target user not found: {}", targetUserName);
+            return false;
+        }
+        UUID targetUserId = targetUserOpt.get().getId();
+        
+        // Find link
+        Optional<LinkedUserJpaEntity> linkOpt = linkedUserRepository.findByOwnerUserIdAndTargetUserId(ownerUserId, targetUserId);
+        if (linkOpt.isEmpty()) {
+            log.warn("Link not found: ownerUserId={}, targetUserName={}", ownerUserId, targetUserName);
+            return false;
+        }
+        
+        LinkedUserJpaEntity link = linkOpt.get();
+        List<String> aliases = link.getAliases() != null 
+            ? new ArrayList<>(Arrays.asList(link.getAliases())) 
+            : new ArrayList<>();
+        
+        if (!aliases.contains(alias)) {
+            aliases.add(alias);
+            link.setAliases(aliases.toArray(new String[0]));
+            linkedUserRepository.save(link);
+            log.info("✅ Added alias '{}' to linked user '{}'", alias, targetUserName);
+            return true;
+        } else {
+            log.info("⚠️ Alias '{}' already exists for linked user '{}'", alias, targetUserName);
+            return false;
+        }
+    }
+    
+    /**
+     * Remove alias from linked user by userName.
+     */
+    @Transactional
+    public boolean removeLinkedUserAlias(UUID ownerUserId, String targetUserName, String alias) {
+        // Find target user by username
+        Optional<UserJpaEntity> targetUserOpt = userRepository.findByUsername(targetUserName);
+        if (targetUserOpt.isEmpty()) {
+            log.warn("Target user not found: {}", targetUserName);
+            return false;
+        }
+        UUID targetUserId = targetUserOpt.get().getId();
+        
+        // Find link
+        Optional<LinkedUserJpaEntity> linkOpt = linkedUserRepository.findByOwnerUserIdAndTargetUserId(ownerUserId, targetUserId);
+        if (linkOpt.isEmpty()) {
+            log.warn("Link not found: ownerUserId={}, targetUserName={}", ownerUserId, targetUserName);
+            return false;
+        }
+        
+        LinkedUserJpaEntity link = linkOpt.get();
+        if (link.getAliases() == null) {
+            return false;
+        }
+        
+        List<String> aliases = new ArrayList<>(Arrays.asList(link.getAliases()));
+        boolean removed = aliases.remove(alias);
+        
+        if (removed) {
+            link.setAliases(aliases.toArray(new String[0]));
+            linkedUserRepository.save(link);
+            log.info("✅ Removed alias '{}' from linked user '{}'", alias, targetUserName);
+        }
+        return removed;
+    }
 }
 
