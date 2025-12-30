@@ -112,16 +112,29 @@ public class UserEntityService {
         userRepository.save(userJpa);
 
         // 3. Save conversation history (append new messages)
-        if (context.getConversationHistory() != null) {
-            // Get existing message count
-            int existingCount = chatMessageRepository.findLastNMessages(userId, 1000).size();
-            int newCount = context.getConversationHistory().size();
+        if (context.getConversationHistory() != null && !context.getConversationHistory().isEmpty()) {
+            // Get last saved timestamp to identify where old messages end
+            List<ChatMessageJpaEntity> lastMessages = chatMessageRepository.findLastNMessages(userId, 1);
+            Long lastSavedTimestamp = lastMessages.isEmpty() ? null : 
+                (lastMessages.get(0).getCreatedAt() != null ? lastMessages.get(0).getCreatedAt().toEpochMilli() : null);
             
-            // Only save new messages (if count increased)
-            if (newCount > existingCount) {
-                List<ConversationMessage> newMessages = context.getConversationHistory()
-                        .subList(existingCount, newCount);
-                
+            // Find index where new messages start (first message without timestamp or after last saved)
+            int newMessagesStartIdx = 0;
+            if (lastSavedTimestamp != null) {
+                for (int i = context.getConversationHistory().size() - 1; i >= 0; i--) {
+                    ConversationMessage msg = context.getConversationHistory().get(i);
+                    if (msg.getTimestamp() != null && msg.getTimestamp() <= lastSavedTimestamp) {
+                        newMessagesStartIdx = i + 1;
+                        break;
+                    }
+                }
+            }
+            
+            // Save new messages
+            List<ConversationMessage> newMessages = context.getConversationHistory().subList(
+                newMessagesStartIdx, context.getConversationHistory().size());
+            
+            if (!newMessages.isEmpty()) {
                 for (ConversationMessage msgDto : newMessages) {
                     ChatMessageJpaEntity msgJpa = mapper.toJpaChatMessage(msgDto, userId);
                     chatMessageRepository.save(msgJpa);
@@ -218,16 +231,29 @@ public class UserEntityService {
         }
 
         // 5. Save conversation history (append new messages)
-        if (context.getConversationHistory() != null) {
-            // Get existing message count
-            int existingCount = chatMessageRepository.findLastNMessages(userId, 1000).size();
-            int newCount = context.getConversationHistory().size();
+        if (context.getConversationHistory() != null && !context.getConversationHistory().isEmpty()) {
+            // Get last saved timestamp to identify where old messages end
+            List<ChatMessageJpaEntity> lastMessages = chatMessageRepository.findLastNMessages(userId, 1);
+            Long lastSavedTimestamp = lastMessages.isEmpty() ? null : 
+                (lastMessages.get(0).getCreatedAt() != null ? lastMessages.get(0).getCreatedAt().toEpochMilli() : null);
             
-            // Only save new messages (if count increased)
-            if (newCount > existingCount) {
-                List<ConversationMessage> newMessages = context.getConversationHistory()
-                        .subList(existingCount, newCount);
-                
+            // Find index where new messages start (first message without timestamp or after last saved)
+            int newMessagesStartIdx = 0;
+            if (lastSavedTimestamp != null) {
+                for (int i = context.getConversationHistory().size() - 1; i >= 0; i--) {
+                    ConversationMessage msg = context.getConversationHistory().get(i);
+                    if (msg.getTimestamp() != null && msg.getTimestamp() <= lastSavedTimestamp) {
+                        newMessagesStartIdx = i + 1;
+                        break;
+                    }
+                }
+            }
+            
+            // Save new messages
+            List<ConversationMessage> newMessages = context.getConversationHistory().subList(
+                newMessagesStartIdx, context.getConversationHistory().size());
+            
+            if (!newMessages.isEmpty()) {
                 for (ConversationMessage msgDto : newMessages) {
                     ChatMessageJpaEntity msgJpa = mapper.toJpaChatMessage(msgDto, userId);
                     chatMessageRepository.save(msgJpa);
