@@ -198,7 +198,7 @@ public class CustomInstructionAgent {
                     OpenAiChatOptions.builder()
                             .model(MODEL)
                             .maxCompletionTokens(MAX_COMPLETION_TOKENS)
-                            .temperature(0.7)
+                            .temperature(1.0) // gpt-5-mini (reasoning model) only supports default (1.0)
                             .build()
             );
 

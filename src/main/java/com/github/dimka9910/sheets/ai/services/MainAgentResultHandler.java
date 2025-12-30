@@ -158,12 +158,82 @@ public class MainAgentResultHandler {
      * Handle single InstructionAction.
      */
     private void handleInstructionAction(CustomInstructionAction action, UserEntity userContext) {
-        log.info("Instruction action: {} (entity={}, entityId={})", 
-                action.getActionType(), action.getEntityType(), action.getEntityId());
+        log.info("Instruction action: {} (entity={}, entityId={}, value={})", 
+                action.getActionType(), action.getEntityType(), action.getEntityId(), action.getValue());
         
-        // TODO: Implement instruction action handling
-        // This will be done when we update CustomInstructionAgent to use CustomInstructionAgentResponse
-        log.warn("⚠️ Instruction action handling not yet implemented: {}", action.getActionType());
+        try {
+            switch (action.getActionType()) {
+                case UPDATE_DEFAULT -> handleUpdateDefault(action, userContext);
+                case ADD_LINKED_USER_ALIAS -> handleAddLinkedUserAlias(action, userContext);
+                case REMOVE_LINKED_USER_ALIAS -> handleRemoveLinkedUserAlias(action, userContext);
+                case ADD_ACCOUNT_ALIAS -> handleAddAccountAlias(action, userContext);
+                case REMOVE_ACCOUNT_ALIAS -> handleRemoveAccountAlias(action, userContext);
+                case ADD_FUND_ALIAS -> handleAddFundAlias(action, userContext);
+                case REMOVE_FUND_ALIAS -> handleRemoveFundAlias(action, userContext);
+                case ADD_CUSTOM_INSTRUCTION -> handleAddCustomInstruction(action, userContext);
+                case REMOVE_CUSTOM_INSTRUCTION -> handleRemoveCustomInstruction(action, userContext);
+                default -> log.warn("⚠️ Unknown instruction action type: {}", action.getActionType());
+            }
+        } catch (Exception e) {
+            log.error("❌ Error handling instruction action {}: {}", action.getActionType(), e.getMessage(), e);
+        }
+    }
+    
+    private void handleUpdateDefault(CustomInstructionAction action, UserEntity userContext) {
+        String entityId = action.getEntityId(); // e.g., "currency", "account", "fund", "language"
+        String value = action.getValue();
+        
+        switch (entityId.toLowerCase()) {
+            case "currency", "defaultcurrency" -> {
+                userContext.setDefaultCurrency(value);
+                log.info("✅ Updated default currency to: {}", value);
+            }
+            case "language", "preferredlanguage" -> {
+                userContext.setPreferredLanguage(value);
+                log.info("✅ Updated preferred language to: {}", value);
+            }
+            default -> log.warn("⚠️ Unknown default entity: {}", entityId);
+        }
+    }
+    
+    private void handleAddLinkedUserAlias(CustomInstructionAction action, UserEntity userContext) {
+        // TODO: Implement when needed
+        log.warn("⚠️ ADD_LINKED_USER_ALIAS not yet implemented");
+    }
+    
+    private void handleRemoveLinkedUserAlias(CustomInstructionAction action, UserEntity userContext) {
+        // TODO: Implement when needed
+        log.warn("⚠️ REMOVE_LINKED_USER_ALIAS not yet implemented");
+    }
+    
+    private void handleAddAccountAlias(CustomInstructionAction action, UserEntity userContext) {
+        // TODO: Implement when needed
+        log.warn("⚠️ ADD_ACCOUNT_ALIAS not yet implemented");
+    }
+    
+    private void handleRemoveAccountAlias(CustomInstructionAction action, UserEntity userContext) {
+        // TODO: Implement when needed
+        log.warn("⚠️ REMOVE_ACCOUNT_ALIAS not yet implemented");
+    }
+    
+    private void handleAddFundAlias(CustomInstructionAction action, UserEntity userContext) {
+        // TODO: Implement when needed
+        log.warn("⚠️ ADD_FUND_ALIAS not yet implemented");
+    }
+    
+    private void handleRemoveFundAlias(CustomInstructionAction action, UserEntity userContext) {
+        // TODO: Implement when needed
+        log.warn("⚠️ REMOVE_FUND_ALIAS not yet implemented");
+    }
+    
+    private void handleAddCustomInstruction(CustomInstructionAction action, UserEntity userContext) {
+        // TODO: Implement when needed
+        log.warn("⚠️ ADD_CUSTOM_INSTRUCTION not yet implemented");
+    }
+    
+    private void handleRemoveCustomInstruction(CustomInstructionAction action, UserEntity userContext) {
+        // TODO: Implement when needed
+        log.warn("⚠️ REMOVE_CUSTOM_INSTRUCTION not yet implemented");
     }
 
     // ═══════════════════════════════════════════════════════════════════════════
