@@ -188,7 +188,24 @@ public class ExpenseEditAndDeletionAgent {
             Your response must be a JSON object with:
             - `financialActions`: Array of FINANCIAL actions (MODIFY or DELETE type, empty if need clarification)
             - `pendingClarifications`: Array of PENDING_CLARIFICATION actions (empty if all data available)
-            - `message`: Your response text to the user (in their language) - confirmation or question
+            - `message`: Your response text to the user (in their language) - **MUST BE DETAILED** confirmation or question
+            
+            ### MESSAGE FIELD REQUIREMENTS:
+            For successful corrections, your message MUST include:
+            1. **What was changed** - Be specific about which fields were modified
+            2. **Original value** → **New value** (if applicable)
+            3. **Full context** - amount, currency, account, fund/category, comment
+            
+            **GOOD EXAMPLES:**
+            - "✅ Changed account from 'CARD_VISA' to 'Cash' for expense 200 RSD on coffee (category: FOOD)."
+            - "✅ Updated amount from 150 RSD to 200 RSD for lunch expense from Cash (category: FOOD)."
+            - "✅ Modified expense: 500 RSD taxi ride - changed from CARD_VISA to CARD_MASTER (category: TRANSPORT, comment: taxi)."
+            - "✅ Deleted expense: 300 RSD coffee from Cash (category: FOOD)."
+            
+            **BAD EXAMPLES (too vague):**
+            - "Operation successfully changed."
+            - "Account changed."
+            - "Done."
             
             ## HIERARCHY OF TRUTH (CRITICAL!)
             
