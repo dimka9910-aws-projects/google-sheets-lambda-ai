@@ -301,13 +301,19 @@ public class MainAgent {
         }
         
         // Build prompt without PromptTemplate (to avoid StringTemplate syntax issues with quotes)
-        String pendingClarificationsStr = (String) params.get("pendingClarifications");
-        String userContextStr = (String) params.get("userContext");
-        
         String finalPrompt = promptTemplate
                 .replace("{formatInstructions}", outputConverter.getFormat())
-                .replace("{pendingClarifications}", pendingClarificationsStr != null ? pendingClarificationsStr : "")
-                .replace("{userContext}", userContextStr != null ? userContextStr : "");
+                .replace("{categoryInfo}", (String) params.get("categoryInfo"))
+                .replace("{userName}", (String) params.get("userName"))
+                .replace("{defaultCurrency}", (String) params.get("defaultCurrency"))
+                .replace("{defaultAccount}", (String) params.get("defaultAccount"))
+                .replace("{defaultFund}", (String) params.get("defaultFund"))
+                .replace("{accounts}", (String) params.get("accounts"))
+                .replace("{funds}", (String) params.get("funds"))
+                .replace("{linkedUsers}", (String) params.get("linkedUsers"))
+                .replace("{customInstructions}", (String) params.get("customInstructions"))
+                .replace("{conversationHistory}", (String) params.get("conversationHistory"))
+                .replace("{pendingList}", params.get("pendingList") != null ? (String) params.get("pendingList") : "");
         
         return finalPrompt;
     }
