@@ -11,6 +11,7 @@ target/
 # Credentials (NEVER commit!)
 service-acc.json
 application.properties
+.dev-database-url.local
 
 # SAM
 .aws-sam/
