@@ -278,26 +278,23 @@ public class FinancialAgent {
           **⚠️ CRITICAL MATCHING RULES (MUST FOLLOW):**
           
           1. **ONLY USE VALUES FROM AVAILABLE LISTS!**
-             - Account MUST be one of the IDs from "Available Accounts" list
-             - Fund MUST be one of the IDs from "Available Funds" list  
+             - Account MUST be one of the IDs from "Available Accounts" list below
+             - Fund MUST be one of the IDs from "Available Funds" list below
              - **NEVER invent or guess values that are not in the lists!**
              - If you can't find a match → PENDING_CLARIFICATION
           
           2. **PHONETIC/TRANSLITERATION MATCHING:**
              - User may write in different script (cyrillic vs latin) - match by sound!
-             - "етел" (cyrillic) sounds like "Yettel" → match CARD_DIMA_YETTEL
-             - "райф" (cyrillic) sounds like "Raif" → match CARD_DIMA_VISA_RAIF
-             - "кэш" (cyrillic) = "cash" → match accounts containing CASH
-             - Always consider phonetic similarity across scripts!
+             - Always consider phonetic similarity across scripts
+             - Example: if user writes in cyrillic but account name is in latin, match by pronunciation
           
           3. **SEMANTIC MATCHING:**
-             - "топливо" (fuel) → look for TRAVEL, TRANSPORT, or similar fund
-             - "еда" (food) → look for FOOD fund
-             - Match by meaning, not just exact words
+             - Match by meaning when exact word is not in the list
+             - Look for semantically related fund/account in Available lists
           
           4. **FALLBACK PRIORITY:**
              - First: Try to match user's word to Available list (phonetic + semantic)
-             - Second: Use default ({defaultAccount} / {defaultFund}) if user didn't specify
+             - Second: Use default ({defaultAccount} / {defaultFund}) if user didn't specify anything
              - Third: If no default AND can't match → PENDING_CLARIFICATION
           
           5. **WHEN TO ASK (PENDING_CLARIFICATION):**
@@ -402,19 +399,15 @@ public class FinancialAgent {
         ## Examples (use ACTUAL values from Available lists, these are just format examples)
         
         ### EXPENSE:
-        - "coffee 200" → {{"operationType": "EXPENSE", "amount": 200, "currency": "{currency}", "account": "{defaultAccount}", "fund": "<FUND_FROM_LIST>"}}
-        - "200 динар етел топливо" → {{"operationType": "EXPENSE", "amount": 200, "currency": "RSD", "account": "<YETTEL_CARD_FROM_LIST>", "fund": "<TRAVEL_OR_SIMILAR_FROM_LIST>"}}
-          ↑ "етел" sounds like "Yettel" → find Yettel card in Available Accounts!
-          ↑ "топливо" (fuel) → find TRAVEL or transport-related fund in Available Funds!
+        - "coffee 200" → {{"operationType": "EXPENSE", "amount": 200, "currency": "{currency}", "account": "{defaultAccount}", "fund": "<FUND_FROM_AVAILABLE_LIST>"}}
         
         ### TRANSFER (internal):
-        - "transfer 1000 from card to cash" → {{"operationType": "TRANSFER", "amount": 1000, "currency": "{currency}", "account": "<CARD_FROM_LIST>", "targetAccount": "<CASH_FROM_LIST>"}}
+        - "transfer 1000 from card to cash" → {{"operationType": "TRANSFER", "amount": 1000, "currency": "{currency}", "account": "<ACCOUNT_FROM_LIST>", "targetAccount": "<ACCOUNT_FROM_LIST>"}}
         
         ### PENDING_CLARIFICATION (when you CAN'T find match in Available lists):
         - "coffee" → {{"context": "User wants to record coffee expense. Missing: amount."}}
-        - "transfer 1000" → {{"context": "User wants to transfer 1000 RSD. Missing: source account (from where?) and target account (to where?)."}}
-        - "200 на блаблабла" → {{"context": "Не могу найти 'блаблабла' среди доступных счетов/фондов. Уточните, пожалуйста."}}
-          ↑ NEVER invent values! Ask user if no match found!
+        - "transfer 1000" → {{"context": "User wants to transfer 1000. Missing: source account and target account."}}
+        - If user mentions something NOT in Available lists → Ask for clarification, NEVER invent values!
     """;
     
     // Additional section for TRANSFER operations with linked users (conditionally appended)
