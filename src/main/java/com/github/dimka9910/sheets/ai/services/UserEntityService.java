@@ -19,6 +19,7 @@ import java.util.stream.Collectors;
 @Slf4j
 @Service
 @RequiredArgsConstructor
+@SuppressWarnings("null")
 public class UserEntityService {
 
     private final UserJpaRepository userRepository;
@@ -151,6 +152,78 @@ public class UserEntityService {
         }
         
         log.debug("✅ Saved conversation history + AI context for userName: {}", context.getUserName());
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // DEFAULTS UPDATE (safe, does not touch accounts/funds rows)
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    @Transactional
+    public void updateDefaultCurrency(UUID userId, String currency) {
+        if (userId == null) throw new IllegalArgumentException("userId is required");
+        UserJpaEntity userJpa = userRepository.findById(userId)
+                .orElseThrow(() -> new IllegalStateException("User not found: " + userId));
+        userJpa.setDefaultCurrency(normalizeOrNull(currency));
+        userRepository.save(userJpa);
+    }
+
+    @Transactional
+    public void updatePreferredLanguage(UUID userId, String language) {
+        if (userId == null) throw new IllegalArgumentException("userId is required");
+        UserJpaEntity userJpa = userRepository.findById(userId)
+                .orElseThrow(() -> new IllegalStateException("User not found: " + userId));
+        userJpa.setPreferredLanguage(normalizeOrNull(language));
+        userRepository.save(userJpa);
+    }
+
+    @Transactional
+    public void updateDefaultAccount(UUID userId, String accountExternalId) {
+        if (userId == null) throw new IllegalArgumentException("userId is required");
+        UserJpaEntity userJpa = userRepository.findById(userId)
+                .orElseThrow(() -> new IllegalStateException("User not found: " + userId));
+
+        String ext = normalizeOrNull(accountExternalId);
+        if (ext == null) {
+            userJpa.setDefaultAccountId(null);
+            userRepository.save(userJpa);
+            return;
+        }
+
+        UUID accountId = accountRepository.findByUserIdAndExternalId(userId, ext)
+                .map(AccountJpaEntity::getId)
+                .orElseThrow(() -> new IllegalArgumentException("Account not found: " + ext));
+
+        userJpa.setDefaultAccountId(accountId);
+        userRepository.save(userJpa);
+    }
+
+    @Transactional
+    public void updateDefaultFund(UUID userId, String fundExternalId) {
+        if (userId == null) throw new IllegalArgumentException("userId is required");
+        UserJpaEntity userJpa = userRepository.findById(userId)
+                .orElseThrow(() -> new IllegalStateException("User not found: " + userId));
+
+        String ext = normalizeOrNull(fundExternalId);
+        if (ext == null) {
+            userJpa.setDefaultFundId(null);
+            userRepository.save(userJpa);
+            return;
+        }
+
+        UUID fundId = fundRepository.findByUserIdAndExternalId(userId, ext)
+                .map(FundJpaEntity::getId)
+                .orElseThrow(() -> new IllegalArgumentException("Fund not found: " + ext));
+
+        userJpa.setDefaultFundId(fundId);
+        userRepository.save(userJpa);
+    }
+
+    private String normalizeOrNull(String s) {
+        if (s == null) return null;
+        String trimmed = s.trim();
+        if (trimmed.isBlank()) return null;
+        if ("not set".equalsIgnoreCase(trimmed) || "null".equalsIgnoreCase(trimmed)) return null;
+        return trimmed;
     }
 
     /**

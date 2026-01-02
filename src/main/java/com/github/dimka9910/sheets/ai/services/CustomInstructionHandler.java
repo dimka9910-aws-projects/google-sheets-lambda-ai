@@ -30,6 +30,7 @@ public class CustomInstructionHandler {
 
     private final CustomInstructionAgent customInstructionAgent;
     private final UserEntityService userEntityService;
+    @SuppressWarnings("unused")
     private final SQSPublisher sqsPublisher;
 
     /**
@@ -48,17 +49,11 @@ public class CustomInstructionHandler {
             var agentRequest = new CustomInstructionAgent.Request(instructions, userEntity);
             var agentResponse = customInstructionAgent.process(agentRequest);
             
-            if (!agentResponse.isSuccess()) {
-                log.error("CustomInstructionAgent failed: {}", agentResponse.errorMessage());
-                return;
-            }
-            
-            log.info("CustomInstructionAgent result: {} actions - {}", 
-                    agentResponse.actions().size(),
-                    agentResponse.explanation());
+            log.info("CustomInstructionAgent result: {} actions", 
+                    agentResponse.getCustomInstructionActions() != null ? agentResponse.getCustomInstructionActions().size() : 0);
             
             // Apply all instruction actions
-            for (CustomInstructionAction action : agentResponse.actions()) {
+            for (CustomInstructionAction action : agentResponse.getCustomInstructionActions()) {
                 applyInstructionAction(action, userEntity);
             }
             
@@ -100,8 +95,15 @@ public class CustomInstructionHandler {
                 if (index != null) {
                     userEntity.removeInstruction(index);
                     log.info("Removed custom instruction at index: {}", index);
+                } else if (value != null) {
+                    boolean removed = userEntity.getCustomInstructions() != null && userEntity.getCustomInstructions().remove(value);
+                    if (removed) {
+                        log.info("Removed custom instruction by value: {}", value);
+                    } else {
+                        log.warn("Custom instruction not found: {}", value);
+                    }
                 } else {
-                    log.warn("REMOVE_CUSTOM_INSTRUCTION requires index field");
+                    log.warn("REMOVE_CUSTOM_INSTRUCTION requires index or value");
                 }
             }
             
@@ -109,11 +111,13 @@ public class CustomInstructionHandler {
                 switch (entityId) {
                     case "currency" -> {
                         userEntity.setDefaultCurrency(value);
+                        userEntityService.updateDefaultCurrency(userEntity.getId(), value);
                         log.info("Updated default currency: {}", value);
                     }
                     case "account" -> userEntity.findAccountByAlias(value).ifPresentOrElse(
                             account -> {
                                 userEntity.setDefaultAccount(account);
+                                userEntityService.updateDefaultAccount(userEntity.getId(), account.getAccountId());
                                 log.info("Updated default account: {}", account.getAccountId());
                             },
                             () -> log.warn("Account not found: {}", value)
@@ -121,10 +125,16 @@ public class CustomInstructionHandler {
                     case "fund" -> userEntity.findFundByAlias(value).ifPresentOrElse(
                             fund -> {
                                 userEntity.setDefaultFund(fund);
+                                userEntityService.updateDefaultFund(userEntity.getId(), fund.getFundId());
                                 log.info("Updated default fund: {}", fund.getFundId());
                             },
                             () -> log.warn("Fund not found: {}", value)
                     );
+                    case "language" -> {
+                        userEntity.setPreferredLanguage(value);
+                        userEntityService.updatePreferredLanguage(userEntity.getId(), value);
+                        log.info("Updated preferred language: {}", value);
+                    }
                     default -> log.warn("Unknown default type: {}", entityId);
                 }
             }

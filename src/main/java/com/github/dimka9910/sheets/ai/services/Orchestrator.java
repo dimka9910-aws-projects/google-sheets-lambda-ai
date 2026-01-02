@@ -4,7 +4,6 @@ import com.github.dimka9910.sheets.ai.dto.response.PendingClarificationAction;
 import com.github.dimka9910.sheets.ai.dto.response.MainAgentRedirectAction;
 import com.github.dimka9910.sheets.ai.dto.response.BaseAgentResponse;
 import com.github.dimka9910.sheets.ai.dto.response.MainAgentResponse;
-import com.github.dimka9910.sheets.ai.dto.response.CustomInstructionAgentResponse;
 import com.github.dimka9910.sheets.ai.dto.telegram.TelegramChatRequest;
 import com.github.dimka9910.sheets.ai.dto.telegram.TelegramChatResponse;
 import com.github.dimka9910.sheets.ai.dto.user.UserEntity;
@@ -187,14 +186,7 @@ public class Orchestrator {
                 log.info("  ↳ Calling CustomInstructionAgent");
                 // CustomInstructionAgent expects List<String> instructions, so wrap message in list
                 var ciRequest = new CustomInstructionAgent.Request(List.of(message), userContext);
-                var ciResponse = customInstructionAgent.process(ciRequest);
-                
-                // Convert CustomInstructionAgent.Response to CustomInstructionAgentResponse
-                // TODO: Update CustomInstructionAgent to return CustomInstructionAgentResponse directly
-                yield CustomInstructionAgentResponse.builder()
-                        .customInstructionActions(List.of())
-                        .message(ciResponse.explanation() != null ? ciResponse.explanation() : "Settings updated")
-                        .build();
+                yield customInstructionAgent.process(ciRequest);
             }
             case FINANCIAL -> {
                 log.info("  ↳ Calling FinancialAgent (no linked users)");

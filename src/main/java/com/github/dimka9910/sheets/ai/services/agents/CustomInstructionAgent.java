@@ -1,6 +1,6 @@
 package com.github.dimka9910.sheets.ai.services.agents;
 
-import com.github.dimka9910.sheets.ai.dto.response.CustomInstructionAction;
+import com.github.dimka9910.sheets.ai.dto.response.CustomInstructionAgentResponse;
 import com.github.dimka9910.sheets.ai.dto.user.LinkedUserEntry;
 import com.github.dimka9910.sheets.ai.dto.user.UserEntity;
 import com.github.dimka9910.sheets.ai.services.UserContextToPromptMapper;
@@ -14,6 +14,7 @@ import org.springframework.ai.converter.BeanOutputConverter;
 import org.springframework.ai.openai.OpenAiChatOptions;
 import org.springframework.stereotype.Component;
 
+import java.util.ArrayList;
 import java.util.List;
 
 /**
@@ -43,47 +44,24 @@ public class CustomInstructionAgent {
             UserEntity userEntity
     ) {}
 
-    public record Response(
-            List<CustomInstructionAction> actions,
-            String explanation,
-            String errorMessage
-    ) {
-        public boolean isSuccess() {
-            return errorMessage == null;
-        }
-        
-        public boolean hasActions() {
-            return actions != null && !actions.isEmpty();
-        }
-    }
-
     // ═══════════════════════════════════════════════════════════════════════════
-    // PROMPT TEMPLATE (Spring AI PromptTemplate with placeholders)
+    // PROMPT TEMPLATE
     // ═══════════════════════════════════════════════════════════════════════════
     
     private static final String PROMPT_TEMPLATE = """
-            # Role: Custom Instruction Manager
-            
-            You manage user's preferences, aliases, and custom rules for their financial tracking system.
-            
-            ## Your Capabilities
-            
-            1. **Linked User Aliases** - nicknames for people
-               Example: "remember I call ALICE as sweetie" → add alias "sweetie" to linked user ALICE
-            
-            2. **Account Aliases** - nicknames for accounts
-               Example: "main is my primary card" → add alias "main" to account
-            
-            3. **Fund Aliases** - nicknames for categories
-               Example: "cafe is FOOD" → add alias "cafe" to fund FOOD
-            
-            4. **Default Updates** - permanent preferences
-               Example: "I always spend in EUR" → update defaultCurrency to EUR
-            
-            5. **Custom Instructions** - complex rules
-               Example: "highway = 100 dollars from cash in family budget"
-            
-            ## User Context
+            # ROLE: Settings & Instructions Manager
+
+            You manage user's preferences and interpretation rules for a personal finance assistant.
+            Your job is to output structured actions to update settings (aliases, defaults, custom instructions),
+            or ask a clarification question if ambiguous.
+
+            ## HARD RULES (MUST FOLLOW)
+            - Output MUST be valid JSON only (no markdown, no comments).
+            - Use ONLY IDs that exist in the provided context lists (accounts/funds/linked users).
+            - If ambiguous, DO NOT guess: ask a question in `message` and add ONE item into `pendingClarifications`.
+            - For aliases: store the alias value as provided (do not invent new aliases).
+
+            ## USER CONTEXT
             
             **Current User:** {userName}
             
@@ -104,54 +82,21 @@ public class CustomInstructionAgent {
             **Existing Custom Instructions:**
             {customInstructions}
             
-            ## Available Actions
-            
-            **Alias Management:**
-            - ADD_LINKED_USER_ALIAS: {"actionType":"ADD_LINKED_USER_ALIAS","userName":"<LINKED_USER_USERNAME>","alias":"<ALIAS>"}
-            - REMOVE_LINKED_USER_ALIAS: {"actionType":"REMOVE_LINKED_USER_ALIAS","userName":"<LINKED_USER_USERNAME>","alias":"<ALIAS>"}
-            - ADD_ACCOUNT_ALIAS: {"actionType":"ADD_ACCOUNT_ALIAS","accountId":"<ACCOUNT_ID_FROM_CONTEXT>","alias":"<ALIAS>"}
-            - REMOVE_ACCOUNT_ALIAS: {"actionType":"REMOVE_ACCOUNT_ALIAS","accountId":"<ACCOUNT_ID_FROM_CONTEXT>","alias":"<ALIAS>"}
-            - ADD_FUND_ALIAS: {"actionType":"ADD_FUND_ALIAS","fundId":"<FUND_ID_FROM_CONTEXT>","alias":"<ALIAS>"}
-            - REMOVE_FUND_ALIAS: {"actionType":"REMOVE_FUND_ALIAS","fundId":"<FUND_ID_FROM_CONTEXT>","alias":"<ALIAS>"}
-            
-            **Custom Instructions:**
-            - ADD_CUSTOM_INSTRUCTION: {"actionType":"ADD_CUSTOM_INSTRUCTION","instruction":"<TEXT>"}
-            - REMOVE_CUSTOM_INSTRUCTION: {"actionType":"REMOVE_CUSTOM_INSTRUCTION","index":0}
-            
-            **Defaults:**
-            - UPDATE_DEFAULT: {"actionType":"UPDATE_DEFAULT","defaultType":"CURRENCY","value":"<VALUE>"} (or ACCOUNT, or FUND)
-            
-            **Clarification:**
-            - ASK_CLARIFICATION: {"actionType":"ASK_CLARIFICATION","question":"Which account?","context":"note"}
-            
-            ## Conflict Management
-            
-            When adding alias that conflicts with existing:
-            1. Remove old alias first (REMOVE action)
-            2. Add new alias (ADD action)
-            3. Return both actions in same response
-            
-            When updating custom instruction:
-            - Use REMOVE (old index) + ADD (new text)
-            
-            ## When to Ask Clarification
-            
-            Use ASK_CLARIFICATION when:
-            - Instruction is ambiguous
-            - Unsure which entity user refers to
-            - Not enough information
-            
-            ## Response Format
-            
+            ## ACTIONS CONTRACT
+            All actions must use THIS DTO shape:
+            - actionType: one of CustomInstructionAction.ActionType enum values
+            - entityType: one of: linkedUser | account | fund | customInstruction | default
+            - entityId: the target ID (e.g. linked user's userName, accountId, fundId, or default key)
+            - value: the value to add/set (alias string / instruction text / default value)
+            - index: optional (only for REMOVE_CUSTOM_INSTRUCTION; if omitted, you may remove by value)
+
+            Defaults supported via UPDATE_DEFAULT:
+            - entityType="default"
+            - entityId must be ONE of: currency | account | fund | language
+            - value must be the desired value (for account/fund: use exact ID from list)
+
+            ## RESPONSE FORMAT (JSON SCHEMA)
             {format}
-            
-            **IMPORTANT:**
-            - Return PURE JSON without comments or markdown
-            - `actions` can be empty array if nothing to do
-            - Use exact actionType strings from Available Actions
-            - When referring to accounts/funds/users, use their exact IDs from context
-            - **NEVER include "id" field in actions** - ID is system-generated
-            - Explanation should be concise (1-2 sentences)
             """;
     
     // ═══════════════════════════════════════════════════════════════════════════
@@ -162,16 +107,16 @@ public class CustomInstructionAgent {
     private final UserContextToPromptMapper contextMapper;
     
     // Cached converter for better performance
-    private final BeanOutputConverter<Response> outputConverter;
+    private final BeanOutputConverter<CustomInstructionAgentResponse> outputConverter;
     
     public CustomInstructionAgent(ChatModel chatModel, UserContextToPromptMapper contextMapper) {
         this.chatModel = chatModel;
         this.contextMapper = contextMapper;
         // Initialize converter once (expensive reflection operation)
-        this.outputConverter = new BeanOutputConverter<>(Response.class);
+        this.outputConverter = new BeanOutputConverter<>(CustomInstructionAgentResponse.class);
     }
 
-    public Response process(Request request) {
+    public CustomInstructionAgentResponse process(Request request) {
         try {
             log.debug("🎛️ CustomInstructionAgent processing {} instructions", 
                     request.instructions().size());
@@ -184,6 +129,7 @@ public class CustomInstructionAgent {
                     systemPrompt.length(), userPrompt.length());
 
             // Create Spring AI Prompt with SEPARATE system and user messages
+            @SuppressWarnings("null")
             Prompt prompt = new Prompt(
                     List.of(
                             new SystemMessage(systemPrompt),
@@ -206,20 +152,21 @@ public class CustomInstructionAgent {
             log.debug("AI response length: {} chars", content.length());
 
             // Parse using BeanOutputConverter
-            Response result = outputConverter.convert(content);
-            
-            log.info("✅ CustomInstructionAgent parsed: {} actions", 
-                    result.actions() != null ? result.actions().size() : 0);
+            CustomInstructionAgentResponse result = outputConverter.convert(content);
+
+            log.info("✅ CustomInstructionAgent parsed: {} actions, pending={}",
+                    result.getCustomInstructionActions() != null ? result.getCustomInstructionActions().size() : 0,
+                    result.getPendingClarifications() != null ? result.getPendingClarifications().size() : 0);
             
             return result;
             
         } catch (Exception e) {
             log.error("❌ CustomInstructionAgent error: {}", e.getMessage(), e);
-            return new Response(
-                    List.of(),
-                    "Error processing instruction: " + e.getMessage(),
-                    e.getMessage()
-            );
+            return CustomInstructionAgentResponse.builder()
+                    .customInstructionActions(List.of())
+                    .pendingClarifications(new ArrayList<>())
+                    .message("Error processing instruction: " + e.getMessage())
+                    .build();
         }
     }
 

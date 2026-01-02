@@ -144,18 +144,8 @@ public class ExpenseEditAndDeletionAgent {
 
         FinancialAction.OperationType opType = action.getOperationType();
 
-        // 2. Required identifying fields
-        if (action.getAmount() == null) {
-            throw new IllegalStateException("Amount is missing for correction ID=" + action.getId());
-        }
-        if (action.getCurrency() == null) {
-            throw new IllegalStateException("Currency is missing for correction ID=" + action.getId());
-        }
-        if (action.getAccount() == null) {
-            throw new IllegalStateException("Source Account is missing for correction ID=" + action.getId());
-        }
-
-        // 3. Only MODIFY/DELETE are supported by this agent
+        // 2. Only MODIFY/DELETE are supported by this agent.
+        // Backend applies corrections as a PATCH using UUID; other fields may be partially filled.
         switch (opType) {
             case MODIFY -> log.debug("✅ Validated MODIFY for ID: {}", action.getId());
             case DELETE -> log.debug("✅ Validated DELETE for ID: {}", action.getId());
@@ -184,17 +174,6 @@ public class ExpenseEditAndDeletionAgent {
             1. **What was changed** - Be specific about which fields were modified
             2. **Original value** → **New value** (if applicable)
             3. **Full context** - amount, currency, account, fund/category, comment
-            
-            **GOOD EXAMPLES:**
-            - "✅ Changed account from 'CARD_VISA' to 'Cash' for expense 200 RSD on coffee (category: FOOD)."
-            - "✅ Updated amount from 150 RSD to 200 RSD for lunch expense from Cash (category: FOOD)."
-            - "✅ Modified expense: 500 RSD taxi ride - changed from CARD_VISA to CARD_MASTER (category: TRANSPORT, comment: taxi)."
-            - "✅ Deleted expense: 300 RSD coffee from Cash (category: FOOD)."
-            
-            **BAD EXAMPLES (too vague):**
-            - "Operation successfully changed."
-            - "Account changed."
-            - "Done."
             
             ## HIERARCHY OF TRUTH (CRITICAL!)
             
@@ -229,9 +208,9 @@ public class ExpenseEditAndDeletionAgent {
              All other fields remain unchanged."
             
             Your job:
-            1. Extract UUID and original values from enriched message
-            2. Apply the specific change mentioned
-            3. Return FINANCIAL action with correction=true
+            1. Extract UUID from enriched message
+            2. Identify what the user wants to change
+            3. Return a PATCH-like FINANCIAL action with correction=true
             
             ## RULES FOR MODIFY
             
@@ -239,19 +218,15 @@ public class ExpenseEditAndDeletionAgent {
             - `id`: UUID from enriched message (CRITICAL!)
             - `operationType`: "MODIFY"
             - `correction`: true
-            - `amount`, `currency`, `account`: Always required
-            - `fund`: Required for EXPENSE, optional for INCOME
-            - `targetAccount`: Required for TRANSFER
+            
+            **Patch rule (CRITICAL):**
+            - Include ONLY changed fields (amount/currency/account/fund/targetAccount/comment/date).
+            - Do NOT invent missing original fields. Backend will load them by UUID.
             
             **Process:**
-            1. Extract ALL original values from enriched message
-            2. Apply the specific change mentioned by user
-            3. Keep all other fields unchanged
-            
-            **Special rules by operation type:**
-            - **EXPENSE**: Must have `fund` field
-            - **INCOME**: `fund` is optional
-            - **TRANSFER**: Must have both `account` (source) and `targetAccount` (destination)
+            1. Determine which fields user wants to change
+            2. Output those fields only
+            3. If user is vague → ask a clarification (PENDING_CLARIFICATION)
             
             ## RULES FOR DELETE
             
@@ -259,10 +234,9 @@ public class ExpenseEditAndDeletionAgent {
             - `id`: UUID from enriched message
             - `operationType`: "DELETE"
             - `correction`: true
-            - `amount`, `currency`, `account`: For identification/verification
             
-            **Process:**
-            Extract all identifying fields from enriched message.
+            **Patch rule:**
+            - Only `id`, `operationType`, `correction` are required. Do not invent extra fields.
             
             ## PENDING_CLARIFICATION
             
@@ -281,9 +255,7 @@ public class ExpenseEditAndDeletionAgent {
             2. **correction=true is MANDATORY** for all FINANCIAL actions from this agent
             3. **Return PURE JSON** - no markdown, no comments
             4. **Validate operation type logic:**
-               - EXPENSE → needs fund
-               - TRANSFER → needs targetAccount
-               - INCOME → fund optional
+               - MODIFY/DELETE only
             """;
 }
 

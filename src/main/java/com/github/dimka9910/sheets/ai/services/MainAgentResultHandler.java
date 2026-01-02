@@ -196,12 +196,30 @@ public class MainAgentResultHandler {
         switch (entityId.toLowerCase()) {
             case "currency", "defaultcurrency" -> {
                 userContext.setDefaultCurrency(value);
+                userContextService.updateDefaultCurrency(userContext.getId(), value);
                 log.info("✅ Updated default currency to: {}", value);
             }
             case "language", "preferredlanguage" -> {
                 userContext.setPreferredLanguage(value);
+                userContextService.updatePreferredLanguage(userContext.getId(), value);
                 log.info("✅ Updated preferred language to: {}", value);
             }
+            case "account", "defaultaccount" -> userContext.findAccountByAlias(value).ifPresentOrElse(
+                    account -> {
+                        userContext.setDefaultAccount(account);
+                        userContextService.updateDefaultAccount(userContext.getId(), account.getAccountId());
+                        log.info("✅ Updated default account to: {}", account.getAccountId());
+                    },
+                    () -> log.warn("⚠️ Default account not found by reference: {}", value)
+            );
+            case "fund", "defaultfund" -> userContext.findFundByAlias(value).ifPresentOrElse(
+                    fund -> {
+                        userContext.setDefaultFund(fund);
+                        userContextService.updateDefaultFund(userContext.getId(), fund.getFundId());
+                        log.info("✅ Updated default fund to: {}", fund.getFundId());
+                    },
+                    () -> log.warn("⚠️ Default fund not found by reference: {}", value)
+            );
             default -> log.warn("⚠️ Unknown default entity: {}", entityId);
         }
     }
