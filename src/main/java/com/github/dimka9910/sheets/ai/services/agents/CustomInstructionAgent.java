@@ -1,6 +1,5 @@
 package com.github.dimka9910.sheets.ai.services.agents;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
 import com.github.dimka9910.sheets.ai.dto.response.CustomInstructionAction;
 import com.github.dimka9910.sheets.ai.dto.user.LinkedUserEntry;
 import com.github.dimka9910.sheets.ai.dto.user.UserEntity;
@@ -11,14 +10,11 @@ import org.springframework.ai.chat.messages.UserMessage;
 import org.springframework.ai.chat.model.ChatModel;
 import org.springframework.ai.chat.model.ChatResponse;
 import org.springframework.ai.chat.prompt.Prompt;
-import org.springframework.ai.chat.prompt.PromptTemplate;
 import org.springframework.ai.converter.BeanOutputConverter;
 import org.springframework.ai.openai.OpenAiChatOptions;
 import org.springframework.stereotype.Component;
 
-import java.util.HashMap;
 import java.util.List;
-import java.util.Map;
 
 /**
  * Spring Component for custom instruction management using Spring AI + OpenAI.
@@ -111,22 +107,22 @@ public class CustomInstructionAgent {
             ## Available Actions
             
             **Alias Management:**
-            - ADD_LINKED_USER_ALIAS: \\{"actionType": "ADD_LINKED_USER_ALIAS", "userName": "ALICE", "alias": "sweetie"\\}
-            - REMOVE_LINKED_USER_ALIAS: \\{"actionType": "REMOVE_LINKED_USER_ALIAS", "userName": "ALICE", "alias": "sweetie"\\}
-            - ADD_ACCOUNT_ALIAS: \\{"actionType": "ADD_ACCOUNT_ALIAS", "accountId": "CARD_VISA", "alias": "main"\\}
-            - REMOVE_ACCOUNT_ALIAS: \\{"actionType": "REMOVE_ACCOUNT_ALIAS", "accountId": "CARD_VISA", "alias": "main"\\}
-            - ADD_FUND_ALIAS: \\{"actionType": "ADD_FUND_ALIAS", "fundId": "FOOD", "alias": "cafe"\\}
-            - REMOVE_FUND_ALIAS: \\{"actionType": "REMOVE_FUND_ALIAS", "fundId": "FOOD", "alias": "cafe"\\}
+            - ADD_LINKED_USER_ALIAS: {"actionType":"ADD_LINKED_USER_ALIAS","userName":"<LINKED_USER_USERNAME>","alias":"<ALIAS>"}
+            - REMOVE_LINKED_USER_ALIAS: {"actionType":"REMOVE_LINKED_USER_ALIAS","userName":"<LINKED_USER_USERNAME>","alias":"<ALIAS>"}
+            - ADD_ACCOUNT_ALIAS: {"actionType":"ADD_ACCOUNT_ALIAS","accountId":"<ACCOUNT_ID_FROM_CONTEXT>","alias":"<ALIAS>"}
+            - REMOVE_ACCOUNT_ALIAS: {"actionType":"REMOVE_ACCOUNT_ALIAS","accountId":"<ACCOUNT_ID_FROM_CONTEXT>","alias":"<ALIAS>"}
+            - ADD_FUND_ALIAS: {"actionType":"ADD_FUND_ALIAS","fundId":"<FUND_ID_FROM_CONTEXT>","alias":"<ALIAS>"}
+            - REMOVE_FUND_ALIAS: {"actionType":"REMOVE_FUND_ALIAS","fundId":"<FUND_ID_FROM_CONTEXT>","alias":"<ALIAS>"}
             
             **Custom Instructions:**
-            - ADD_CUSTOM_INSTRUCTION: \\{"actionType": "ADD_CUSTOM_INSTRUCTION", "instruction": "text"\\}
-            - REMOVE_CUSTOM_INSTRUCTION: \\{"actionType": "REMOVE_CUSTOM_INSTRUCTION", "index": 0\\}
+            - ADD_CUSTOM_INSTRUCTION: {"actionType":"ADD_CUSTOM_INSTRUCTION","instruction":"<TEXT>"}
+            - REMOVE_CUSTOM_INSTRUCTION: {"actionType":"REMOVE_CUSTOM_INSTRUCTION","index":0}
             
             **Defaults:**
-            - UPDATE_DEFAULT: \\{"actionType": "UPDATE_DEFAULT", "defaultType": "CURRENCY|ACCOUNT|FUND", "value": "EUR"\\}
+            - UPDATE_DEFAULT: {"actionType":"UPDATE_DEFAULT","defaultType":"CURRENCY","value":"<VALUE>"} (or ACCOUNT, or FUND)
             
             **Clarification:**
-            - ASK_CLARIFICATION: \\{"actionType": "ASK_CLARIFICATION", "question": "Which account?", "context": "note"\\}
+            - ASK_CLARIFICATION: {"actionType":"ASK_CLARIFICATION","question":"Which account?","context":"note"}
             
             ## Conflict Management
             
@@ -163,7 +159,6 @@ public class CustomInstructionAgent {
     // ═══════════════════════════════════════════════════════════════════════════
     
     private final ChatModel chatModel;
-    private final ObjectMapper objectMapper;
     private final UserContextToPromptMapper contextMapper;
     
     // Cached converter for better performance
@@ -172,7 +167,6 @@ public class CustomInstructionAgent {
     public CustomInstructionAgent(ChatModel chatModel, UserContextToPromptMapper contextMapper) {
         this.chatModel = chatModel;
         this.contextMapper = contextMapper;
-        this.objectMapper = new ObjectMapper();
         // Initialize converter once (expensive reflection operation)
         this.outputConverter = new BeanOutputConverter<>(Response.class);
     }
@@ -205,6 +199,9 @@ public class CustomInstructionAgent {
             // Call LLM
             ChatResponse chatResponse = chatModel.call(prompt);
             String content = chatResponse.getResult().getOutput().getText();
+            if (content == null || content.isBlank()) {
+                throw new IllegalStateException("Empty response from custom-instruction model");
+            }
             
             log.debug("AI response length: {} chars", content.length());
 
@@ -230,30 +227,34 @@ public class CustomInstructionAgent {
      * Build system prompt using PromptTemplate (role, rules, context).
      */
     private String buildSystemPrompt(Request request) {
-        Map<String, Object> params = new HashMap<>();
-        
         UserEntity userContext = request.userEntity();
         
         // Format context sections (NO conversation history!)
-        params.put("userName", userContext.getUserName());
-        params.put("accounts", contextMapper.formatAccountsList(userContext.getAccounts()));
-        params.put("funds", contextMapper.formatFundsList(userContext.getFunds()));
-        params.put("linkedUsers", formatLinkedUsersList(userContext.getLinkedUsers()));
-        params.put("customInstructions", formatCustomInstructionsList(userContext.getCustomInstructions()));
-        
+        String userName = userContext.getUserName();
+        String accounts = contextMapper.formatAccountsList(userContext.getAccounts());
+        String funds = contextMapper.formatFundsList(userContext.getFunds());
+        String linkedUsers = formatLinkedUsersList(userContext.getLinkedUsers());
+        String customInstructions = formatCustomInstructionsList(userContext.getCustomInstructions());
+
         // Defaults
-        params.put("defaultCurrency", userContext.getDefaultCurrency() != null 
-                ? userContext.getDefaultCurrency() : "not set");
-        params.put("defaultAccount", userContext.getDefaultAccount() != null 
-                ? userContext.getDefaultAccount().getAccountId() : "not set");
-        params.put("defaultFund", userContext.getDefaultFund() != null 
-                ? userContext.getDefaultFund().getFundId() : "not set");
-        
+        String defaultCurrency = userContext.getDefaultCurrency() != null ? userContext.getDefaultCurrency() : "not set";
+        String defaultAccount = userContext.getDefaultAccount() != null ? userContext.getDefaultAccount().getAccountId() : "not set";
+        String defaultFund = userContext.getDefaultFund() != null ? userContext.getDefaultFund().getFundId() : "not set";
+
         // JSON schema for response
-        params.put("format", outputConverter.getFormat());
-        
-        PromptTemplate template = new PromptTemplate(PROMPT_TEMPLATE);
-        return template.render(params);
+        String format = outputConverter.getFormat();
+
+        // NOTE: Avoid PromptTemplate/StringTemplate here to prevent syntax issues with quotes/pipes in examples.
+        return PROMPT_TEMPLATE
+                .replace("{userName}", userName != null ? userName : "User")
+                .replace("{accounts}", accounts != null ? accounts : "(No accounts)")
+                .replace("{funds}", funds != null ? funds : "(No funds)")
+                .replace("{linkedUsers}", linkedUsers != null ? linkedUsers : "(No linked users)")
+                .replace("{customInstructions}", customInstructions != null ? customInstructions : "(No custom instructions)")
+                .replace("{defaultCurrency}", defaultCurrency)
+                .replace("{defaultAccount}", defaultAccount)
+                .replace("{defaultFund}", defaultFund)
+                .replace("{format}", format);
     }
     
     /**

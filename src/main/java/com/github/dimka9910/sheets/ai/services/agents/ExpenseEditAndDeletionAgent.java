@@ -55,6 +55,7 @@ public class ExpenseEditAndDeletionAgent {
             String systemPrompt = buildSystemPrompt(userContext);
             String userPrompt = "### User Message ###\n" + message;
 
+            @SuppressWarnings("null")
             Prompt prompt = new Prompt(
                     List.of(
                             new SystemMessage(systemPrompt),
@@ -69,6 +70,9 @@ public class ExpenseEditAndDeletionAgent {
 
             ChatResponse chatResponse = chatModel.call(prompt);
             String content = chatResponse.getResult().getOutput().getText();
+            if (content == null || content.isBlank()) {
+                throw new IllegalStateException("Empty response from correction model");
+            }
 
             FinancialAgentResponse result = outputConverter.convert(content);
 
@@ -129,7 +133,7 @@ public class ExpenseEditAndDeletionAgent {
     }
 
     private void validateFinancialAction(FinancialAction action) {
-        // 1. БАЗОВАЯ ПРОВЕРКА (Общая для всех коррекций)
+        // 1. Basic validation (common for all corrections)
         if (!action.isCorrection()) {
             throw new IllegalStateException("Correction flag must be TRUE for this agent.");
         }
@@ -140,8 +144,7 @@ public class ExpenseEditAndDeletionAgent {
 
         FinancialAction.OperationType opType = action.getOperationType();
 
-        // 2. ПРОВЕРКА ОБЯЗАТЕЛЬНЫХ ПОЛЕЙ ДАННЫХ
-        // Для DELETE и MODIFY нужны базовые поля для идентификации записи
+        // 2. Required identifying fields
         if (action.getAmount() == null) {
             throw new IllegalStateException("Amount is missing for correction ID=" + action.getId());
         }
@@ -152,26 +155,12 @@ public class ExpenseEditAndDeletionAgent {
             throw new IllegalStateException("Source Account is missing for correction ID=" + action.getId());
         }
 
-        // 3. СПЕЦИФИЧЕСКАЯ ЛОГИКА ПО ТИПАМ ОПЕРАЦИЙ
+        // 3. Only MODIFY/DELETE are supported by this agent
         switch (opType) {
-            case MODIFY -> validateModifyDetails(action);
+            case MODIFY -> log.debug("✅ Validated MODIFY for ID: {}", action.getId());
             case DELETE -> log.debug("✅ Validated DELETE for ID: {}", action.getId());
             default -> throw new IllegalStateException("Only MODIFY or DELETE allowed. Got: " + opType);
         }
-    }
-
-    private void validateModifyDetails(FinancialAction action) {
-        // Если это расход — фонд обязателен
-        if (action.getOperationType() == FinancialAction.OperationType.EXPENSE && action.getFund() == null) {
-            throw new IllegalStateException("MODIFY Expense requires a Fund ID. Got ID=" + action.getId());
-        }
-
-        // Если это перевод — нужен целевой аккаунт
-        if (action.getOperationType() == FinancialAction.OperationType.TRANSFER && action.getTargetAccount() == null) {
-            throw new IllegalStateException("MODIFY Transfer requires a Target Account ID. Got ID=" + action.getId());
-        }
-        
-        log.debug("✅ Validated MODIFY for ID: {}", action.getId());
     }
 
     private String truncate(String s, int maxLen) {

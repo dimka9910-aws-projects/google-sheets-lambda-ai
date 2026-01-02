@@ -1,20 +1,16 @@
 package com.github.dimka9910.sheets.ai.services.agents;
 
-import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.ai.chat.messages.SystemMessage;
 import org.springframework.ai.chat.messages.UserMessage;
 import org.springframework.ai.chat.model.ChatModel;
 import org.springframework.ai.chat.model.ChatResponse;
 import org.springframework.ai.chat.prompt.Prompt;
-import org.springframework.ai.chat.prompt.PromptTemplate;
 import org.springframework.ai.converter.BeanOutputConverter;
 import org.springframework.ai.openai.OpenAiChatOptions;
 import org.springframework.stereotype.Component;
 
-import java.util.HashMap;
 import java.util.List;
-import java.util.Map;
 
 /**
  * Spring Component for message classification using Spring AI + OpenAI.
@@ -67,7 +63,7 @@ public class MessageClassifierAgent {
     
     private static final String PROMPT_TEMPLATE = """
             You are a message classifier for a personal finance bot.
-            Users write in ANY language (Russian, English, Serbian, mixed, etc).
+            Users can write in any language or mixed languages.
             
             ## Your Task
             Classify the message into EXACTLY ONE category.
@@ -98,13 +94,13 @@ public class MessageClassifierAgent {
             **COMPLEX_ACTION** - Everything else (default fallback)
             This includes:
             - Multiple operations in one message
-            - Corrections to previous transactions (keywords: "не", "not", "actually", "изменить", "change")
+            - Corrections to previous transactions (negation / "actually" / "change" / references to a previous message)
             - Questions about settings, help, show data
             - Custom instructions, aliases, settings (e.g. "remember Sarah is USER_X")
             - Math expressions, calculations
             - Unclear, ambiguous, or slang-heavy messages
             - When in doubt → COMPLEX_ACTION
-            - if user's tries to add something to previous message like "and also paid..", "а ешё..", "also forgot to say.."
+            - If user tries to add something to previous message like "and also...", "also forgot to say..."
             - any possible reference to previous messages should be treated like COMPLEX_ACTION
             
             ## Special Rules
@@ -153,6 +149,7 @@ public class MessageClassifierAgent {
             systemPrompt += "\n\n## Response Format\nReturn JSON following this schema:\n" + format;
             
             // Create Spring AI Prompt with messages
+            @SuppressWarnings("null")
             Prompt prompt = new Prompt(
                     List.of(
                             new SystemMessage(systemPrompt),
@@ -170,6 +167,9 @@ public class MessageClassifierAgent {
             
             // Parse structured output
             String content = chatResponse.getResult().getOutput().getText();
+            if (content == null || content.isBlank()) {
+                throw new IllegalStateException("Empty response from classifier model");
+            }
             ClassificationResult result = outputConverter.convert(content);
             
             // Convert to Category enum
@@ -212,29 +212,26 @@ public class MessageClassifierAgent {
     // ═══════════════════════════════════════════════════════════════════════════
     
     private String buildSystemPrompt(Request request) {
-        Map<String, Object> params = new HashMap<>();
-        
         // Include linked users context if available (for better classification)
+        final String linkedUsersContext;
+        final String linkedUsersExample;
         if (request.linkedUserNamesAndAliases() != null && !request.linkedUserNamesAndAliases().isEmpty()) {
             String linkedUsersStr = String.join(", ", request.linkedUserNamesAndAliases());
-            String linkedUsersExample = request.linkedUserNamesAndAliases().get(0);
-            
-            String linkedUsersContext = String.format(
-                "## Linked Users\nUser has these linked users: %s\n" +
-                "Messages mentioning these specific names/aliases can be SIMPLE_FINANCIAL.\n" +
-                "Generic terms (friends, brothers, etc.) → SIMPLE_FINANCIAL (expense with comment).",
-                linkedUsersStr
-            );
-            
-            params.put("linkedUsersContext", linkedUsersContext);
-            params.put("linkedUsersExample", linkedUsersExample);
+            linkedUsersExample = request.linkedUserNamesAndAliases().get(0);
+
+            linkedUsersContext =
+                    "## Linked Users\n" +
+                    "User has these linked users: " + linkedUsersStr + "\n" +
+                    "Messages mentioning these specific names/aliases should be THIRD_PARTY_FINANCIAL.\n" +
+                    "Generic terms (friends, family, colleagues, etc.) → SIMPLE_FINANCIAL (treat as comment, not linked user).";
         } else {
-            params.put("linkedUsersContext", "## Linked Users\nUser has no linked users.");
-            params.put("linkedUsersExample", "friend");
+            linkedUsersContext = "## Linked Users\nUser has no linked users.";
+            linkedUsersExample = "friend";
         }
-        
-        PromptTemplate template = new PromptTemplate(PROMPT_TEMPLATE);
-        return template.render(params);
+
+        return PROMPT_TEMPLATE
+                .replace("{linkedUsersContext}", linkedUsersContext)
+                .replace("{linkedUsersExample}", linkedUsersExample);
     }
     
     private String buildUserPrompt(Request request) {

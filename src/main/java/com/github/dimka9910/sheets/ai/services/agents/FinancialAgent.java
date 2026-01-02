@@ -11,16 +11,16 @@ import org.springframework.ai.chat.messages.UserMessage;
 import org.springframework.ai.chat.model.ChatModel;
 import org.springframework.ai.chat.model.ChatResponse;
 import org.springframework.ai.chat.prompt.Prompt;
-import org.springframework.ai.chat.prompt.PromptTemplate;
 import org.springframework.ai.converter.BeanOutputConverter;
 import org.springframework.ai.openai.OpenAiChatOptions;
 import org.springframework.stereotype.Component;
 import org.apache.commons.collections4.CollectionUtils;
 
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
-import java.util.Objects;
+import java.util.Set;
 
 /**
  * Universal financial agent handling ALL simple financial operations:
@@ -123,6 +123,17 @@ public class FinancialAgent {
             
             return result;
             
+        } catch (ModelValidationException e) {
+            log.warn("⚠️ FinancialAgent model validation failed: {}", e.getMessage());
+            return FinancialAgentResponse.builder()
+                    .financialActions(List.of())
+                    .pendingClarifications(List.of(
+                            com.github.dimka9910.sheets.ai.dto.response.PendingClarificationAction.builder()
+                                    .context(e.getMessage())
+                                    .build()
+                    ))
+                    .message("I couldn't confidently match your account/fund to the available list. Please clarify which one you meant.")
+                    .build();
         } catch (Exception e) {
             log.error("❌ FinancialAgent error: {}", e.getMessage(), e);
             return FinancialAgentResponse.builder()
@@ -138,6 +149,9 @@ public class FinancialAgent {
      */
     private void validateResult(FinancialAgentResponse response, UserEntity userContext) {
         if (response.getFinancialActions() == null) return;
+
+        Set<String> allowedAccounts = buildAllowedAccountIds(userContext);
+        Set<String> allowedFunds = buildAllowedFundIds(userContext);
         
         for (FinancialAction financial : response.getFinancialActions()) {
             OperationType type = financial.getOperationType();
@@ -146,6 +160,11 @@ public class FinancialAgent {
             if (financial.getAmount() == null || financial.getCurrency() == null) {
                 throwValidationError("amount and currency are MANDATORY for all operations", financial);
             }
+
+            // Guardrail: prevent invented IDs (accounts/funds)
+            requireAllowed("account", financial.getAccount(), allowedAccounts);
+            requireAllowed("targetAccount", financial.getTargetAccount(), allowedAccounts);
+            requireAllowed("fund", financial.getFund(), allowedFunds);
             
             switch (type) {
                 case EXPENSE -> {
@@ -207,6 +226,58 @@ public class FinancialAgent {
                 }
             }
         }
+    }
+
+    private Set<String> buildAllowedAccountIds(UserEntity userContext) {
+        Set<String> ids = new HashSet<>();
+        if (userContext.getAccounts() != null) {
+            for (var a : userContext.getAccounts()) {
+                if (a != null && a.getAccountId() != null) ids.add(a.getAccountId());
+            }
+        }
+        if (userContext.getLinkedUserEntitys() != null) {
+            for (UserEntity linked : userContext.getLinkedUserEntitys().values()) {
+                if (linked != null && linked.getAccounts() != null) {
+                    for (var a : linked.getAccounts()) {
+                        if (a != null && a.getAccountId() != null) ids.add(a.getAccountId());
+                    }
+                }
+            }
+        }
+        return ids;
+    }
+
+    private Set<String> buildAllowedFundIds(UserEntity userContext) {
+        Set<String> ids = new HashSet<>();
+        if (userContext.getFunds() != null) {
+            for (var f : userContext.getFunds()) {
+                if (f != null && f.getFundId() != null) ids.add(f.getFundId());
+            }
+        }
+        if (userContext.getLinkedUserEntitys() != null) {
+            for (UserEntity linked : userContext.getLinkedUserEntitys().values()) {
+                if (linked != null && linked.getFunds() != null) {
+                    for (var f : linked.getFunds()) {
+                        if (f != null && f.getFundId() != null) ids.add(f.getFundId());
+                    }
+                }
+            }
+        }
+        return ids;
+    }
+
+    private void requireAllowed(String field, String value, Set<String> allowed) {
+        if (value == null) return;
+        if (!allowed.contains(value)) {
+            throw new ModelValidationException(
+                    "AI returned " + field + "='" + value + "' which is not present in available IDs. " +
+                    "Please ask the user to choose a valid " + field + " from their list."
+            );
+        }
+    }
+
+    private static class ModelValidationException extends RuntimeException {
+        ModelValidationException(String message) { super(message); }
     }
     
     private void throwValidationError(String requirement, FinancialAction action) {
@@ -315,7 +386,7 @@ public class FinancialAgent {
              - if user have linked user "Robert" and says he bought something for bob - you can clearly match a linked user
              - if user have a linked user "Linda" and says he bought a present for mom - it most likely just a simple EXPENSE operation with comment "present for mom" and not a linked user operation.
              - so don't try to invent anything here, if it clearly doesn't match - it's a simple expense operation with a comment.
-             - Use EXACT `userName` from the list (DIMA, KIKI, etc.).
+            - Use EXACT `userName` from the list (do not invent).
              - Never use nicknames or aliases in the `userName` or `targetPerson` fields.
              - also user's Custom Instructions might have special rules for linked user matching, so pay attention to them as well
            - So if you clearly identified that operation involves a LINKED_USER there might be two possible scenarios 
@@ -343,11 +414,11 @@ public class FinancialAgent {
           - Comment (if provided)
           
           **Examples of good confirmations (use ACTUAL account/fund names from Available lists!):**
-          - EXPENSE: "Записал расход 200 RSD с <ACCOUNT_FROM_LIST> на категорию <FUND_FROM_LIST> (кофе)."
-          - TRANSFER: "Перевёл 1000 RSD с <ACCOUNT_FROM_LIST> на <TARGET_ACCOUNT_FROM_LIST>."
-          - INCOME: "Записал доход 50000 RSD на <ACCOUNT_FROM_LIST> (зарплата)."
+          - EXPENSE: "Recorded expense 200 {currency} from <ACCOUNT_FROM_LIST> to <FUND_FROM_LIST> (coffee)."
+          - TRANSFER: "Recorded transfer 1000 {currency} from <ACCOUNT_FROM_LIST> to <TARGET_ACCOUNT_FROM_LIST>."
+          - INCOME: "Recorded income 50000 {currency} to <ACCOUNT_FROM_LIST> (salary)."
           
-          **⚠️ IMPORTANT: Use ACTUAL values from Available Accounts/Funds lists, not placeholder names!**
+          **IMPORTANT: Use ACTUAL values from Available Accounts/Funds lists, not placeholder names.**
           
           **For clarifications, ask specific question:**
           - "How much did you spend on coffee?"
@@ -418,68 +489,44 @@ public class FinancialAgent {
         ### When RECEIVING money FROM linked user:
         - **userName**: linked user's userName (who SENDS)
         - **targetPerson**: current user's userName (who RECEIVES)
-        - **account**: their account (source)
-        - **targetAccount**: my account (destination)
-        - **Examples:** "Sarah gave me 500", "got 1000 from Bob", "Bob sent me money"
+        - **account**: sender's account (source) - MUST be from Available Accounts
+        - **targetAccount**: receiver's account (destination) - MUST be from Available Accounts
         
         ### When SENDING money TO linked user:
         - **userName**: current user's userName (who SENDS)
         - **targetPerson**: linked user's userName (who RECEIVES)
-        - **account**: my account (source)
-        - **targetAccount**: their account (destination)
-        - **Examples:** "sent 500 to Sarah", "gave Bob 200", "transfer to girlfriend"
+        - **account**: sender's account (source) - MUST be from Available Accounts
+        - **targetAccount**: receiver's account (destination) - MUST be from Available Accounts
         
         ### userName and targetPerson Rules:
         - **CRITICAL: Must be EXACT userName from Linked Users list!**
         - Match user's words (names/aliases) to find linked user, then use their EXACT userName
         - ❌ WRONG: using aliases or nicknames in userName/targetPerson fields
-        - ✅ CORRECT: using userName field value (e.g., "KIKI", "BOB", "DIMA")
+        - ✅ CORRECT: using userName field value from the linked users list
         
         ### EXPENSE: Paying FOR someone on THEIR fund (Cross-user expense tracking)
         **This is NOT a TRANSFER! It's an EXPENSE where one person pays but tracks it on another person's budget.**
         
         **Scenario 1: I paid for linked user's expense → Track on THEIR fund**
         - **account**: MY account (I paid from my wallet/card)
-        - **fund**: THEIR fund from their funds list (e.g., KIKI's PERSONAL, KIKI's FOOD)
+        - **fund**: THEIR fund from their funds list (must exist in linked user's funds)
         - **targetPerson**: THEIR userName (who benefits)
         - **Use case**: Tracking expenses per person in shared finances
         
         **Scenario 2: Linked user paid for MY expense → Track on MY fund**
         - **account**: THEIR account (they paid from their wallet/card)
-        - **fund**: MY fund from my funds list (e.g., DIMA's PERSONAL, DIMA's FOOD)
+        - **fund**: MY fund from my funds list (must exist in current user's funds)
         - **targetPerson**: MY userName (who benefits)
         - **Use case**: Partner paid for my groceries, but it's my personal budget
         
-        **Examples:**
-        - "Paid for Alice's present 200 on her personal budget" (Alice=KIKI) →
-          {{"operationType": "EXPENSE", "amount": 200, "account": "CARD_DIMA", "fund": "PERSONAL_KIKI", "targetPerson": "KIKI", "comment": "present"}}
-          ↑ I (DIMA) paid, but tracked on KIKI's PERSONAL fund
-        
-        - "Paid for girlfriend's fuel 2000" (girlfriend=KIKI, she has default fund) →
-          {{"operationType": "EXPENSE", "amount": 2000, "account": "CARD_DIMA", "fund": "TRANSPORT_KIKI", "targetPerson": "KIKI"}}
-          ↑ I paid, but tracked on KIKI's TRANSPORT fund
-        
-        - "Bob paid for my groceries 500" (Bob=BOB, I=DIMA) →
-          {{"operationType": "EXPENSE", "amount": 500, "account": "CARD_BOB", "fund": "FOOD_DIMA", "targetPerson": "DIMA", "comment": "groceries"}}
-          ↑ BOB paid, but tracked on DIMA's FOOD fund
-        
         **CRITICAL: Fund matching logic:**
         - Look for fund in the BENEFICIARY's (targetPerson) fund list, NOT the payer's
-        - If user says "her personal budget" → search in KIKI's funds for PERSONAL
-        - If user says "my food budget" → search in DIMA's funds for FOOD
         - Use beneficiary's default fund if fund not specified
         
         ### EXPENSE: Simple "for someone" (Generic third-party expense)
         - If user just says "bought coffee for Sarah" without specifying fund → generic expense
         - Use payer's account and payer's fund (infer from item: coffee→FOOD), set targetPerson
-        - Example: "bought coffee for Sarah" → {{"account": "CARD_DIMA", "fund": "FOOD", "targetPerson": "KIKI"}}
-        
-        ### TRANSFER Examples:
-        - "sent 500 to Sarah" (Sarah's userName is KIKI) → 
-          {{"operationType": "TRANSFER", "amount": 500, "currency": "RSD", "userName": "DIMA", "targetPerson": "KIKI", "account": "CARD_DIMA", "targetAccount": "CARD_KIKI"}}
-        
-        - "Bob gave me 200" (Bob's userName is BOB) → 
-          {{"operationType": "TRANSFER", "amount": 200, "currency": "RSD", "userName": "BOB", "targetPerson": "DIMA", "account": "CARD_BOB", "targetAccount": "CARD_DIMA"}}
+        - Example (format only): "bought coffee for <linked user>" → {"account":"<ACCOUNT_FROM_LIST>","fund":"<FUND_FROM_LIST>","targetPerson":"<LINKED_USER_USERNAME>"}
         """;
 
     
@@ -521,9 +568,14 @@ public class FinancialAgent {
             params.put("linkedUsers", "");
         }
         
-        // Step 3: Render final prompt with data parameters
-        PromptTemplate template = new PromptTemplate(promptBuilder.toString());
-        return Objects.requireNonNull(template.render(params), "Prompt template render returned null");
+        // Step 3: Render final prompt WITHOUT PromptTemplate/StringTemplate (prevents syntax errors with quotes/pipes)
+        String rendered = promptBuilder.toString();
+        for (Map.Entry<String, Object> e : params.entrySet()) {
+            String key = "{" + e.getKey() + "}";
+            String value = e.getValue() != null ? String.valueOf(e.getValue()) : "";
+            rendered = rendered.replace(key, value);
+        }
+        return rendered;
     }
 }
 
