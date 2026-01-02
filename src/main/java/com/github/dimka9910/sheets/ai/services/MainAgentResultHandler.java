@@ -29,8 +29,10 @@ import java.util.Optional;
 @RequiredArgsConstructor
 public class MainAgentResultHandler {
 
+    @SuppressWarnings("unused")
     private final SQSPublisher sqsPublisher;
     private final UserEntityService userContextService;
+    @SuppressWarnings("unused")
     private final CustomInstructionHandler customInstructionHandler;
     private final Optional<FinancialOperationService> financialOperationService;
     
@@ -384,12 +386,6 @@ public class MainAgentResultHandler {
     // ═══════════════════════════════════════════════════════════════════════════
 
     private boolean handleFinancialAction(FinancialAction action, UserEntity userContext) {
-        // Validate required fields
-        if (action.getAmount() == null || action.getAmount() <= 0) {
-            log.warn("❌ Financial action missing amount: {}", action);
-            return false;
-        }
-        
         if (action.getOperationType() == null) {
             log.warn("❌ Financial action missing operationType: {}", action);
             return false;
@@ -400,24 +396,42 @@ public class MainAgentResultHandler {
             log.error("❌ DATABASE_URL not configured, cannot save financial operation");
             return false;
         }
-        
-        // MODIFY and DELETE are not yet implemented
-        if (action.getOperationType() == FinancialAction.OperationType.MODIFY ||
-            action.getOperationType() == FinancialAction.OperationType.DELETE) {
-            log.info("⏸️ [NOT IMPLEMENTED] {} action received: {} {} {} - skipping for now", 
-                    action.getOperationType(), action.getAmount(), action.getCurrency(), action.getComment());
-            // Return true so it shows in debug, but don't save
-            return true;
+
+        // Corrections: MODIFY/DELETE
+        if (action.getOperationType() == FinancialAction.OperationType.MODIFY) {
+            if (action.getId() == null) {
+                log.warn("❌ MODIFY missing id: {}", action);
+                return false;
+            }
+            try {
+                financialOperationService.get().modifyOperation(action.getId(), action, userContext);
+                log.info("✅ MODIFY applied: id={}", action.getId());
+                return true;
+            } catch (Exception e) {
+                log.error("❌ Failed to MODIFY operation {}", action.getId(), e);
+                return false;
+            }
         }
-        
-        // TODO: Handle correction (soft delete previous operation)
-        if (action.isCorrection()) {
-            log.warn("⏸️ Correction not yet implemented for database - skipping old operation cancellation");
-            // ParsedCommand lastOp = userContext.popLastOperation();
-            // if (lastOp != null) {
-            //     log.info("Correction: soft deleting old operation");
-            //     financialOperationService.get().softDelete(lastOpId);
-            // }
+
+        if (action.getOperationType() == FinancialAction.OperationType.DELETE) {
+            if (action.getId() == null) {
+                log.warn("❌ DELETE missing id: {}", action);
+                return false;
+            }
+            try {
+                financialOperationService.get().deleteOperation(action.getId());
+                log.info("✅ DELETE applied: id={}", action.getId());
+                return true;
+            } catch (Exception e) {
+                log.error("❌ Failed to DELETE operation {}", action.getId(), e);
+                return false;
+            }
+        }
+
+        // Validate required fields for NEW operations
+        if (action.getAmount() == null || action.getAmount() <= 0) {
+            log.warn("❌ Financial action missing amount: {}", action);
+            return false;
         }
         
         try {

@@ -10,7 +10,6 @@ import org.springframework.ai.chat.messages.UserMessage;
 import org.springframework.ai.chat.model.ChatModel;
 import org.springframework.ai.chat.model.ChatResponse;
 import org.springframework.ai.chat.prompt.Prompt;
-import org.springframework.ai.chat.prompt.PromptTemplate;
 import org.springframework.ai.converter.BeanOutputConverter;
 import org.springframework.ai.openai.OpenAiChatOptions;
 import org.springframework.stereotype.Component;
@@ -19,7 +18,6 @@ import org.apache.commons.collections4.CollectionUtils;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Objects;
 
 /**
  * Main Orchestrator Agent (Master Router).
@@ -111,9 +109,10 @@ public class MainAgent {
             Good Ticket: "Delete operation ID=abc-123 (last operation from history): EXPENSE 200 RSD coffee, CARD_VISA to FOOD, 1 min ago."
             
             ## AVAILABLE AGENTS:
-            - `FINANCIAL`: Financial operations WITHOUT linked users (expenses, transfers between own accounts, income, MODIFY/DELETE)
-            - `THIRD_PARTY_FINANCIAL`: Financial operations WITH linked users (transfers to/from linked users, expenses for linked users, MODIFY/DELETE)
+            - `FINANCIAL`: Financial operations WITHOUT linked users (expenses, transfers between own accounts, income)
+            - `THIRD_PARTY_FINANCIAL`: Financial operations WITH linked users (transfers to/from linked users, expenses for linked users)
             - `CUSTOM_INSTRUCTION`: Settings changes (defaults, aliases, custom rules)
+            - `CORRECTION`: Modify/delete existing operations (requires UUID from conversation history)
             
             # RESPONSE FORMAT
             
@@ -156,7 +155,7 @@ public class MainAgent {
             - Corrections
             
             ## Identify Request Type
-            - **Correction**: "No", "Wrong", "Not X but Y", "Delete" → REDIRECT to CORRECTION with UUID
+            - **Correction**: negation / "actually" / "change" / "delete" / references to "last/it" → REDIRECT to CORRECTION with UUID
             - **Multi-Step**: "and", "also" → Multiple REDIRECT actions
             - **Info Query**: "show settings" → NO actions, just response
             - **Partial**: Some info → REDIRECT with what you know
@@ -236,7 +235,11 @@ public class MainAgent {
             ChatResponse chatResponse = chatModel.call(prompt);
             String content = chatResponse.getResult().getOutput().getText();
             log.debug("AI response: {}", truncate(content, 400));
-            
+
+            if (content == null || content.isBlank()) {
+                throw new IllegalStateException("Empty response from MainAgent model");
+            }
+
             MainAgentResponse result = outputConverter.convert(content);
             
             log.info("✅ Parsed: redirects={}, pending={}, response='{}'", 

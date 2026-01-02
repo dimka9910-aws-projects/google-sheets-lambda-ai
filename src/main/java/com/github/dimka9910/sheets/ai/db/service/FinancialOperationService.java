@@ -13,6 +13,10 @@ import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.math.BigDecimal;
+import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
+import java.time.format.DateTimeParseException;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -81,6 +85,7 @@ public class FinancialOperationService {
             return entity;
         }
         
+        @SuppressWarnings("null")
         FinancialOperation saved = repository.save(entity);
         
         log.info("✅ EXPENSE saved: id={}, amount={}, accountId={}, fundId={}", 
@@ -119,6 +124,7 @@ public class FinancialOperationService {
             return entity;
         }
         
+        @SuppressWarnings("null")
         FinancialOperation saved = repository.save(entity);
         
         log.info("✅ INCOME saved: id={}, amount={}, accountId={}, fundId={}", 
@@ -169,7 +175,9 @@ public class FinancialOperationService {
             return List.of(debit, credit);
         }
         
+        @SuppressWarnings("null")
         FinancialOperation savedDebit = repository.save(debit);
+        @SuppressWarnings("null")
         FinancialOperation savedCredit = repository.save(credit);
         
         log.info("✅ TRANSFER saved: link_id={}, debit_id={}, credit_id={}, from={} to={}", 
@@ -198,7 +206,10 @@ public class FinancialOperationService {
      */
     @Transactional(readOnly = true)
     public FinancialOperation findById(UUID id) {
-        return repository.findById(id).orElse(null);
+        if (id == null) return null;
+        @SuppressWarnings("null")
+        FinancialOperation op = repository.findById(id).orElse(null);
+        return op;
     }
 
     /**
@@ -208,12 +219,191 @@ public class FinancialOperationService {
      */
     @Transactional
     public void softDelete(UUID id) {
+        if (id == null) {
+            throw new IllegalArgumentException("Operation id is required for softDelete");
+        }
         log.info("🗑️ Soft deleting operation: {}", id);
         repository.findById(id).ifPresent(op -> {
             op.setDeletedAt(java.time.LocalDateTime.now());
-            repository.save(op);
+            @SuppressWarnings("null")
+            FinancialOperation saved = repository.save(op);
+            log.debug("Soft delete saved: id={}", saved.getId());
             log.info("✅ Operation soft deleted: {}", id);
         });
+    }
+
+    /**
+     * Delete operation by ID. If operation is a TRANSFER (linkId != null) deletes both sides.
+     */
+    @Transactional
+    public void deleteOperation(UUID id) {
+        if (id == null) {
+            throw new IllegalArgumentException("Operation id is required for DELETE");
+        }
+
+        FinancialOperation op = repository.findActiveById(id).orElse(null);
+        if (op == null) {
+            log.warn("⚠️ DELETE requested but operation not found or already deleted: {}", id);
+            return;
+        }
+
+        // If it is a transfer (two linked records) - delete by linkId
+        if (op.getLinkId() != null) {
+            int updated = repository.softDeleteByLinkId(op.getLinkId());
+            log.info("✅ Soft deleted {} linked operations (linkId={})", updated, op.getLinkId());
+            return;
+        }
+
+        int updated = repository.softDelete(id);
+        log.info("✅ Soft deleted {} operation (id={})", updated, id);
+    }
+
+    /**
+     * Modify an existing operation by ID.
+     * Supports EXPENSE/INCOME and TRANSFER (updates both linked records).
+     *
+     * NOTE: FinancialAction.operationType should be MODIFY; the actual stored type is read from DB.
+     */
+    @Transactional
+    public void modifyOperation(UUID id, FinancialAction action, UserEntity userContext) {
+        if (id == null) {
+            throw new IllegalArgumentException("Operation id is required for MODIFY");
+        }
+        if (action == null) {
+            throw new IllegalArgumentException("Action is required for MODIFY");
+        }
+        if (userContext == null) {
+            throw new IllegalArgumentException("User context is required for MODIFY");
+        }
+
+        FinancialOperation existing = repository.findActiveById(id).orElse(null);
+        if (existing == null) {
+            throw new IllegalStateException("Operation not found or already deleted: " + id);
+        }
+
+        String storedType = existing.getOperationType();
+        if ("TRANSFER".equalsIgnoreCase(storedType) && existing.getLinkId() != null) {
+            modifyTransfer(existing.getLinkId(), action, userContext);
+            return;
+        }
+
+        modifySingle(existing, action, userContext);
+    }
+
+    private void modifyTransfer(UUID linkId, FinancialAction action, UserEntity userContext) {
+        List<FinancialOperation> ops = repository.findByLinkId(linkId);
+        if (ops == null || ops.isEmpty()) {
+            throw new IllegalStateException("TRANSFER not found by linkId: " + linkId);
+        }
+
+        FinancialOperation debit = null;
+        FinancialOperation credit = null;
+        for (FinancialOperation op : ops) {
+            if (op.getAmount() != null && op.getAmount().signum() < 0) debit = op;
+            if (op.getAmount() != null && op.getAmount().signum() > 0) credit = op;
+        }
+        if (debit == null || credit == null) {
+            throw new IllegalStateException("TRANSFER records malformed for linkId=" + linkId + " (need debit+credit)");
+        }
+
+        BigDecimal absAmount = action.getAmount() != null ? BigDecimal.valueOf(action.getAmount()).abs() : null;
+        if (absAmount != null) {
+            debit.setAmount(absAmount.negate());
+            credit.setAmount(absAmount);
+        }
+
+        if (action.getCurrency() != null && !action.getCurrency().isBlank()) {
+            debit.setCurrency(action.getCurrency());
+            credit.setCurrency(action.getCurrency());
+        }
+
+        LocalDateTime txDate = parseDate(action.getDate());
+        if (action.getDate() != null && !action.getDate().isBlank()) {
+            debit.setTransactionDate(txDate);
+            credit.setTransactionDate(txDate);
+        }
+
+        if (action.getAccount() != null && !action.getAccount().isBlank()) {
+            UUID sourceAccountId = resolveAccountId(action.getAccount(), userContext);
+            if (sourceAccountId == null) throw new IllegalArgumentException("Source account not found: " + action.getAccount());
+            debit.setAccountId(sourceAccountId);
+        }
+
+        if (action.getTargetAccount() != null && !action.getTargetAccount().isBlank()) {
+            UUID targetAccountId = resolveAccountId(action.getTargetAccount(), userContext);
+            if (targetAccountId == null) throw new IllegalArgumentException("Target account not found: " + action.getTargetAccount());
+            credit.setAccountId(targetAccountId);
+        }
+
+        if (action.getComment() != null) {
+            // Keep existing suffixes "(from)/(to)" if present
+            debit.setDescription(action.getComment() + " (from)");
+            credit.setDescription(action.getComment() + " (to)");
+        }
+
+        @SuppressWarnings("null")
+        FinancialOperation savedDebit = repository.save(debit);
+        @SuppressWarnings("null")
+        FinancialOperation savedCredit = repository.save(credit);
+        log.debug("Modified TRANSFER saved: debit_id={}, credit_id={}", savedDebit.getId(), savedCredit.getId());
+        log.info("✅ TRANSFER modified (linkId={})", linkId);
+    }
+
+    private void modifySingle(FinancialOperation existing, FinancialAction action, UserEntity userContext) {
+        String storedType = existing.getOperationType();
+
+        if (action.getAmount() != null) {
+            BigDecimal absAmount = BigDecimal.valueOf(action.getAmount()).abs();
+            if ("EXPENSE".equalsIgnoreCase(storedType)) {
+                existing.setAmount(absAmount.negate());
+            } else {
+                // INCOME or any other single-record type: positive amount
+                existing.setAmount(absAmount);
+            }
+        }
+
+        if (action.getCurrency() != null && !action.getCurrency().isBlank()) {
+            existing.setCurrency(action.getCurrency());
+        }
+
+        if (action.getDate() != null && !action.getDate().isBlank()) {
+            existing.setTransactionDate(parseDate(action.getDate()));
+        }
+
+        if (action.getAccount() != null && !action.getAccount().isBlank()) {
+            UUID accountId = resolveAccountId(action.getAccount(), userContext);
+            if (accountId == null) throw new IllegalArgumentException("Account not found: " + action.getAccount());
+            existing.setAccountId(accountId);
+        }
+
+        if (action.getFund() != null && !action.getFund().isBlank()) {
+            UUID fundId = resolveFundId(action.getFund(), userContext);
+            if (fundId == null) throw new IllegalArgumentException("Fund not found: " + action.getFund());
+            existing.setFundId(fundId);
+        }
+
+        if (action.getComment() != null) {
+            existing.setDescription(action.getComment());
+        }
+
+        @SuppressWarnings("null")
+        FinancialOperation saved = repository.save(existing);
+        log.debug("Modified operation saved: id={}", saved.getId());
+        log.info("✅ {} modified (id={})", storedType, existing.getId());
+    }
+
+    private LocalDateTime parseDate(String dateString) {
+        if (dateString == null || dateString.isBlank()) return null;
+        try {
+            return LocalDateTime.parse(dateString, DateTimeFormatter.ISO_LOCAL_DATE_TIME);
+        } catch (DateTimeParseException e) {
+            try {
+                return LocalDateTime.parse(dateString + "T00:00:00", DateTimeFormatter.ISO_LOCAL_DATE_TIME);
+            } catch (DateTimeParseException e2) {
+                log.warn("Failed to parse date '{}', keeping original timestamp", dateString);
+                return null;
+            }
+        }
     }
     
     // ═══════════════════════════════════════════════════════════════════════════
@@ -259,7 +449,22 @@ public class FinancialOperationService {
         }
         
         Optional<FundEntry> fund = userContext.findFundByAlias(fundReference);
-        return fund.map(FundEntry::getId).orElse(null);
+        if (fund.isPresent()) {
+            return fund.get().getId();
+        }
+
+        // Try linked users' funds (for cross-user expense tracking)
+        if (userContext.getLinkedUserEntitys() != null) {
+            for (UserEntity linkedUser : userContext.getLinkedUserEntitys().values()) {
+                fund = linkedUser.findFundByAlias(fundReference);
+                if (fund.isPresent()) {
+                    log.debug("✅ Found fund {} in linked user {}", fundReference, linkedUser.getUserName());
+                    return fund.get().getId();
+                }
+            }
+        }
+
+        return null;
     }
 }
 
