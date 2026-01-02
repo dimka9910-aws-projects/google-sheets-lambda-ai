@@ -270,24 +270,43 @@ public class FinancialAgent {
            - EXPENSE: Everything else (default).
         
         2. **Map Entities (Priority: Explicit > Inferred > Default)**:
-           - **Amount**: - should be provided Explicitly as number or text or slang.
+           - **Amount**: should be provided Explicitly as number or text or slang.
            - **Currency**: Match explicit word -> Infer from slang -> Use {currency} default.
-           - **Account**: Match user keyword to exact ID from "Available" lists, or default, or ask
-
-           - **Fund**: Match user keyword to exact ID from "Available" lists.
-             - *Inference*: "amex" -> AMERICAN_EXPRESS, "taxi" -> TRANSPORT, "card" -> CARD_MAIN.
-             - *Fallback*: Use {defaultAccount} / {defaultFund} ONLY if inference fails.
+           - **Account**: Match user keyword to EXACT ID from "Available Accounts" list below.
+           - **Fund**: Match user keyword to EXACT ID from "Available Funds" list below.
              
-          **NOTE - (GENERAL RULES FOR MATCHING FIELD VALUES)**:
-          - *Inference*: try to match provided name to listed name or alias, it can be slang, short form of the name or exact match. Examples:
-            - "amex" -> AMERICAN_EXPRESS
-            - "family" -> FAMILY_MONTHLY_BUDGET
-            - "payed with 100 dollar bill" -> clearly refers cash operations so some CASH account should be selected
-          - if user clearly didn't try to refer any value - pick default
-          - if no default available - PENDING_CLARIFICATION
-          - If it seems like user tried to refer some value, but you are NOT 99% sure about what value to pick - better leave a PENDING_CLARIFICATION with your guess if you have any, or just ask.
-          - if user refers some name, which doesn't exist in account list or fund list - leave PENDING_CLARIFICATION explaining that you can't pick one. 
-          - also user's Custom Instructions might have special rules for value matching, so pay attention to them as well
+          **⚠️ CRITICAL MATCHING RULES (MUST FOLLOW):**
+          
+          1. **ONLY USE VALUES FROM AVAILABLE LISTS!**
+             - Account MUST be one of the IDs from "Available Accounts" list
+             - Fund MUST be one of the IDs from "Available Funds" list  
+             - **NEVER invent or guess values that are not in the lists!**
+             - If you can't find a match → PENDING_CLARIFICATION
+          
+          2. **PHONETIC/TRANSLITERATION MATCHING:**
+             - User may write in different script (cyrillic vs latin) - match by sound!
+             - "етел" (cyrillic) sounds like "Yettel" → match CARD_DIMA_YETTEL
+             - "райф" (cyrillic) sounds like "Raif" → match CARD_DIMA_VISA_RAIF
+             - "кэш" (cyrillic) = "cash" → match accounts containing CASH
+             - Always consider phonetic similarity across scripts!
+          
+          3. **SEMANTIC MATCHING:**
+             - "топливо" (fuel) → look for TRAVEL, TRANSPORT, or similar fund
+             - "еда" (food) → look for FOOD fund
+             - Match by meaning, not just exact words
+          
+          4. **FALLBACK PRIORITY:**
+             - First: Try to match user's word to Available list (phonetic + semantic)
+             - Second: Use default ({defaultAccount} / {defaultFund}) if user didn't specify
+             - Third: If no default AND can't match → PENDING_CLARIFICATION
+          
+          5. **WHEN TO ASK (PENDING_CLARIFICATION):**
+             - User tried to refer something but NO match found in Available lists
+             - You're not 99% confident about the match
+             - No default available and user didn't specify
+             - **NEVER guess or invent values!**
+          
+          - Custom Instructions might have special rules for matching, pay attention to them
           
                   
         3. **Handle Linked Users (If applicable)**:
@@ -326,14 +345,12 @@ public class FinancialAgent {
           - Target person (if applicable)
           - Comment (if provided)
           
-          **Examples of good confirmations (adapt to {preferredLanguage}):**
-          - EXPENSE: "Recorded expense 200 RSD from CARD_MAIN to FOOD category (coffee)."
-          - EXPENSE (with targetPerson): "Recorded expense 500 RSD from CARD_MAIN to TRANSPORT category for KIKI (taxi)."
-          - TRANSFER (between own accounts): "Transferred 1000 RSD from CARD_MAIN to CASH."
-          - TRANSFER (to linked user): "Transferred 500 RSD from CARD_DIMA to CARD_KIKI for KIKI."
-          - TRANSFER (from linked user): "Received 200 RSD from BOB from CARD_BOB to CARD_DIMA."
-          - INCOME: "Recorded income 50000 RSD to CARD_MAIN (salary)."
-          - Cross-user expense: "Recorded expense 2000 RSD from CARD_DIMA to TRANSPORT_KIKI category for KIKI (fuel on her budget)."
+          **Examples of good confirmations (use ACTUAL account/fund names from Available lists!):**
+          - EXPENSE: "Записал расход 200 RSD с <ACCOUNT_FROM_LIST> на категорию <FUND_FROM_LIST> (кофе)."
+          - TRANSFER: "Перевёл 1000 RSD с <ACCOUNT_FROM_LIST> на <TARGET_ACCOUNT_FROM_LIST>."
+          - INCOME: "Записал доход 50000 RSD на <ACCOUNT_FROM_LIST> (зарплата)."
+          
+          **⚠️ IMPORTANT: Use ACTUAL values from Available Accounts/Funds lists, not placeholder names!**
           
           **For clarifications, ask specific question:**
           - "How much did you spend on coffee?"
@@ -358,9 +375,9 @@ public class FinancialAgent {
         **Required fields:** amount, currency, account, fund
         **Optional fields:** targetPerson (if spending FOR someone), comment
         
-        **Examples:**
-        - "coffee 200" → EXPENSE from default account to FOOD fund
-        - "taxi 500 cash" → EXPENSE from CASH account
+        **Examples (conceptual - use ACTUAL values from Available lists!):**
+        - "coffee 200" → EXPENSE from default account to food-related fund FROM LIST
+        - "taxi 500 cash" → EXPENSE from cash account FROM LIST to transport-related fund FROM LIST
         - "bought lunch for Sarah 1500" → EXPENSE with targetPerson (if Sarah is linked user)
         
         ### 2. TRANSFER - Moving money between accounts
@@ -382,20 +399,22 @@ public class FinancialAgent {
         **Examples:** "salary 50000", "got paid 3000"
         
       
-        ## Examples
+        ## Examples (use ACTUAL values from Available lists, these are just format examples)
         
         ### EXPENSE:
-        - "coffee 200" → {{"operationType": "EXPENSE", "amount": 200, "currency": "RSD", "account": "CARD_MAIN", "fund": "FOOD"}}
-        - "taxi 500 cash" → {{"operationType": "EXPENSE", "amount": 500, "currency": "RSD", "account": "CASH", "fund": "TRANSPORT"}}
+        - "coffee 200" → {{"operationType": "EXPENSE", "amount": 200, "currency": "{currency}", "account": "{defaultAccount}", "fund": "<FUND_FROM_LIST>"}}
+        - "200 динар етел топливо" → {{"operationType": "EXPENSE", "amount": 200, "currency": "RSD", "account": "<YETTEL_CARD_FROM_LIST>", "fund": "<TRAVEL_OR_SIMILAR_FROM_LIST>"}}
+          ↑ "етел" sounds like "Yettel" → find Yettel card in Available Accounts!
+          ↑ "топливо" (fuel) → find TRAVEL or transport-related fund in Available Funds!
         
         ### TRANSFER (internal):
-        - "transfer 1000 from card to cash" → {{"operationType": "TRANSFER", "amount": 1000, "currency": "RSD", "account": "CARD_MAIN", "targetAccount": "CASH"}}
-        - "withdrew 500" → {{"operationType": "TRANSFER", "amount": 500, "currency": "RSD", "account": "CARD_MAIN", "targetAccount": "CASH"}}
+        - "transfer 1000 from card to cash" → {{"operationType": "TRANSFER", "amount": 1000, "currency": "{currency}", "account": "<CARD_FROM_LIST>", "targetAccount": "<CASH_FROM_LIST>"}}
         
-        ### PENDING_CLARIFICATION:
+        ### PENDING_CLARIFICATION (when you CAN'T find match in Available lists):
         - "coffee" → {{"context": "User wants to record coffee expense. Missing: amount."}}
         - "transfer 1000" → {{"context": "User wants to transfer 1000 RSD. Missing: source account (from where?) and target account (to where?)."}}
-        - "500 to friend" → {{"context": "User wants to send 500 RSD to friend. Unclear: friend is not in linked users list. Is this a linked user or regular expense?"}}
+        - "200 на блаблабла" → {{"context": "Не могу найти 'блаблабла' среди доступных счетов/фондов. Уточните, пожалуйста."}}
+          ↑ NEVER invent values! Ask user if no match found!
     """;
     
     // Additional section for TRANSFER operations with linked users (conditionally appended)
