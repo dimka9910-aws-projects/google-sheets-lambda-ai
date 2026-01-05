@@ -136,14 +136,15 @@ public class FinancialAgent {
             
         } catch (ModelValidationException e) {
             log.warn("⚠️ FinancialAgent model validation failed: {}", e.getMessage());
+            String clarificationMessage = buildUserFriendlyClarificationMessage(e, userContext, message);
             return FinancialAgentResponse.builder()
                     .financialActions(List.of())
                     .pendingClarifications(List.of(
                             com.github.dimka9910.sheets.ai.dto.response.PendingClarificationAction.builder()
-                                    .context(e.getMessage())
+                                    .context(buildPendingContext(e))
                                     .build()
                     ))
-                    .message("I couldn't confidently match your account/fund to the available list. Please clarify which one you meant.")
+                    .message(clarificationMessage)
                     .build();
         } catch (Exception e) {
             log.error("❌ FinancialAgent error: {}", e.getMessage(), e);
@@ -256,6 +257,85 @@ public class FinancialAgent {
             if (haystack.contains(n)) return true;
         }
         return false;
+    }
+
+    private String buildPendingContext(ModelValidationException e) {
+        // Keep this short so it doesn't bloat context; detailed logs already contain full info.
+        String msg = e != null && e.getMessage() != null ? e.getMessage() : "Validation failed";
+        if (msg.length() > 240) return msg.substring(0, 240) + "...";
+        return msg;
+    }
+
+    private String buildUserFriendlyClarificationMessage(ModelValidationException e, UserEntity userContext, String userMessage) {
+        String lang = detectLanguage(userContext, userMessage);
+        String err = e != null && e.getMessage() != null ? e.getMessage() : "";
+
+        boolean missingAmount = err.contains("Missing: amount") || err.contains("Need: amount") || err.contains("amount");
+        boolean missingAccount = err.contains("Missing:") ? err.contains("account") : err.contains("account") && err.contains("requires");
+        boolean missingFund = err.contains("Missing:") ? err.contains("fund") : err.contains("fund") && err.contains("requires");
+
+        // Special case: invalid ID returned by model (guardrail)
+        boolean invalidAccount = err.contains("AI returned account='") || err.contains("AI returned targetAccount='");
+        boolean invalidFund = err.contains("AI returned fund='");
+
+        if ("ru".equals(lang)) {
+            if (invalidAccount) {
+                return "Не смог однозначно выбрать счёт. Укажи, пожалуйста, какой счёт использовать (из списка твоих счетов).";
+            }
+            if (invalidFund || missingFund) {
+                // If default fund is missing, ask explicitly about fund/category.
+                if (userContext == null || userContext.getDefaultFund() == null) {
+                    return "Не могу выбрать фонд/категорию для этой траты. Какой фонд использовать?";
+                }
+                return "Не смог однозначно выбрать фонд/категорию. Подтверди, пожалуйста, какой фонд использовать.";
+            }
+            if (missingAccount) {
+                return "Не могу выбрать счёт для этой операции. Какой счёт использовать?";
+            }
+            if (missingAmount) {
+                return "Сколько именно (сумма)?";
+            }
+            return "Нужны уточнения, чтобы записать операцию. Что именно ты имел в виду?";
+        }
+
+        // Default: English
+        if (invalidAccount) {
+            return "I couldn't confidently choose the account. Which account should I use?";
+        }
+        if (invalidFund || missingFund) {
+            if (userContext == null || userContext.getDefaultFund() == null) {
+                return "I can't choose a fund/category for this expense. Which fund should I use?";
+            }
+            return "I couldn't confidently choose the fund/category. Which fund should I use?";
+        }
+        if (missingAccount) {
+            return "I can't choose the account for this operation. Which account should I use?";
+        }
+        if (missingAmount) {
+            return "How much was it?";
+        }
+        return "I need a clarification to record this. What exactly did you mean?";
+    }
+
+    private String detectLanguage(UserEntity userContext, String userMessage) {
+        String preferred = userContext != null ? userContext.getPreferredLanguage() : null;
+        if (preferred != null && !preferred.isBlank()) {
+            String p = preferred.trim().toLowerCase();
+            // Accept both "ru" and "russian"
+            if (p.startsWith("ru")) return "ru";
+            if (p.startsWith("en")) return "en";
+            return p; // best effort
+        }
+        if (userMessage != null) {
+            for (int i = 0; i < userMessage.length(); i++) {
+                char ch = userMessage.charAt(i);
+                // Cyrillic blocks
+                if ((ch >= '\u0400' && ch <= '\u04FF') || (ch >= '\u0500' && ch <= '\u052F')) {
+                    return "ru";
+                }
+            }
+        }
+        return "en";
     }
     
     /**
