@@ -283,9 +283,11 @@ public class FinancialAgent {
 
             return new BenchRunResult(result, new BenchMetrics(llmMs, promptTokens, completionTokens, totalTokens, cachedTokens, reasoningTokens));
         } catch (Exception e) {
+            String msg = e.getMessage() != null ? e.getMessage() : e.getClass().getSimpleName();
+            if (msg.length() > 180) msg = msg.substring(0, 180) + "...";
             FinancialAgentResponse r = FinancialAgentResponse.builder()
                     .financialActions(List.of())
-                    .message("Something went wrong. Please try again.")
+                    .message("ERROR: " + msg)
                     .build();
             return new BenchRunResult(r, new BenchMetrics(0, null, null, null, null, null));
         }
