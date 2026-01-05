@@ -70,10 +70,9 @@ public class FinancialAgent {
         log.info("🔷 FinancialAgent processing: \"{}\" (includeLinkedUsers={})", message, includeLinkedUsersContext);
         
         if (message == null || message.isBlank()) {
-            String lang = com.github.dimka9910.sheets.ai.util.UserFacingText.detectLanguage(userContext, message);
             return FinancialAgentResponse.builder()
                     .financialActions(List.of())
-                    .message(com.github.dimka9910.sheets.ai.util.UserFacingText.emptyMessage(lang))
+                    .message("Please send a non-empty message.")
                     .build();
         }
         
@@ -106,35 +105,17 @@ public class FinancialAgent {
             
             if (content == null || content.isBlank()) {
                 log.error("❌ Empty response from LLM");
-                String lang = com.github.dimka9910.sheets.ai.util.UserFacingText.detectLanguage(userContext, message);
                 return FinancialAgentResponse.builder()
                         .financialActions(List.of())
-                        .message(com.github.dimka9910.sheets.ai.util.UserFacingText.emptyModelResponse(lang))
+                        .message("I didn't get a response from the AI model. Please try again.")
                         .build();
             }
             
             // Parse FinancialAgentResponse using BeanOutputConverter
             FinancialAgentResponse result = outputConverter.convert(content);
             
-            // Normalize "not set" to null (model may echo our default placeholder)
-            normalizeNotSet(result);
-
-            // Enforce policy: do NOT infer Fund from purchase item text.
-            // If user didn't explicitly reference a fund/category/budget (or didn't literally mention a fund name/id),
-            // we treat fund as "unspecified" and rely on defaults / clarification.
-            enforceFundSelectionPolicy(result, userContext, message);
-
-            // Apply defaults in code (prefer defaults over model guessing).
-            applyDefaults(result, userContext);
-            
             // Validate that model followed instructions
             validateResult(result, userContext);
-
-            // Ensure user-facing message matches FINAL action fields after server-side policy/defaults.
-            // Otherwise the model's message can disagree with what we actually persist.
-            if (!CollectionUtils.isEmpty(result.getFinancialActions())) {
-                result.setMessage(buildDeterministicConfirmationMessage(userContext, message, result.getFinancialActions()));
-            }
             
             log.info("✅ FinancialAgent result: {} financial actions, pending={}", 
                     !CollectionUtils.isEmpty(result.getFinancialActions()) ? result.getFinancialActions().size() : 0, 
@@ -144,7 +125,6 @@ public class FinancialAgent {
             
         } catch (ModelValidationException e) {
             log.warn("⚠️ FinancialAgent model validation failed: {}", e.getMessage());
-            String clarificationMessage = buildUserFriendlyClarificationMessage(e, userContext, message);
             return FinancialAgentResponse.builder()
                     .financialActions(List.of())
                     .pendingClarifications(List.of(
@@ -152,121 +132,20 @@ public class FinancialAgent {
                                     .context(buildPendingContext(e))
                                     .build()
                     ))
-                    .message(clarificationMessage)
+                    .message("Please clarify the missing/ambiguous details (e.g., account and/or fund).")
                     .build();
         } catch (Exception e) {
             log.error("❌ FinancialAgent error: {}", e.getMessage(), e);
-            String lang = com.github.dimka9910.sheets.ai.util.UserFacingText.detectLanguage(userContext, message);
             return FinancialAgentResponse.builder()
                     .financialActions(List.of())
-                    .message(com.github.dimka9910.sheets.ai.util.UserFacingText.genericError(lang))
+                    .message("Something went wrong. Please try again.")
                     .build();
         }
     }
     
-    /**
-     * Normalize "not set" placeholder to null (model may return our default placeholder literally).
-     */
-    private void normalizeNotSet(FinancialAgentResponse response) {
-        if (response.getFinancialActions() == null) return;
-        for (FinancialAction action : response.getFinancialActions()) {
-            if ("not set".equals(action.getAccount())) action.setAccount(null);
-            if ("not set".equals(action.getTargetAccount())) action.setTargetAccount(null);
-            if ("not set".equals(action.getFund())) action.setFund(null);
-        }
-    }
-
-    /**
-     * Backend-enforced defaults (so model doesn't need to guess).
-     * Rule: if a field wasn't explicitly provided, use defaults when available; otherwise keep null.
-     */
-    private void applyDefaults(FinancialAgentResponse response, UserEntity userContext) {
-        if (response.getFinancialActions() == null) return;
-        String defaultAccountId = userContext.getDefaultAccount() != null ? userContext.getDefaultAccount().getAccountId() : null;
-        String defaultFundId = userContext.getDefaultFund() != null ? userContext.getDefaultFund().getFundId() : null;
-        String defaultCurrency = userContext.getDefaultCurrency();
-
-        for (FinancialAction action : response.getFinancialActions()) {
-            if (action == null || action.getOperationType() == null) continue;
-
-            if (action.getCurrency() == null && defaultCurrency != null) {
-                action.setCurrency(defaultCurrency);
-            }
-
-            switch (action.getOperationType()) {
-                case EXPENSE -> {
-                    if (action.getAccount() == null && defaultAccountId != null) action.setAccount(defaultAccountId);
-                    if (action.getFund() == null && defaultFundId != null) action.setFund(defaultFundId);
-                }
-                case INCOME -> {
-                    if (action.getAccount() == null && defaultAccountId != null) action.setAccount(defaultAccountId);
-                }
-                case TRANSFER -> {
-                    // For TRANSFER, defaults are ambiguous: leave missing accounts as-is (will be clarified/validated).
-                }
-                default -> {
-                    // no-op
-                }
-            }
-        }
-    }
-
-    /**
-     * Fund selection policy:
-     * - If user explicitly references a fund/category/budget OR literally mentions a known fund token -> allow model-chosen fund.
-     * - Otherwise -> do not allow inference; clear fund so defaults/clarification apply.
-     */
-    private void enforceFundSelectionPolicy(FinancialAgentResponse response, UserEntity userContext, String userMessage) {
-        if (response == null || response.getFinancialActions() == null) return;
-        String msg = userMessage != null ? userMessage.toLowerCase() : "";
-
-        boolean hasFundSignalWord = containsAny(msg,
-                " fund", "fund ", "category", "budget", "bucket",
-                " фонд", "фонд ", "категор", "бюджет"
-        );
-
-        // Build known fund tokens (externalId, displayName, aliases) to detect literal mentions.
-        Set<String> fundTokens = new HashSet<>();
-        if (userContext != null && userContext.getFunds() != null) {
-            for (var f : userContext.getFunds()) {
-                if (f == null) continue;
-                if (f.getFundId() != null) fundTokens.add(f.getFundId().toLowerCase());
-                if (f.getDisplayName() != null) fundTokens.add(f.getDisplayName().toLowerCase());
-                if (f.getAliases() != null) {
-                    for (String a : f.getAliases()) {
-                        if (a != null && !a.isBlank()) fundTokens.add(a.toLowerCase());
-                    }
-                }
-            }
-        }
-
-        boolean literallyMentionsKnownFund = false;
-        for (String t : fundTokens) {
-            if (t.length() < 3) continue;
-            if (msg.contains(t)) {
-                literallyMentionsKnownFund = true;
-                break;
-            }
-        }
-
-        // If no explicit fund signal and no literal mention of a known fund -> clear fund to prevent inference.
-        if (!hasFundSignalWord && !literallyMentionsKnownFund) {
-            for (FinancialAction action : response.getFinancialActions()) {
-                if (action != null && action.getOperationType() == OperationType.EXPENSE) {
-                    action.setFund(null);
-                }
-            }
-        }
-    }
-
-    private boolean containsAny(String haystack, String... needles) {
-        if (haystack == null || haystack.isBlank()) return false;
-        for (String n : needles) {
-            if (n == null || n.isBlank()) continue;
-            if (haystack.contains(n)) return true;
-        }
-        return false;
-    }
+    // NOTE: guardrail-only mode:
+    // - We do NOT modify model output (no server-side defaults, no heuristic fund/account inference).
+    // - Only validations/ID guardrails and safe fallbacks remain.
 
     private String buildPendingContext(ModelValidationException e) {
         // Keep this short so it doesn't bloat context; detailed logs already contain full info.
@@ -275,154 +154,6 @@ public class FinancialAgent {
         return msg;
     }
 
-    private String buildUserFriendlyClarificationMessage(ModelValidationException e, UserEntity userContext, String userMessage) {
-        String lang = detectLanguage(userContext, userMessage);
-        String err = e != null && e.getMessage() != null ? e.getMessage() : "";
-
-        boolean missingAmount = err.contains("Missing: amount") || err.contains("Need: amount") || err.contains("amount");
-        boolean missingAccount = err.contains("Missing:") ? err.contains("account") : err.contains("account") && err.contains("requires");
-        boolean missingFund = err.contains("Missing:") ? err.contains("fund") : err.contains("fund") && err.contains("requires");
-
-        // Special case: invalid ID returned by model (guardrail)
-        boolean invalidAccount = err.contains("AI returned account='") || err.contains("AI returned targetAccount='");
-        boolean invalidFund = err.contains("AI returned fund='");
-
-        if ("ru".equals(lang)) {
-            if (invalidAccount) {
-                return "Не смог однозначно выбрать счёт. Укажи, пожалуйста, какой счёт использовать (из списка твоих счетов).";
-            }
-            if (invalidFund || missingFund) {
-                // If default fund is missing, ask explicitly about fund/category.
-                if (userContext == null || userContext.getDefaultFund() == null) {
-                    return "Не могу выбрать фонд/категорию для этой траты. Какой фонд использовать?";
-                }
-                return "Не смог однозначно выбрать фонд/категорию. Подтверди, пожалуйста, какой фонд использовать.";
-            }
-            if (missingAccount) {
-                return "Не могу выбрать счёт для этой операции. Какой счёт использовать?";
-            }
-            if (missingAmount) {
-                return "Сколько именно (сумма)?";
-            }
-            return "Нужны уточнения, чтобы записать операцию. Что именно ты имел в виду?";
-        }
-
-        // Default: English
-        if (invalidAccount) {
-            return "I couldn't confidently choose the account. Which account should I use?";
-        }
-        if (invalidFund || missingFund) {
-            if (userContext == null || userContext.getDefaultFund() == null) {
-                return "I can't choose a fund/category for this expense. Which fund should I use?";
-            }
-            return "I couldn't confidently choose the fund/category. Which fund should I use?";
-        }
-        if (missingAccount) {
-            return "I can't choose the account for this operation. Which account should I use?";
-        }
-        if (missingAmount) {
-            return "How much was it?";
-        }
-        return "I need a clarification to record this. What exactly did you mean?";
-    }
-
-    private String detectLanguage(UserEntity userContext, String userMessage) {
-        String preferred = userContext != null ? userContext.getPreferredLanguage() : null;
-        if (preferred != null && !preferred.isBlank()) {
-            String p = preferred.trim().toLowerCase();
-            // Accept both "ru" and "russian"
-            if (p.startsWith("ru")) return "ru";
-            if (p.startsWith("en")) return "en";
-            return p; // best effort
-        }
-        if (userMessage != null) {
-            for (int i = 0; i < userMessage.length(); i++) {
-                char ch = userMessage.charAt(i);
-                // Cyrillic blocks
-                if ((ch >= '\u0400' && ch <= '\u04FF') || (ch >= '\u0500' && ch <= '\u052F')) {
-                    return "ru";
-                }
-            }
-        }
-        return "en";
-    }
-
-    private String buildDeterministicConfirmationMessage(UserEntity userContext, String userMessage, List<FinancialAction> actions) {
-        String lang = com.github.dimka9910.sheets.ai.util.UserFacingText.detectLanguage(userContext, userMessage);
-        StringBuilder sb = new StringBuilder();
-        for (int i = 0; i < actions.size(); i++) {
-            FinancialAction a = actions.get(i);
-            if (a == null || a.getOperationType() == null) continue;
-            if (sb.length() > 0) sb.append("\n");
-
-            String amount = formatAmount(a.getAmount());
-            String currency = a.getCurrency() != null ? a.getCurrency() : (userContext != null ? userContext.getDefaultCurrency() : null);
-            if (currency == null || currency.isBlank()) currency = "RSD";
-
-            String comment = a.getComment();
-
-            switch (a.getOperationType()) {
-                case EXPENSE -> {
-                    if ("ru".equals(lang)) {
-                        sb.append("Записал расход ").append(amount).append(" ").append(currency)
-                                .append(" со счёта ").append(a.getAccount())
-                                .append(" в фонд ").append(a.getFund());
-                        if (comment != null && !comment.isBlank()) sb.append(" (").append(comment).append(")");
-                        sb.append(".");
-                    } else {
-                        sb.append("Recorded expense ").append(amount).append(" ").append(currency)
-                                .append(" from ").append(a.getAccount())
-                                .append(" to ").append(a.getFund());
-                        if (comment != null && !comment.isBlank()) sb.append(" (").append(comment).append(")");
-                        sb.append(".");
-                    }
-                }
-                case INCOME -> {
-                    if ("ru".equals(lang)) {
-                        sb.append("Записал доход ").append(amount).append(" ").append(currency)
-                                .append(" на счёт ").append(a.getAccount());
-                        if (comment != null && !comment.isBlank()) sb.append(" (").append(comment).append(")");
-                        sb.append(".");
-                    } else {
-                        sb.append("Recorded income ").append(amount).append(" ").append(currency)
-                                .append(" to ").append(a.getAccount());
-                        if (comment != null && !comment.isBlank()) sb.append(" (").append(comment).append(")");
-                        sb.append(".");
-                    }
-                }
-                case TRANSFER -> {
-                    if ("ru".equals(lang)) {
-                        sb.append("Записал перевод ").append(amount).append(" ").append(currency)
-                                .append(" со счёта ").append(a.getAccount())
-                                .append(" на ").append(a.getTargetAccount()).append(".");
-                    } else {
-                        sb.append("Recorded transfer ").append(amount).append(" ").append(currency)
-                                .append(" from ").append(a.getAccount())
-                                .append(" to ").append(a.getTargetAccount()).append(".");
-                    }
-                }
-                case MODIFY -> {
-                    if ("ru".equals(lang)) sb.append("Ок, обновил последнюю операцию.");
-                    else sb.append("OK — updated the last operation.");
-                }
-                case DELETE -> {
-                    if ("ru".equals(lang)) sb.append("Ок, удалил последнюю операцию.");
-                    else sb.append("OK — deleted the last operation.");
-                }
-                default -> {
-                    if ("ru".equals(lang)) sb.append("Готово.");
-                    else sb.append("Done.");
-                }
-            }
-        }
-        return sb.toString();
-    }
-
-    private String formatAmount(Double v) {
-        if (v == null) return "?";
-        if (v % 1 == 0) return String.valueOf(v.longValue());
-        return String.valueOf(v);
-    }
     
     /**
      * Universal validation for all financial operation types.
