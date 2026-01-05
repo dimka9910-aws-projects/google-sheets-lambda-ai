@@ -378,8 +378,14 @@ public class FinancialAgent {
            - EXPENSE: Everything else (default).
         
         2. **Map Entities (Priority: Explicit > Inferred > Default)**:
-           - **Amount**: should be provided Explicitly as number or text or slang.
-           - **Currency**: Match explicit word -> Infer from slang -> Use {currency} default.
+           - **Amount**:
+             - If the user message contains exactly ONE clear numeric value (e.g., "200", "200.50"), it MUST be used as `amount`.
+             - Do NOT ask for amount if a clear numeric value is present.
+             - If there are multiple numbers and it's ambiguous which is the amount → PENDING_CLARIFICATION.
+           - **Currency**:
+             - If user explicitly mentions a currency name/symbol (in any language), map it to an ISO currency code if unambiguous.
+             - Example (format only): "dinar" → RSD.
+             - If no currency is mentioned or mapping is ambiguous → use {currency} default.
            - **Account**: Match user keyword to EXACT ID from "Available Accounts" list below.
            - **Fund**: Match user keyword to EXACT ID from "Available Funds" list below.
              
