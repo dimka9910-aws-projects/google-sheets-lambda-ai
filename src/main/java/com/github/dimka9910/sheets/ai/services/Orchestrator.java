@@ -2,8 +2,13 @@ package com.github.dimka9910.sheets.ai.services;
 
 import com.github.dimka9910.sheets.ai.dto.response.PendingClarificationAction;
 import com.github.dimka9910.sheets.ai.dto.response.MainAgentRedirectAction;
+import com.github.dimka9910.sheets.ai.dto.response.CombinedAgentResponse;
 import com.github.dimka9910.sheets.ai.dto.response.BaseAgentResponse;
 import com.github.dimka9910.sheets.ai.dto.response.MainAgentResponse;
+import com.github.dimka9910.sheets.ai.dto.response.CustomInstructionAction;
+import com.github.dimka9910.sheets.ai.dto.response.CustomInstructionAgentResponse;
+import com.github.dimka9910.sheets.ai.dto.response.FinancialAction;
+import com.github.dimka9910.sheets.ai.dto.response.FinancialAgentResponse;
 import com.github.dimka9910.sheets.ai.dto.telegram.TelegramChatRequest;
 import com.github.dimka9910.sheets.ai.dto.telegram.TelegramChatResponse;
 import com.github.dimka9910.sheets.ai.dto.user.UserEntity;
@@ -171,56 +176,67 @@ public class Orchestrator {
         if (redirects.isEmpty()) {
             return mainResponse;
         }
-        
-        // Currently we only support single redirect per response
-        if (redirects.size() > 1) {
-            log.warn("Multiple redirects found ({}), processing only the first one", redirects.size());
+
+        // Execute ALL redirects (MainAgent may decompose "A and B" into multiple actions).
+        List<FinancialAction> mergedFinancial = new ArrayList<>();
+        List<CustomInstructionAction> mergedInstructions = new ArrayList<>();
+        List<PendingClarificationAction> mergedPending = new ArrayList<>();
+        if (mainResponse.getPendingClarifications() != null) {
+            mergedPending.addAll(mainResponse.getPendingClarifications());
         }
-        
-        MainAgentRedirectAction redirect = redirects.get(0);
-        String message = redirect.getMessage();
-        
-        log.info("→ Redirecting to {} with message: \"{}\"", 
-                redirect.getAgentType(), truncate(message, 60));
-        
-        // Route to specialized agent based on agentType
-        BaseAgentResponse specializedResponse = switch (redirect.getAgentType()) {
-            case CUSTOM_INSTRUCTION -> {
-                log.info("  ↳ Calling CustomInstructionAgent");
-                // CustomInstructionAgent expects List<String> instructions, so wrap message in list
-                var ciRequest = new CustomInstructionAgent.Request(List.of(message), userContext);
-                yield customInstructionAgent.process(ciRequest);
+
+        for (MainAgentRedirectAction redirect : redirects) {
+            String ticket = redirect.getMessage();
+            log.info("→ Redirecting to {} with message: \"{}\"",
+                    redirect.getAgentType(), truncate(ticket, 60));
+
+            BaseAgentResponse r = switch (redirect.getAgentType()) {
+                case CUSTOM_INSTRUCTION -> {
+                    log.info("  ↳ Calling CustomInstructionAgent");
+                    var ciRequest = new CustomInstructionAgent.Request(List.of(ticket), userContext);
+                    yield customInstructionAgent.process(ciRequest);
+                }
+                case FINANCIAL -> {
+                    log.info("  ↳ Calling FinancialAgent (no linked users)");
+                    yield financialAgent.process(ticket, userContext, false);
+                }
+                case THIRD_PARTY_FINANCIAL -> {
+                    log.info("  ↳ Calling FinancialAgent (with linked users)");
+                    yield financialAgent.process(ticket, userContext, true);
+                }
+                case CORRECTION -> {
+                    log.info("  ↳ Calling ExpenseEditAndDeletionAgent");
+                    yield expenseEditAndDeletionAgent.process(ticket, userContext);
+                }
+            };
+
+            log.info("  ✅ Specialized agent returned: type={}, pending={}",
+                    r.getClass().getSimpleName(),
+                    !CollectionUtils.isEmpty(r.getPendingClarifications()));
+
+            if (r.getPendingClarifications() != null) mergedPending.addAll(r.getPendingClarifications());
+
+            if (r instanceof FinancialAgentResponse fr && fr.getFinancialActions() != null) {
+                mergedFinancial.addAll(fr.getFinancialActions());
+            } else if (r instanceof CustomInstructionAgentResponse cr && cr.getCustomInstructionActions() != null) {
+                mergedInstructions.addAll(cr.getCustomInstructionActions());
             }
-            case FINANCIAL -> {
-                log.info("  ↳ Calling FinancialAgent (no linked users)");
-                yield financialAgent.process(message, userContext, false);
-            }
-            case THIRD_PARTY_FINANCIAL -> {
-                log.info("  ↳ Calling FinancialAgent (with linked users)");
-                yield financialAgent.process(message, userContext, true);
-            }
-            case CORRECTION -> {
-                log.info("  ↳ Calling ExpenseEditAndDeletionAgent");
-                yield expenseEditAndDeletionAgent.process(message, userContext);
-            }
-        };
-        
-        log.info("  ✅ Specialized agent returned: type={}, pending={}", 
-                specializedResponse.getClass().getSimpleName(),
-                !CollectionUtils.isEmpty(specializedResponse.getPendingClarifications()));
-        
-        // IMPORTANT: Merge pending clarifications from MainAgent (if any) into specialized response
-        // MainAgent might have asked for clarification while also redirecting
-        if (mainResponse.getPendingClarifications() != null && !mainResponse.getPendingClarifications().isEmpty()) {
-            List<PendingClarificationAction> mergedPending = new ArrayList<>(mainResponse.getPendingClarifications());
-            if (specializedResponse.getPendingClarifications() != null) {
-                mergedPending.addAll(specializedResponse.getPendingClarifications());
-            }
-            specializedResponse.setPendingClarifications(mergedPending);
-            log.debug("  → Merged {} pending from MainAgent", mainResponse.getPendingClarifications().size());
         }
-        
-        return specializedResponse;
+
+        // If we ended up with multiple action types, return a composite response but keep MainAgent's message
+        // (it should describe what happened to the user in one coherent response).
+        if (!mergedFinancial.isEmpty() || !mergedInstructions.isEmpty()) {
+            return CombinedAgentResponse.builder()
+                    .message(mainResponse.getMessage())
+                    .pendingClarifications(mergedPending)
+                    .financialActions(mergedFinancial)
+                    .customInstructionActions(mergedInstructions)
+                    .build();
+        }
+
+        // No actions produced; keep MainAgent response but preserve merged pending.
+        mainResponse.setPendingClarifications(mergedPending);
+        return mainResponse;
     }
 
     // ═══════════════════════════════════════════════════════════════════════════

@@ -81,6 +81,8 @@ public class MainAgent {
             - NEVER execute SETTINGS. REDIRECT to CUSTOM_INSTRUCTION.
             - Use PENDING_CLARIFICATION only if inference + history + defaults = zero clues.
             - Multi-step ("A and B") = multiple REDIRECT actions.
+            - If user both RESOLVES a pending clarification AND asks to change defaults/settings in the same message:
+              create multiple redirects (e.g., FINANCIAL + CUSTOM_INSTRUCTION) and describe BOTH outcomes in your `message`.
             - ALWAYS respond in the SAME language as the user's input message unless other instructions provided.
             
             ## CRITICAL: FINDING OPERATIONS FOR CORRECTIONS
@@ -160,11 +162,11 @@ public class MainAgent {
             - **Info Query**: "show settings" → NO actions, just response
             - **Partial**: Some info → REDIRECT with what you know
             
-            ## Infer & Apply Defaults
-            - Keywords: "coffee" → FOOD, "taxi" → TRANSPORT
-            - Context: "same but..." → copy from previous
-            - Instructions: Check custom rules
-            - Defaults: Mention in Ticket if used
+            ## Defaults & Funds (IMPORTANT)
+            - Do NOT guess a fund/category from the purchase item text.
+            - If fund is not explicitly referenced and defaultFund exists → mention defaultFund in the Ticket.
+            - If fund is not explicitly referenced and defaultFund is missing → resolve via clarification (or use user's answer to the pending question).
+            - If user explicitly references a fund/category/budget → match it to an available fund ID.
             
             {formatInstructions}
             
@@ -202,6 +204,11 @@ public class MainAgent {
             - If resolved → create completed actions
             - If still unclear → NEW PENDING_CLARIFICATION
             - If topic changed → acknowledge, process new request
+            
+            **IMPORTANT:**
+            - If the user provides the missing fields (e.g., fund/account) → you MUST create the operation now (via redirect to FINANCIAL/THIRD_PARTY_FINANCIAL),
+              not only update settings.
+            - If the user also says "use this as default" → add an additional redirect to CUSTOM_INSTRUCTION in the same response.
             """;
 
     // ═══════════════════════════════════════════════════════════════════════════

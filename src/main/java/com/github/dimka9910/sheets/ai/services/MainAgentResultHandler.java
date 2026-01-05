@@ -82,6 +82,15 @@ public class MainAgentResultHandler {
                     : new ArrayList<>();
             log.info("Processing CustomInstructionAgentResponse: {} instruction actions, {} pending", 
                     customInstructionActions.size(), pendingActions.size());
+        } else if (agentResponse instanceof CombinedAgentResponse combinedResponse) {
+            financialActions = combinedResponse.getFinancialActions() != null
+                    ? combinedResponse.getFinancialActions()
+                    : new ArrayList<>();
+            customInstructionActions = combinedResponse.getCustomInstructionActions() != null
+                    ? combinedResponse.getCustomInstructionActions()
+                    : new ArrayList<>();
+            log.info("Processing CombinedAgentResponse: {} financial actions, {} instruction actions, {} pending",
+                    financialActions.size(), customInstructionActions.size(), pendingActions.size());
         } else {
             // MainAgentResponse - pure conversational, no actions
             log.info("Processing MainAgentResponse: conversational only, {} pending", pendingActions.size());

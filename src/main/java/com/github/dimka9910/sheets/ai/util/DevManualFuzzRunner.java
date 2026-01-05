@@ -69,6 +69,14 @@ public class DevManualFuzzRunner {
         // Explicit fund reference (format-focused): should pick TRAVEL when user explicitly references fund.
         runner.step(a, "tickets 200 to travel fund", Expect.savedSingleOperationFundIs("EXPENSE", "TRAVEL"));
 
+        // Regression: resolving a pending clarification + setting default in the SAME reply should do BOTH.
+        // Remove default fund, create pending, then resolve with "use TRAVEL and set as default".
+        try (Connection c = connect(dbUrl)) {
+            clearDefaultFund(c, a.userId());
+        }
+        runner.step(a, "taxi 200", Expect.pending()); // fund missing (no default)
+        runner.step(a, "use TRAVEL fund for that and set it as default", Expect.savedSingleOperationAndDefaultFundIs("EXPENSE", "TRAVEL", "TRAVEL"));
+
         // Pending clarification: missing amount
         runner.step(a, "coffee", Expect.pending());
         runner.step(a, "200", Expect.savedSingleOperation("EXPENSE"));
@@ -376,6 +384,27 @@ public class DevManualFuzzRunner {
                 require(lang.equals(v), "preferred_language should be updated to " + lang + " but got " + v);
             };
         }
+
+        static Expect savedSingleOperationAndDefaultFundIs(String expectedType, String expectedOpFundExternalId, String expectedDefaultFundExternalId) {
+            return (c, user, message, resp) -> {
+                require(resp.isSuccess(), "response.success should be true");
+                require(resp.getOperationsCount() >= 1, "should save at least 1 operation");
+
+                var op = latestOp(c, user.userId());
+                requireNotNull(op, "latest operation should exist");
+                require(expectedType.equals(op.operationType), "operation_type mismatch: expected=" + expectedType + " actual=" + op.operationType);
+                require(op.deletedAt == null, "operation must not be deleted");
+
+                String fundExternalId = latestOpFundExternalId(c, user.userId());
+                requireNotNull(fundExternalId, "latest operation fund external_id should exist");
+                require(expectedOpFundExternalId.equals(fundExternalId),
+                        "operation fund mismatch: expected=" + expectedOpFundExternalId + " but got " + fundExternalId);
+
+                String defaultFundExternalId = readDefaultFundExternalId(c, user.userId());
+                require(expectedDefaultFundExternalId.equals(defaultFundExternalId),
+                        "default fund mismatch: expected=" + expectedDefaultFundExternalId + " but got " + defaultFundExternalId);
+            };
+        }
     }
 
     private static final class OpRow {
@@ -447,6 +476,26 @@ public class DevManualFuzzRunner {
                 rs.next();
                 return rs.getString(1);
             }
+        }
+    }
+
+    private static String readDefaultFundExternalId(Connection c, UUID userId) throws SQLException {
+        try (PreparedStatement ps = c.prepareStatement(
+                "SELECT f.external_id " +
+                "FROM users u LEFT JOIN funds f ON u.default_fund_id = f.id " +
+                "WHERE u.id = ?::uuid")) {
+            ps.setObject(1, userId);
+            try (ResultSet rs = ps.executeQuery()) {
+                rs.next();
+                return rs.getString(1);
+            }
+        }
+    }
+
+    private static void clearDefaultFund(Connection c, UUID userId) throws SQLException {
+        try (PreparedStatement ps = c.prepareStatement("UPDATE users SET default_fund_id = NULL WHERE id = ?::uuid")) {
+            ps.setObject(1, userId);
+            ps.executeUpdate();
         }
     }
 
