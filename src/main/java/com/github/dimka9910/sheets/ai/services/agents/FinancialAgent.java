@@ -87,6 +87,12 @@ public class FinancialAgent {
             
             // Create Spring AI Prompt
             @SuppressWarnings("null")
+            String reasoningEffort = System.getenv().getOrDefault("ZZ_REASONING_EFFORT", "low").trim().toLowerCase();
+            if (reasoningEffort.isBlank()) reasoningEffort = "low";
+            if (!reasoningEffort.equals("low") && !reasoningEffort.equals("medium") && !reasoningEffort.equals("high")) {
+                log.warn("⚠️ Invalid ZZ_REASONING_EFFORT='{}'. Using 'low'. Allowed: low|medium|high", reasoningEffort);
+                reasoningEffort = "low";
+            }
             Prompt prompt = new Prompt(
                     List.of(
                             new SystemMessage(systemPrompt),
@@ -99,12 +105,15 @@ public class FinancialAgent {
                             .temperature(1.0)
                             // Spring AI OpenAiChatOptions supports reasoningEffort for reasoning models.
                             // Supported values (per Spring AI 1.1.1 source): low | medium | high.
-                            .reasoningEffort("low")
+                            .reasoningEffort(reasoningEffort)
                             .build()
             );
             
             // Call LLM
+            long t0 = System.nanoTime();
             ChatResponse chatResponse = chatModel.call(prompt);
+            long ms = (System.nanoTime() - t0) / 1_000_000;
+            log.info("⏱️ LLM call duration: {} ms (model={}, reasoningEffort={})", ms, MODEL, reasoningEffort);
             String content = chatResponse.getResult().getOutput().getText();
             
             if (content == null || content.isBlank()) {
