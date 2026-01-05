@@ -97,9 +97,9 @@ public class FinancialAgent {
                             .maxCompletionTokens(MAX_TOKENS)
                             // GPT-5 reasoning models typically only support default temperature (1.0)
                             .temperature(1.0)
-                            // Minimal reasoning effort to reduce latency/cost (if supported by the API/model).
-                            // Spring AI 1.1.x sends this under `extra_body`; our interceptor moves it to root.
-                            .extraBody(Map.of("reasoning_effort", "minimal"))
+                            // Spring AI OpenAiChatOptions supports reasoningEffort for reasoning models.
+                            // Supported values (per Spring AI 1.1.1 source): low | medium | high.
+                            .reasoningEffort("low")
                             .build()
             );
             
