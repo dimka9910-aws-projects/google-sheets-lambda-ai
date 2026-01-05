@@ -45,6 +45,33 @@ public class CheckLastMessage {
                 
                 log.info("👤 DIMA user_id: {}", dimaUserId);
                 log.info("");
+
+                // Show current defaults (resolve to external IDs for readability)
+                log.info("⚙️ Current DIMA defaults:");
+                try (PreparedStatement stmt = conn.prepareStatement(
+                        "SELECT default_currency, preferred_language, default_account_id, default_fund_id " +
+                                "FROM users WHERE id = ?::uuid")) {
+                    stmt.setObject(1, dimaUserId);
+                    ResultSet rs = stmt.executeQuery();
+                    if (rs.next()) {
+                        String defaultCurrency = rs.getString("default_currency");
+                        String preferredLanguage = rs.getString("preferred_language");
+                        UUID defaultAccountId = (UUID) rs.getObject("default_account_id");
+                        UUID defaultFundId = (UUID) rs.getObject("default_fund_id");
+
+                        String defaultAccountExternalId = defaultAccountId != null ? resolveAccountExternalId(conn, defaultAccountId) : null;
+                        String defaultFundExternalId = defaultFundId != null ? resolveFundExternalId(conn, defaultFundId) : null;
+
+                        log.info("- default_currency: {}", defaultCurrency);
+                        log.info("- preferred_language: {}", preferredLanguage);
+                        log.info("- default_account: {} ({})", defaultAccountId, defaultAccountExternalId);
+                        log.info("- default_fund: {} ({})", defaultFundId, defaultFundExternalId);
+                    } else {
+                        log.info("   (user row not found?)");
+                    }
+                }
+                
+                log.info("");
                 
                 // Get last 20 chat messages (all messages)
                 log.info("📝 Last 20 chat messages:");
@@ -72,10 +99,13 @@ public class CheckLastMessage {
                 // Get last 20 financial operations (all operations)
                 log.info("💰 Last 20 financial operations:");
                 try (PreparedStatement stmt = conn.prepareStatement(
-                    "SELECT operation_type, amount, currency, account_id, fund_id, description, transaction_date " +
-                    "FROM financial_operations " +
-                    "WHERE user_id = ? AND deleted_at IS NULL " +
-                    "ORDER BY transaction_date DESC LIMIT 20")) {
+                    "SELECT fo.operation_type, fo.amount, fo.currency, fo.account_id, a.external_id AS account_external_id, " +
+                            "fo.fund_id, f.external_id AS fund_external_id, fo.description, fo.transaction_date " +
+                    "FROM financial_operations fo " +
+                    "LEFT JOIN accounts a ON fo.account_id = a.id " +
+                    "LEFT JOIN funds f ON fo.fund_id = f.id " +
+                    "WHERE fo.user_id = ? AND fo.deleted_at IS NULL " +
+                    "ORDER BY fo.transaction_date DESC LIMIT 20")) {
                     stmt.setObject(1, dimaUserId);
                     ResultSet rs = stmt.executeQuery();
                     int i = 1;
@@ -87,11 +117,13 @@ public class CheckLastMessage {
                         String currency = rs.getString("currency");
                         UUID accountId = (UUID) rs.getObject("account_id");
                         UUID fundId = (UUID) rs.getObject("fund_id");
+                        String accountExternalId = rs.getString("account_external_id");
+                        String fundExternalId = rs.getString("fund_external_id");
                         String desc = rs.getString("description");
                         Timestamp txDate = rs.getTimestamp("transaction_date");
                         
-                        log.info("{}. {} {} {} | account={} fund={} | {} | {}", 
-                            i++, opType, amount, currency, accountId, fundId, desc, txDate);
+                        log.info("{}. {} {} {} | account={} ({}) fund={} ({}) | {} | {}", 
+                            i++, opType, amount, currency, accountId, accountExternalId, fundId, fundExternalId, desc, txDate);
                     }
                     if (!hasOps) {
                         log.info("   (no operations found)");
@@ -207,6 +239,26 @@ public class CheckLastMessage {
         }
         
         return null;
+    }
+
+    private static String resolveAccountExternalId(Connection conn, UUID accountId) throws SQLException {
+        try (PreparedStatement ps = conn.prepareStatement("SELECT external_id FROM accounts WHERE id = ?::uuid")) {
+            ps.setObject(1, accountId);
+            try (ResultSet rs = ps.executeQuery()) {
+                if (!rs.next()) return null;
+                return rs.getString(1);
+            }
+        }
+    }
+
+    private static String resolveFundExternalId(Connection conn, UUID fundId) throws SQLException {
+        try (PreparedStatement ps = conn.prepareStatement("SELECT external_id FROM funds WHERE id = ?::uuid")) {
+            ps.setObject(1, fundId);
+            try (ResultSet rs = ps.executeQuery()) {
+                if (!rs.next()) return null;
+                return rs.getString(1);
+            }
+        }
     }
 }
 

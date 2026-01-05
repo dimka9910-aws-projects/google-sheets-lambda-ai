@@ -129,6 +129,12 @@ public class FinancialAgent {
             
             // Validate that model followed instructions
             validateResult(result, userContext);
+
+            // Ensure user-facing message matches FINAL action fields after server-side policy/defaults.
+            // Otherwise the model's message can disagree with what we actually persist.
+            if (!CollectionUtils.isEmpty(result.getFinancialActions())) {
+                result.setMessage(buildDeterministicConfirmationMessage(userContext, message, result.getFinancialActions()));
+            }
             
             log.info("✅ FinancialAgent result: {} financial actions, pending={}", 
                     !CollectionUtils.isEmpty(result.getFinancialActions()) ? result.getFinancialActions().size() : 0, 
@@ -339,6 +345,83 @@ public class FinancialAgent {
             }
         }
         return "en";
+    }
+
+    private String buildDeterministicConfirmationMessage(UserEntity userContext, String userMessage, List<FinancialAction> actions) {
+        String lang = com.github.dimka9910.sheets.ai.util.UserFacingText.detectLanguage(userContext, userMessage);
+        StringBuilder sb = new StringBuilder();
+        for (int i = 0; i < actions.size(); i++) {
+            FinancialAction a = actions.get(i);
+            if (a == null || a.getOperationType() == null) continue;
+            if (sb.length() > 0) sb.append("\n");
+
+            String amount = formatAmount(a.getAmount());
+            String currency = a.getCurrency() != null ? a.getCurrency() : (userContext != null ? userContext.getDefaultCurrency() : null);
+            if (currency == null || currency.isBlank()) currency = "RSD";
+
+            String comment = a.getComment();
+
+            switch (a.getOperationType()) {
+                case EXPENSE -> {
+                    if ("ru".equals(lang)) {
+                        sb.append("Записал расход ").append(amount).append(" ").append(currency)
+                                .append(" со счёта ").append(a.getAccount())
+                                .append(" в фонд ").append(a.getFund());
+                        if (comment != null && !comment.isBlank()) sb.append(" (").append(comment).append(")");
+                        sb.append(".");
+                    } else {
+                        sb.append("Recorded expense ").append(amount).append(" ").append(currency)
+                                .append(" from ").append(a.getAccount())
+                                .append(" to ").append(a.getFund());
+                        if (comment != null && !comment.isBlank()) sb.append(" (").append(comment).append(")");
+                        sb.append(".");
+                    }
+                }
+                case INCOME -> {
+                    if ("ru".equals(lang)) {
+                        sb.append("Записал доход ").append(amount).append(" ").append(currency)
+                                .append(" на счёт ").append(a.getAccount());
+                        if (comment != null && !comment.isBlank()) sb.append(" (").append(comment).append(")");
+                        sb.append(".");
+                    } else {
+                        sb.append("Recorded income ").append(amount).append(" ").append(currency)
+                                .append(" to ").append(a.getAccount());
+                        if (comment != null && !comment.isBlank()) sb.append(" (").append(comment).append(")");
+                        sb.append(".");
+                    }
+                }
+                case TRANSFER -> {
+                    if ("ru".equals(lang)) {
+                        sb.append("Записал перевод ").append(amount).append(" ").append(currency)
+                                .append(" со счёта ").append(a.getAccount())
+                                .append(" на ").append(a.getTargetAccount()).append(".");
+                    } else {
+                        sb.append("Recorded transfer ").append(amount).append(" ").append(currency)
+                                .append(" from ").append(a.getAccount())
+                                .append(" to ").append(a.getTargetAccount()).append(".");
+                    }
+                }
+                case MODIFY -> {
+                    if ("ru".equals(lang)) sb.append("Ок, обновил последнюю операцию.");
+                    else sb.append("OK — updated the last operation.");
+                }
+                case DELETE -> {
+                    if ("ru".equals(lang)) sb.append("Ок, удалил последнюю операцию.");
+                    else sb.append("OK — deleted the last operation.");
+                }
+                default -> {
+                    if ("ru".equals(lang)) sb.append("Готово.");
+                    else sb.append("Done.");
+                }
+            }
+        }
+        return sb.toString();
+    }
+
+    private String formatAmount(Double v) {
+        if (v == null) return "?";
+        if (v % 1 == 0) return String.valueOf(v.longValue());
+        return String.valueOf(v);
     }
     
     /**

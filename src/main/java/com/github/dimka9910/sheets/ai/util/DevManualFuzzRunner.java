@@ -77,6 +77,16 @@ public class DevManualFuzzRunner {
         runner.step(a, "taxi 200", Expect.pending()); // fund missing (no default)
         runner.step(a, "use TRAVEL fund for that and set it as default", Expect.savedSingleOperationAndDefaultFundIs("EXPENSE", "TRAVEL", "TRAVEL"));
 
+        // Complex: multi-intent in one message (settings + operation)
+        // Should BOTH set default fund and record an expense using that default (without inferring fund from 'taxi').
+        runner.step(a, "set my default fund to FOOD and record taxi 300", Expect.savedSingleOperationAndDefaultFundIs("EXPENSE", "FOOD", "FOOD"));
+
+        // Complex: multiple operations in one message (should save at least 2)
+        runner.step(a, "coffee 110 and taxi 220", Expect.savedAtLeastOperations(2));
+
+        // Complex: mixed transfer + setting in same message (3rd-party + default)
+        runner.step(a, "send 500 to spouse and set my default currency to EUR", Expect.savedTransferPairAndDefaultCurrency("EUR"));
+
         // Pending clarification: missing amount
         runner.step(a, "coffee", Expect.pending());
         runner.step(a, "200", Expect.savedSingleOperation("EXPENSE"));
@@ -382,6 +392,28 @@ public class DevManualFuzzRunner {
                 require(resp.isSuccess(), "response.success should be true");
                 String v = readPreferredLanguage(c, user.userId());
                 require(lang.equals(v), "preferred_language should be updated to " + lang + " but got " + v);
+            };
+        }
+
+        static Expect savedAtLeastOperations(int minOps) {
+            return (c, user, message, resp) -> {
+                require(resp.isSuccess(), "response.success should be true");
+                require(resp.getOperationsCount() >= minOps, "expected at least " + minOps + " operations, got " + resp.getOperationsCount());
+            };
+        }
+
+        static Expect savedTransferPairAndDefaultCurrency(String expectedCurrency) {
+            return (c, user, message, resp) -> {
+                require(resp.isSuccess(), "response.success should be true");
+                // transfer should save at least one op count; paired rows are checked via linkId count
+                OpRow newest = latestOp(c, user.userId());
+                requireNotNull(newest, "latest operation should exist");
+                require("TRANSFER".equals(newest.operationType), "expected latest operation to be TRANSFER");
+                requireNotNull(newest.linkId, "TRANSFER must have link_id");
+                require(countActiveByLinkId(c, newest.linkId) == 2, "TRANSFER should have 2 active rows");
+
+                String cur = readDefaultCurrency(c, user.userId());
+                require(expectedCurrency.equals(cur), "default_currency should be updated to " + expectedCurrency + " but got " + cur);
             };
         }
 
