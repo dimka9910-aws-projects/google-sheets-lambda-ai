@@ -63,6 +63,12 @@ public class DevManualFuzzRunner {
         // Baseline: simple expense
         runner.step(a, "coffee 200", Expect.savedSingleOperation("EXPENSE"));
 
+        // Regression: do NOT infer fund from purchase item. Use default fund when not explicitly referenced.
+        runner.step(a, "taxi 200", Expect.savedSingleOperationFundIs("EXPENSE", "FOOD"));
+        runner.step(a, "tickets 200", Expect.savedSingleOperationFundIs("EXPENSE", "FOOD"));
+        // Explicit fund reference (format-focused): should pick TRAVEL when user explicitly references fund.
+        runner.step(a, "tickets 200 to travel fund", Expect.savedSingleOperationFundIs("EXPENSE", "TRAVEL"));
+
         // Pending clarification: missing amount
         runner.step(a, "coffee", Expect.pending());
         runner.step(a, "200", Expect.savedSingleOperation("EXPENSE"));
@@ -189,9 +195,11 @@ public class DevManualFuzzRunner {
         UUID foodId = UUID.randomUUID();
         UUID transportId = UUID.randomUUID();
         UUID travelId = UUID.randomUUID();
+        UUID creditId = UUID.randomUUID();
         insertFund(c, foodId, userId, "FOOD", "Food", new String[0]);
         insertFund(c, transportId, userId, "TRANSPORT", "Transport", new String[0]);
         insertFund(c, travelId, userId, "TRAVEL", "Travel", new String[0]);
+        insertFund(c, creditId, userId, "CREDIT", "Credit", new String[0]);
 
         // Set defaults: CARD account + FOOD fund
         try (PreparedStatement ps = c.prepareStatement(
@@ -296,6 +304,23 @@ public class DevManualFuzzRunner {
                 requireNotNull(op, "latest operation should exist");
                 require(expectedType.equals(op.operationType), "operation_type mismatch: expected=" + expectedType + " actual=" + op.operationType);
                 require(op.deletedAt == null, "operation must not be deleted");
+            };
+        }
+
+        static Expect savedSingleOperationFundIs(String expectedType, String expectedFundExternalId) {
+            return (c, user, message, resp) -> {
+                require(resp.isSuccess(), "response.success should be true");
+                require(resp.getOperationsCount() >= 1, "should save at least 1 operation");
+
+                var op = latestOp(c, user.userId());
+                requireNotNull(op, "latest operation should exist");
+                require(expectedType.equals(op.operationType), "operation_type mismatch: expected=" + expectedType + " actual=" + op.operationType);
+                require(op.deletedAt == null, "operation must not be deleted");
+
+                String fundExternalId = latestOpFundExternalId(c, user.userId());
+                requireNotNull(fundExternalId, "latest operation fund external_id should exist");
+                require(expectedFundExternalId.equals(fundExternalId),
+                        "fund mismatch: expected=" + expectedFundExternalId + " but got " + fundExternalId);
             };
         }
 
@@ -420,6 +445,21 @@ public class DevManualFuzzRunner {
             ps.setObject(1, userId);
             try (ResultSet rs = ps.executeQuery()) {
                 rs.next();
+                return rs.getString(1);
+            }
+        }
+    }
+
+    private static String latestOpFundExternalId(Connection c, UUID userId) throws SQLException {
+        try (PreparedStatement ps = c.prepareStatement(
+                "SELECT f.external_id " +
+                "FROM financial_operations fo " +
+                "JOIN funds f ON fo.fund_id = f.id " +
+                "WHERE fo.user_id = ?::uuid " +
+                "ORDER BY fo.created_at DESC LIMIT 1")) {
+            ps.setObject(1, userId);
+            try (ResultSet rs = ps.executeQuery()) {
+                if (!rs.next()) return null;
                 return rs.getString(1);
             }
         }

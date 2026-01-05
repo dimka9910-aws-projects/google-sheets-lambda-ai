@@ -116,6 +116,14 @@ public class FinancialAgent {
             
             // Normalize "not set" to null (model may echo our default placeholder)
             normalizeNotSet(result);
+
+            // Enforce policy: do NOT infer Fund from purchase item text.
+            // If user didn't explicitly reference a fund/category/budget (or didn't literally mention a fund name/id),
+            // we treat fund as "unspecified" and rely on defaults / clarification.
+            enforceFundSelectionPolicy(result, userContext, message);
+
+            // Apply defaults in code (prefer defaults over model guessing).
+            applyDefaults(result, userContext);
             
             // Validate that model followed instructions
             validateResult(result, userContext);
@@ -156,6 +164,98 @@ public class FinancialAgent {
             if ("not set".equals(action.getTargetAccount())) action.setTargetAccount(null);
             if ("not set".equals(action.getFund())) action.setFund(null);
         }
+    }
+
+    /**
+     * Backend-enforced defaults (so model doesn't need to guess).
+     * Rule: if a field wasn't explicitly provided, use defaults when available; otherwise keep null.
+     */
+    private void applyDefaults(FinancialAgentResponse response, UserEntity userContext) {
+        if (response.getFinancialActions() == null) return;
+        String defaultAccountId = userContext.getDefaultAccount() != null ? userContext.getDefaultAccount().getAccountId() : null;
+        String defaultFundId = userContext.getDefaultFund() != null ? userContext.getDefaultFund().getFundId() : null;
+        String defaultCurrency = userContext.getDefaultCurrency();
+
+        for (FinancialAction action : response.getFinancialActions()) {
+            if (action == null || action.getOperationType() == null) continue;
+
+            if (action.getCurrency() == null && defaultCurrency != null) {
+                action.setCurrency(defaultCurrency);
+            }
+
+            switch (action.getOperationType()) {
+                case EXPENSE -> {
+                    if (action.getAccount() == null && defaultAccountId != null) action.setAccount(defaultAccountId);
+                    if (action.getFund() == null && defaultFundId != null) action.setFund(defaultFundId);
+                }
+                case INCOME -> {
+                    if (action.getAccount() == null && defaultAccountId != null) action.setAccount(defaultAccountId);
+                }
+                case TRANSFER -> {
+                    // For TRANSFER, defaults are ambiguous: leave missing accounts as-is (will be clarified/validated).
+                }
+                default -> {
+                    // no-op
+                }
+            }
+        }
+    }
+
+    /**
+     * Fund selection policy:
+     * - If user explicitly references a fund/category/budget OR literally mentions a known fund token -> allow model-chosen fund.
+     * - Otherwise -> do not allow inference; clear fund so defaults/clarification apply.
+     */
+    private void enforceFundSelectionPolicy(FinancialAgentResponse response, UserEntity userContext, String userMessage) {
+        if (response == null || response.getFinancialActions() == null) return;
+        String msg = userMessage != null ? userMessage.toLowerCase() : "";
+
+        boolean hasFundSignalWord = containsAny(msg,
+                " fund", "fund ", "category", "budget", "bucket",
+                " фонд", "фонд ", "категор", "бюджет"
+        );
+
+        // Build known fund tokens (externalId, displayName, aliases) to detect literal mentions.
+        Set<String> fundTokens = new HashSet<>();
+        if (userContext != null && userContext.getFunds() != null) {
+            for (var f : userContext.getFunds()) {
+                if (f == null) continue;
+                if (f.getFundId() != null) fundTokens.add(f.getFundId().toLowerCase());
+                if (f.getDisplayName() != null) fundTokens.add(f.getDisplayName().toLowerCase());
+                if (f.getAliases() != null) {
+                    for (String a : f.getAliases()) {
+                        if (a != null && !a.isBlank()) fundTokens.add(a.toLowerCase());
+                    }
+                }
+            }
+        }
+
+        boolean literallyMentionsKnownFund = false;
+        for (String t : fundTokens) {
+            if (t.length() < 3) continue;
+            if (msg.contains(t)) {
+                literallyMentionsKnownFund = true;
+                break;
+            }
+        }
+
+        // If no explicit fund signal and no literal mention of a known fund -> clear fund to prevent inference.
+        if (!hasFundSignalWord && !literallyMentionsKnownFund) {
+            for (FinancialAction action : response.getFinancialActions()) {
+                if (action != null && action.getOperationType() == OperationType.EXPENSE) {
+                    action.setFund(null);
+                }
+            }
+        }
+    }
+
+    private boolean containsAny(String haystack, String... needles) {
+        if (haystack == null || haystack.isBlank()) return false;
+        for (String n : needles) {
+            if (n == null || n.isBlank()) continue;
+            if (haystack.contains(n)) return true;
+        }
+        return false;
     }
     
     /**
@@ -322,7 +422,8 @@ public class FinancialAgent {
         );
         
         log.error(errorMsg);
-        throw new IllegalStateException(errorMsg);
+        // Treat validation failures as "need clarification" instead of hard errors.
+        throw new ModelValidationException(errorMsg);
     }
     
     private void validateUserName(String userName, UserEntity userContext, String fieldName) {
@@ -344,7 +445,7 @@ public class FinancialAgent {
             );
             
             log.error(errorMsg);
-            throw new IllegalStateException(errorMsg);
+            throw new ModelValidationException(errorMsg);
         }
     }
     
@@ -386,6 +487,12 @@ public class FinancialAgent {
           3. **SEMANTIC MATCHING:**
              - Match by meaning when exact word is not in the list
              - Look for semantically related fund/account in Available lists
+             - If the user uses a different language, mentally translate key terms to English before matching
+             - **DO NOT infer Fund from the purchase item itself.**
+               - If user only describes an expense (e.g., "200 for taxi", "200 for tickets") without explicitly referencing a fund/category/budget:
+                 use defaultFund if available, otherwise ask for clarification.
+               - Only attempt to match a Fund when the user explicitly references a fund/category/budget (e.g., "to fund X", "category X", "budget X").
+               - If user tried to reference a fund but you can't match confidently → PENDING_CLARIFICATION.
           
           4. **FALLBACK PRIORITY:**
              - First: Try to match user's word to Available list (phonetic + semantic)
