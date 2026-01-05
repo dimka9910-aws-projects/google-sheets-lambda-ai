@@ -36,7 +36,7 @@ import java.util.Set;
 @Component
 public class FinancialAgent {
     
-    private static final String MODEL = "gpt-4o-mini";
+    private static final String MODEL = "gpt-5-mini";
     private static final int MAX_TOKENS = 600;
     
     private final ChatModel chatModel;
@@ -95,7 +95,11 @@ public class FinancialAgent {
                     OpenAiChatOptions.builder()
                             .model(MODEL)
                             .maxCompletionTokens(MAX_TOKENS)
-                            .temperature(0.0)  // Deterministic for consistent parsing
+                            // GPT-5 reasoning models typically only support default temperature (1.0)
+                            .temperature(1.0)
+                            // Minimal reasoning effort to reduce latency/cost (if supported by the API/model).
+                            // Spring AI 1.1.x sends this under `extra_body`; our interceptor moves it to root.
+                            .extraBody(Map.of("reasoning_effort", "minimal"))
                             .build()
             );
             
