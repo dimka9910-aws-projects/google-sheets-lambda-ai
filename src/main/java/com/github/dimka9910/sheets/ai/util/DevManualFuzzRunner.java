@@ -39,12 +39,14 @@ public class DevManualFuzzRunner {
 
         // Create isolated test users and seed minimal data
         String runId = "ZZ_TEST_" + Instant.now().toString().replace(":", "").replace("-", "").replace(".", "");
+        String telegramIdA = "99" + System.currentTimeMillis() + "1";
+        String telegramIdB = "99" + System.currentTimeMillis() + "2";
         TestUser a;
         TestUser b;
 
         try (Connection c = connect(dbUrl)) {
-            a = createUserWithSetup(c, runId + "_A", "990000001");
-            b = createUserWithSetup(c, runId + "_B", "990000002");
+            a = createUserWithSetup(c, runId + "_A", telegramIdA);
+            b = createUserWithSetup(c, runId + "_B", telegramIdB);
             linkUsers(c, a.userId(), b.userId(), "B", List.of("spouse", "partner"));
             linkUsers(c, b.userId(), a.userId(), "A", List.of("spouse", "partner"));
         }
@@ -90,7 +92,78 @@ public class DevManualFuzzRunner {
 
     private static Connection connect(String databaseUrl) throws SQLException, ClassNotFoundException {
         Class.forName("org.postgresql.Driver");
-        return DriverManager.getConnection(databaseUrl);
+        if (databaseUrl == null || databaseUrl.isBlank()) {
+            throw new IllegalArgumentException("DATABASE_URL is blank");
+        }
+
+        // Accept:
+        // - jdbc:postgresql://host:5432/db?...
+        // - postgresql://user:pass@host:5432/db?...
+        String jdbcUrl = toJdbcUrl(databaseUrl);
+        return DriverManager.getConnection(jdbcUrl);
+    }
+
+    private static String toJdbcUrl(String databaseUrl) {
+        String url = databaseUrl.trim();
+        if (url.startsWith("jdbc:")) {
+            return url;
+        }
+        if (!url.startsWith("postgresql://")) {
+            // best-effort fallback
+            return "jdbc:" + url;
+        }
+
+        // Convert libpq URI to JDBC URL
+        // postgresql://user:pass@host:port/db?sslmode=require
+        try {
+            java.net.URI uri = java.net.URI.create(url);
+            String userInfo = uri.getUserInfo(); // user:pass
+            String user = null;
+            String pass = null;
+            if (userInfo != null) {
+                int idx = userInfo.indexOf(':');
+                if (idx >= 0) {
+                    user = userInfo.substring(0, idx);
+                    pass = userInfo.substring(idx + 1);
+                } else {
+                    user = userInfo;
+                }
+            }
+
+            String host = uri.getHost();
+            int port = uri.getPort() >= 0 ? uri.getPort() : 5432;
+            String path = uri.getPath(); // "/neondb"
+            if (path == null || path.isBlank() || "/".equals(path)) {
+                throw new IllegalArgumentException("DATABASE_URL missing database name in path");
+            }
+
+            String query = uri.getQuery(); // sslmode=require&...
+            StringBuilder q = new StringBuilder();
+            if (query != null && !query.isBlank()) {
+                q.append(query);
+            }
+            if (user != null && !user.isBlank()) {
+                if (q.length() > 0) q.append("&");
+                q.append("user=").append(encode(user));
+            }
+            if (pass != null && !pass.isBlank()) {
+                if (q.length() > 0) q.append("&");
+                q.append("password=").append(encode(pass));
+            }
+
+            return "jdbc:postgresql://" + host + ":" + port + path + (q.length() > 0 ? "?" + q : "");
+        } catch (Exception e) {
+            // fallback: prefix jdbc and hope driver accepts it
+            return "jdbc:" + url;
+        }
+    }
+
+    private static String encode(String s) {
+        try {
+            return java.net.URLEncoder.encode(s, java.nio.charset.StandardCharsets.UTF_8);
+        } catch (Exception e) {
+            return s;
+        }
     }
 
     private static TestUser createUserWithSetup(Connection c, String username, String telegramId) throws SQLException {
@@ -98,7 +171,7 @@ public class DevManualFuzzRunner {
 
         try (PreparedStatement ps = c.prepareStatement(
                 "INSERT INTO users (id, username, telegram_id, display_name, default_currency, preferred_language, ai_context, default_account_id, default_fund_id, created_at) " +
-                "VALUES (?::uuid, ?, ?, ?, NULL, NULL, '{}'::jsonb, NULL, NULL, NOW())")) {
+                "VALUES (?::uuid, ?, ?, ?, 'RSD', 'en', '{}'::jsonb, NULL, NULL, NOW())")) {
             ps.setObject(1, userId);
             ps.setString(2, username);
             ps.setString(3, telegramId);
@@ -107,13 +180,27 @@ public class DevManualFuzzRunner {
         }
 
         // Accounts: CARD + CASH
-        insertAccount(c, UUID.randomUUID(), userId, username + "_CARD", "Card", new String[0]);
-        insertAccount(c, UUID.randomUUID(), userId, username + "_CASH", "Cash", new String[0]);
+        UUID cardId = UUID.randomUUID();
+        UUID cashId = UUID.randomUUID();
+        insertAccount(c, cardId, userId, username + "_CARD", "Card", new String[0]);
+        insertAccount(c, cashId, userId, username + "_CASH", "Cash", new String[0]);
 
         // Funds: FOOD + TRANSPORT + TRAVEL
-        insertFund(c, UUID.randomUUID(), userId, "FOOD", "Food", new String[0]);
-        insertFund(c, UUID.randomUUID(), userId, "TRANSPORT", "Transport", new String[0]);
-        insertFund(c, UUID.randomUUID(), userId, "TRAVEL", "Travel", new String[0]);
+        UUID foodId = UUID.randomUUID();
+        UUID transportId = UUID.randomUUID();
+        UUID travelId = UUID.randomUUID();
+        insertFund(c, foodId, userId, "FOOD", "Food", new String[0]);
+        insertFund(c, transportId, userId, "TRANSPORT", "Transport", new String[0]);
+        insertFund(c, travelId, userId, "TRAVEL", "Travel", new String[0]);
+
+        // Set defaults: CARD account + FOOD fund
+        try (PreparedStatement ps = c.prepareStatement(
+                "UPDATE users SET default_account_id = ?::uuid, default_fund_id = ?::uuid WHERE id = ?::uuid")) {
+            ps.setObject(1, cardId);
+            ps.setObject(2, foodId);
+            ps.setObject(3, userId);
+            ps.executeUpdate();
+        }
 
         return new TestUser(username, telegramId, userId);
     }

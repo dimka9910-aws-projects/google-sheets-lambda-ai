@@ -114,6 +114,9 @@ public class FinancialAgent {
             // Parse FinancialAgentResponse using BeanOutputConverter
             FinancialAgentResponse result = outputConverter.convert(content);
             
+            // Normalize "not set" to null (model may echo our default placeholder)
+            normalizeNotSet(result);
+            
             // Validate that model followed instructions
             validateResult(result, userContext);
             
@@ -140,6 +143,18 @@ public class FinancialAgent {
                     .financialActions(List.of())
                     .message("Error processing financial operation: " + e.getMessage())
                     .build();
+        }
+    }
+    
+    /**
+     * Normalize "not set" placeholder to null (model may return our default placeholder literally).
+     */
+    private void normalizeNotSet(FinancialAgentResponse response) {
+        if (response.getFinancialActions() == null) return;
+        for (FinancialAction action : response.getFinancialActions()) {
+            if ("not set".equals(action.getAccount())) action.setAccount(null);
+            if ("not set".equals(action.getTargetAccount())) action.setTargetAccount(null);
+            if ("not set".equals(action.getFund())) action.setFund(null);
         }
     }
     
@@ -185,6 +200,15 @@ public class FinancialAgent {
                 
                 case TRANSFER -> {
                     // TRANSFER: check if it's internal or with linked user
+                    // Normalize userName based on context:
+                    if (financial.getTargetPerson() != null && financial.getUserName() == null) {
+                        // If targetPerson is set but userName is missing, assume sender is currentUser
+                        financial.setUserName(userContext.getUserName());
+                    } else if (financial.getUserName() != null && financial.getUserName().equals(userContext.getUserName()) && financial.getTargetPerson() == null) {
+                        // If userName=currentUser but targetPerson=null, this is internal transfer (model error)
+                        financial.setUserName(null);
+                    }
+                    
                     boolean hasUserNames = financial.getUserName() != null || financial.getTargetPerson() != null;
                     
                     if (hasUserNames) {
