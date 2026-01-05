@@ -471,10 +471,9 @@ public class FinancialAgent {
         **Required fields:** amount, currency, account, fund
         **Optional fields:** targetPerson (if spending FOR someone), comment
         
-        **Examples (conceptual - use ACTUAL values from Available lists!):**
-        - "coffee 200" → EXPENSE from default account to food-related fund FROM LIST
-        - "taxi 500 cash" → EXPENSE from cash account FROM LIST to transport-related fund FROM LIST
-        - "bought lunch for Sarah 1500" → EXPENSE with targetPerson (if Sarah is linked user)
+        **Important: Fund selection**
+        - If user does NOT explicitly reference a fund/category/budget: you MUST use {defaultFund} (if set) or return PENDING_CLARIFICATION.
+        - Do NOT infer fund from the purchase item text.
         
         ### 2. TRANSFER - Moving money between accounts
         **Case A: Between OWN accounts (no people involved)**
@@ -553,7 +552,7 @@ public class FinancialAgent {
         
         ### EXPENSE: Simple "for someone" (Generic third-party expense)
         - If user just says "bought coffee for Sarah" without specifying fund → generic expense
-        - Use payer's account and payer's fund (infer from item: coffee→FOOD), set targetPerson
+        - Use payer's account and payer's default fund (do NOT infer fund from the item), set targetPerson
         - Example (format only): "bought coffee for <linked user>" → {"account":"<ACCOUNT_FROM_LIST>","fund":"<FUND_FROM_LIST>","targetPerson":"<LINKED_USER_USERNAME>"}
         """;
 
