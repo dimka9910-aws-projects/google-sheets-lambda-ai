@@ -114,8 +114,26 @@ public class FinancialAgent {
             // Parse FinancialAgentResponse using BeanOutputConverter
             FinancialAgentResponse result = outputConverter.convert(content);
             
-            // Validate that model followed instructions
-            validateResult(result, userContext);
+            // Validate that model followed instructions.
+            // If validation fails, prefer returning the model's own message (likely in user's language),
+            // and only fall back to a generic message if none was provided.
+            try {
+                validateResult(result, userContext);
+            } catch (ModelValidationException ve) {
+                log.warn("⚠️ FinancialAgent model validation failed: {}", ve.getMessage());
+                String msg = (result != null && result.getMessage() != null && !result.getMessage().isBlank())
+                        ? result.getMessage()
+                        : "Please clarify the missing/ambiguous details (e.g., account and/or fund).";
+                return FinancialAgentResponse.builder()
+                        .financialActions(List.of())
+                        .pendingClarifications(List.of(
+                                com.github.dimka9910.sheets.ai.dto.response.PendingClarificationAction.builder()
+                                        .context(buildPendingContext(ve))
+                                        .build()
+                        ))
+                        .message(msg)
+                        .build();
+            }
             
             log.info("✅ FinancialAgent result: {} financial actions, pending={}", 
                     !CollectionUtils.isEmpty(result.getFinancialActions()) ? result.getFinancialActions().size() : 0, 
@@ -123,17 +141,6 @@ public class FinancialAgent {
             
             return result;
             
-        } catch (ModelValidationException e) {
-            log.warn("⚠️ FinancialAgent model validation failed: {}", e.getMessage());
-            return FinancialAgentResponse.builder()
-                    .financialActions(List.of())
-                    .pendingClarifications(List.of(
-                            com.github.dimka9910.sheets.ai.dto.response.PendingClarificationAction.builder()
-                                    .context(buildPendingContext(e))
-                                    .build()
-                    ))
-                    .message("Please clarify the missing/ambiguous details (e.g., account and/or fund).")
-                    .build();
         } catch (Exception e) {
             log.error("❌ FinancialAgent error: {}", e.getMessage(), e);
             return FinancialAgentResponse.builder()
@@ -571,10 +578,12 @@ public class FinancialAgent {
         params.put("currentUser", context.getUserName() != null ? context.getUserName() : "USER");
         params.put("preferredLanguage", context.getPreferredLanguage() != null ? context.getPreferredLanguage() : "English");
         params.put("currency", context.getDefaultCurrency() != null ? context.getDefaultCurrency() : "RSD");
-        params.put("defaultAccount", context.getDefaultAccount() != null ? 
-                context.getDefaultAccount().getAccountId() : "not set");
-        params.put("defaultFund", context.getDefaultFund() != null ? 
-                context.getDefaultFund().getFundId() : "not set");
+        // IMPORTANT (guardrail-only): do NOT use placeholder strings like "not set" that the model may echo back
+        // and then fail ID validation. Empty means "no default".
+        params.put("defaultAccount", context.getDefaultAccount() != null ?
+                context.getDefaultAccount().getAccountId() : "");
+        params.put("defaultFund", context.getDefaultFund() != null ?
+                context.getDefaultFund().getFundId() : "");
         
         String accountsList = contextMapper.formatAccountsList(context.getAccounts());
         String fundsList = contextMapper.formatFundsList(context.getFunds());
