@@ -106,11 +106,12 @@ public class Orchestrator {
                     // Check if MainAgent succeeded
                     if (!mainResponse.isSuccess()) {
                         log.error("❌ MainAgent failed: {}", mainResponse.errorMessage());
+                        String lang = com.github.dimka9910.sheets.ai.util.UserFacingText.detectLanguage(userContext, message);
                         // Create error response and yield it
                         yield MainAgentResponse.builder()
                                 .redirects(List.of())
                                 .pendingClarifications(List.of())
-                                .message("Error: " + mainResponse.errorMessage())
+                                .message(com.github.dimka9910.sheets.ai.util.UserFacingText.genericError(lang))
                                 .build();
                     }
                     
@@ -120,10 +121,11 @@ public class Orchestrator {
             
             if (agentResponse == null) {
                 log.error("❌ Agent returned NULL response!");
+                String lang = com.github.dimka9910.sheets.ai.util.UserFacingText.detectLanguage(userContext, message);
                 return TelegramChatResponse.builder()
                         .chatId(request.getResponseChatId())
                         .success(false)
-                        .message("Internal error: Agent returned no response")
+                        .message(com.github.dimka9910.sheets.ai.util.UserFacingText.internalError(lang))
                         .build();
             }
             
@@ -141,10 +143,11 @@ public class Orchestrator {
             
         } catch (Exception e) {
             log.error("Orchestration failed: {}", e.getMessage(), e);
+            String lang = com.github.dimka9910.sheets.ai.util.UserFacingText.detectLanguage(userContext, request.getMessage());
             return TelegramChatResponse.builder()
                     .chatId(request.getResponseChatId())
                     .success(false)
-                    .message("Error: " + e.getMessage())
+                    .message(com.github.dimka9910.sheets.ai.util.UserFacingText.genericError(lang))
                     .build();
         }
     }

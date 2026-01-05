@@ -88,9 +88,10 @@ public class ExpenseEditAndDeletionAgent {
 
         } catch (Exception e) {
             log.error("❌ ExpenseEditAndDeletionAgent error: {}", e.getMessage(), e);
+            String lang = com.github.dimka9910.sheets.ai.util.UserFacingText.detectLanguage(userContext, message);
             return FinancialAgentResponse.builder()
                     .financialActions(List.of())
-                    .message("Sorry, could not process the correction. Please try again.")
+                    .message(com.github.dimka9910.sheets.ai.util.UserFacingText.genericError(lang))
                     .build();
         }
     }

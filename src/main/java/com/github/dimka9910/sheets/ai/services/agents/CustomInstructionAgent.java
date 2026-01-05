@@ -162,10 +162,14 @@ public class CustomInstructionAgent {
             
         } catch (Exception e) {
             log.error("❌ CustomInstructionAgent error: {}", e.getMessage(), e);
+            // CustomInstructionAgent does not have the original user message here; use preferredLanguage or infer from instructions.
+            UserEntity ctx = request != null ? request.userEntity() : null;
+            String joined = request != null && request.instructions() != null ? String.join(" ", request.instructions()) : "";
+            String lang = com.github.dimka9910.sheets.ai.util.UserFacingText.detectLanguage(ctx, joined);
             return CustomInstructionAgentResponse.builder()
                     .customInstructionActions(List.of())
                     .pendingClarifications(new ArrayList<>())
-                    .message("Error processing instruction: " + e.getMessage())
+                    .message(com.github.dimka9910.sheets.ai.util.UserFacingText.genericError(lang))
                     .build();
         }
     }

@@ -70,9 +70,10 @@ public class FinancialAgent {
         log.info("🔷 FinancialAgent processing: \"{}\" (includeLinkedUsers={})", message, includeLinkedUsersContext);
         
         if (message == null || message.isBlank()) {
+            String lang = com.github.dimka9910.sheets.ai.util.UserFacingText.detectLanguage(userContext, message);
             return FinancialAgentResponse.builder()
                     .financialActions(List.of())
-                    .message("Error: Empty message")
+                    .message(com.github.dimka9910.sheets.ai.util.UserFacingText.emptyMessage(lang))
                     .build();
         }
         
@@ -105,9 +106,10 @@ public class FinancialAgent {
             
             if (content == null || content.isBlank()) {
                 log.error("❌ Empty response from LLM");
+                String lang = com.github.dimka9910.sheets.ai.util.UserFacingText.detectLanguage(userContext, message);
                 return FinancialAgentResponse.builder()
                         .financialActions(List.of())
-                        .message("Error: Empty response from AI model")
+                        .message(com.github.dimka9910.sheets.ai.util.UserFacingText.emptyModelResponse(lang))
                         .build();
             }
             
@@ -148,9 +150,10 @@ public class FinancialAgent {
                     .build();
         } catch (Exception e) {
             log.error("❌ FinancialAgent error: {}", e.getMessage(), e);
+            String lang = com.github.dimka9910.sheets.ai.util.UserFacingText.detectLanguage(userContext, message);
             return FinancialAgentResponse.builder()
                     .financialActions(List.of())
-                    .message("Error processing financial operation: " + e.getMessage())
+                    .message(com.github.dimka9910.sheets.ai.util.UserFacingText.genericError(lang))
                     .build();
         }
     }
