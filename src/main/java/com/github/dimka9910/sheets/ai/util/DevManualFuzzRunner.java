@@ -37,6 +37,9 @@ public class DevManualFuzzRunner {
             throw new IllegalStateException("DATABASE_URL is required to run DevManualFuzzRunner");
         }
 
+        // Smoke mode: run only first N steps to quickly validate model/config changes.
+        int maxSteps = Integer.parseInt(System.getenv().getOrDefault("ZZ_SMOKE_STEPS", "0"));
+
         // Create isolated test users and seed minimal data
         String runId = "ZZ_TEST_" + Instant.now().toString().replace(":", "").replace("-", "").replace(".", "");
         String telegramIdA = "99" + System.currentTimeMillis() + "1";
@@ -62,12 +65,32 @@ public class DevManualFuzzRunner {
 
         // Baseline: simple expense
         runner.step(a, "coffee 200", Expect.savedSingleOperation("EXPENSE"));
+        if (maxSteps > 0 && runner.stepsRun() >= maxSteps) {
+            System.out.println("\n✅ Smoke run completed for " + runId + " (steps=" + runner.stepsRun() + ")");
+            ctx.close();
+            return;
+        }
 
         // Regression: do NOT infer fund from purchase item. Use default fund when not explicitly referenced.
         runner.step(a, "taxi 200", Expect.savedSingleOperationFundIs("EXPENSE", "FOOD"));
+        if (maxSteps > 0 && runner.stepsRun() >= maxSteps) {
+            System.out.println("\n✅ Smoke run completed for " + runId + " (steps=" + runner.stepsRun() + ")");
+            ctx.close();
+            return;
+        }
         runner.step(a, "tickets 200", Expect.savedSingleOperationFundIs("EXPENSE", "FOOD"));
+        if (maxSteps > 0 && runner.stepsRun() >= maxSteps) {
+            System.out.println("\n✅ Smoke run completed for " + runId + " (steps=" + runner.stepsRun() + ")");
+            ctx.close();
+            return;
+        }
         // Explicit fund reference (format-focused): should pick TRAVEL when user explicitly references fund.
         runner.step(a, "tickets 200 to travel fund", Expect.savedSingleOperationFundIs("EXPENSE", "TRAVEL"));
+        if (maxSteps > 0 && runner.stepsRun() >= maxSteps) {
+            System.out.println("\n✅ Smoke run completed for " + runId + " (steps=" + runner.stepsRun() + ")");
+            ctx.close();
+            return;
+        }
 
         // Regression: resolving a pending clarification + setting default in the SAME reply should do BOTH.
         // Remove default fund, create pending, then resolve with "use TRAVEL and set as default".
@@ -274,6 +297,7 @@ public class DevManualFuzzRunner {
     private static final class ScenarioRunner {
         private final String dbUrl;
         private final SqsMessageProcessor processor;
+        private int stepsRun = 0;
 
         private ScenarioRunner(String dbUrl, SqsMessageProcessor processor) {
             this.dbUrl = dbUrl;
@@ -298,6 +322,11 @@ public class DevManualFuzzRunner {
             try (Connection c = connect(dbUrl)) {
                 expectation.verify(c, user, message, resp);
             }
+            stepsRun++;
+        }
+
+        int stepsRun() {
+            return stepsRun;
         }
     }
 
