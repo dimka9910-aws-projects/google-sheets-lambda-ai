@@ -113,7 +113,15 @@ public class FinancialAgent {
             
             // Parse FinancialAgentResponse using BeanOutputConverter
             FinancialAgentResponse result = outputConverter.convert(content);
-            
+
+            // Contract enforcement (guardrail-only):
+            // If the model asks for clarification, it MUST NOT return any financial actions.
+            // In practice models sometimes return both; we treat that as "pending only" and skip validation/saving.
+            if (result != null && !CollectionUtils.isEmpty(result.getPendingClarifications())) {
+                result.setFinancialActions(List.of());
+                return result;
+            }
+
             // Validate that model followed instructions.
             // If validation fails, prefer returning the model's own message (likely in user's language),
             // and only fall back to a generic message if none was provided.
@@ -513,6 +521,9 @@ public class FinancialAgent {
         - "coffee" → {{"context": "User wants to record coffee expense. Missing: amount."}}
         - "transfer 1000" → {{"context": "User wants to transfer 1000. Missing: source account and target account."}}
         - If user mentions something NOT in Available lists → Ask for clarification, NEVER invent values!
+        
+        **CRITICAL CONTRACT:**
+        - If you output ANY `pendingClarifications`, then `financialActions` MUST be an empty array.
     """;
     
     // Additional section for TRANSFER operations with linked users (conditionally appended)
