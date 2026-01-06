@@ -288,15 +288,19 @@ public class MainAgentResultHandler {
             return;
         }
         
-        // Update in memory
-        var account = userContext.getAccounts().stream()
-            .filter(acc -> acc.getAccountId().equals(accountId))
-            .findFirst();
-        
-        if (account.isPresent()) {
-            if (!account.get().getAliases().contains(alias)) {
-                account.get().getAliases().add(alias);
-            }
+        // Update in memory (defensive: aliases list can be null/immutable depending on mapper)
+        if (userContext.getAccounts() != null) {
+            var account = userContext.getAccounts().stream()
+                    .filter(acc -> acc.getAccountId().equals(accountId))
+                    .findFirst();
+
+            account.ifPresent(acc -> {
+                if (acc.getAliases() == null) acc.setAliases(new ArrayList<>());
+                else acc.setAliases(new ArrayList<>(acc.getAliases())); // ensure mutable
+                if (!acc.getAliases().contains(alias)) {
+                    acc.getAliases().add(alias);
+                }
+            });
         }
         
         // Save to database
@@ -334,15 +338,19 @@ public class MainAgentResultHandler {
             return;
         }
         
-        // Update in memory
-        var fund = userContext.getFunds().stream()
-            .filter(f -> f.getFundId().equals(fundId))
-            .findFirst();
-        
-        if (fund.isPresent()) {
-            if (!fund.get().getAliases().contains(alias)) {
-                fund.get().getAliases().add(alias);
-            }
+        // Update in memory (defensive: aliases list can be null/immutable depending on mapper)
+        if (userContext.getFunds() != null) {
+            var fund = userContext.getFunds().stream()
+                    .filter(f -> f.getFundId().equals(fundId))
+                    .findFirst();
+
+            fund.ifPresent(f -> {
+                if (f.getAliases() == null) f.setAliases(new ArrayList<>());
+                else f.setAliases(new ArrayList<>(f.getAliases())); // ensure mutable
+                if (!f.getAliases().contains(alias)) {
+                    f.getAliases().add(alias);
+                }
+            });
         }
         
         // Save to database

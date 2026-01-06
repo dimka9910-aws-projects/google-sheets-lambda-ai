@@ -102,7 +102,8 @@ public class UserEntityMapper {
                 .id(jpa.getId())  // UUID for internal reference
                 .accountId(jpa.getExternalId())
                 .displayName(jpa.getDisplayName())
-                .aliases(jpa.getAliases() != null ? List.of(jpa.getAliases()) : List.of())
+                // Must be mutable (handlers may add/remove aliases at runtime) and must expand String[] properly.
+                .aliases(jpa.getAliases() != null ? new ArrayList<>(Arrays.asList(jpa.getAliases())) : new ArrayList<>())
                 .build();
     }
 
@@ -111,7 +112,8 @@ public class UserEntityMapper {
                 .id(jpa.getId())  // UUID for internal reference
                 .fundId(jpa.getExternalId())
                 .displayName(jpa.getDisplayName())
-                .aliases(jpa.getAliases() != null ? List.of(jpa.getAliases()) : List.of())
+                // Must be mutable (handlers may add/remove aliases at runtime) and must expand String[] properly.
+                .aliases(jpa.getAliases() != null ? new ArrayList<>(Arrays.asList(jpa.getAliases())) : new ArrayList<>())
                 .build();
     }
 
@@ -120,7 +122,8 @@ public class UserEntityMapper {
         return LinkedUserEntry.builder()
                 .targetUserId(jpa.getTargetUserId())  // Store UUID for loading
                 .displayName(jpa.getDisplayName())
-                .aliases(jpa.getAliases() != null ? List.of(jpa.getAliases()) : List.of())
+                // Must be mutable (handlers may add/remove aliases at runtime) and must expand String[] properly.
+                .aliases(jpa.getAliases() != null ? new ArrayList<>(Arrays.asList(jpa.getAliases())) : new ArrayList<>())
                 .build();
     }
 
