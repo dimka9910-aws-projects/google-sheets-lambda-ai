@@ -60,6 +60,10 @@ public class CustomInstructionAgent {
             - Use ONLY IDs that exist in the provided context lists (accounts/funds/linked users).
             - If ambiguous, DO NOT guess: ask a question in `message` and add ONE item into `pendingClarifications`.
             - For aliases: store the alias value as provided (do not invent new aliases).
+            - Keep `customInstructionActions[*].value` SHORT and canonical:
+              - Max ~160 characters.
+              - No examples, no parentheses, no long explanations.
+              - Prefer a compact rule format: "WHEN <condition> THEN <action>".
 
             ## USER CONTEXT
             
