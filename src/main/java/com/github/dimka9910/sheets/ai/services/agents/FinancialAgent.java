@@ -38,7 +38,7 @@ import java.util.Set;
 @Component
 public class FinancialAgent {
     
-    private static final String MODEL = "gpt-5-mini";
+    private static final String MODEL = "gpt-5.2";
     private static final int MAX_TOKENS = 600;
     
     private final ChatModel chatModel;
@@ -89,6 +89,7 @@ public class FinancialAgent {
             
             // Create Spring AI Prompt
             @SuppressWarnings("null")
+            // Default to minimal reasoning effort for latency/cost.
             String reasoningEffort = System.getenv().getOrDefault("ZZ_REASONING_EFFORT", "low").trim().toLowerCase();
             if (reasoningEffort.isBlank()) reasoningEffort = "low";
             if (!reasoningEffort.equals("low") && !reasoningEffort.equals("medium") && !reasoningEffort.equals("high")) {
