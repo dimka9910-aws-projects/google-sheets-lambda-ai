@@ -9,6 +9,7 @@ on:
 env:
   AWS_REGION: eu-central-1
   MAVEN_SETTINGS: .github/maven-settings.xml
+  SAM_CLI_TELEMETRY: 0
 
 jobs:
   build:
@@ -24,6 +25,11 @@ jobs:
           java-version: '17'
           distribution: 'corretto'
           cache: 'maven'
+
+      - name: Configure Maven mirror (for SAM build)
+        run: |
+          mkdir -p "$HOME/.m2"
+          cp "$MAVEN_SETTINGS" "$HOME/.m2/settings.xml"
       
       - name: Build with Maven (Spring Boot)
         run: mvn -s "$MAVEN_SETTINGS" -B -ntp clean package -DskipTests
@@ -51,6 +57,11 @@ jobs:
           java-version: '17'
           distribution: 'corretto'
           cache: 'maven'
+
+      - name: Configure Maven mirror (for SAM build)
+        run: |
+          mkdir -p "$HOME/.m2"
+          cp "$MAVEN_SETTINGS" "$HOME/.m2/settings.xml"
       
       - name: Build with Maven (Spring Boot)
         run: mvn -s "$MAVEN_SETTINGS" -B -ntp clean package -DskipTests
@@ -119,6 +130,11 @@ jobs:
           java-version: '17'
           distribution: 'corretto'
           cache: 'maven'
+
+      - name: Configure Maven mirror (for SAM build)
+        run: |
+          mkdir -p "$HOME/.m2"
+          cp "$MAVEN_SETTINGS" "$HOME/.m2/settings.xml"
       
       - name: Build with Maven (Spring Boot)
         run: mvn -s "$MAVEN_SETTINGS" -B -ntp clean package -DskipTests
