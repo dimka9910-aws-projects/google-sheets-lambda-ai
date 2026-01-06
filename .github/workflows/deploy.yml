@@ -25,7 +25,7 @@ jobs:
           cache: 'maven'
       
       - name: Build with Maven (Spring Boot)
-        run: mvn clean package -DskipTests
+        run: mvn -B -ntp clean package -DskipTests
       
       - name: Upload artifact
         uses: actions/upload-artifact@v4
@@ -52,7 +52,7 @@ jobs:
           cache: 'maven'
       
       - name: Build with Maven (Spring Boot)
-        run: mvn clean package -DskipTests
+        run: mvn -B -ntp clean package -DskipTests
       
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v4
@@ -69,14 +69,8 @@ jobs:
           DATABASE_URL: ${{ secrets.DATABASE_URL_DEV }}
         run: |
           echo "🚀 Running database migrations to DEV..."
-          # Parse DATABASE_URL (format: postgresql://user:pass@host:port/db?params)
-          DB_USER=$(echo "$DATABASE_URL" | sed -n 's|postgresql://\([^:]*\):.*|\1|p')
-          DB_PASS=$(echo "$DATABASE_URL" | sed -n 's|postgresql://[^:]*:\([^@]*\)@.*|\1|p')
-          JDBC_URL=$(echo "$DATABASE_URL" | sed 's|postgresql://[^@]*@|jdbc:postgresql://|')
-          mvn liquibase:update \
-            -Dliquibase.url="$JDBC_URL" \
-            -Dliquibase.username="$DB_USER" \
-            -Dliquibase.password="$DB_PASS"
+          chmod +x ./run-migrations.sh
+          ./run-migrations.sh
       
       - name: SAM Build
         run: sam build
@@ -125,7 +119,7 @@ jobs:
           cache: 'maven'
       
       - name: Build with Maven (Spring Boot)
-        run: mvn clean package -DskipTests
+        run: mvn -B -ntp clean package -DskipTests
       
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v4
@@ -142,14 +136,8 @@ jobs:
           DATABASE_URL: ${{ secrets.DATABASE_URL_PROD }}
         run: |
           echo "🚀 Running database migrations to PROD..."
-          # Parse DATABASE_URL (format: postgresql://user:pass@host:port/db?params)
-          DB_USER=$(echo "$DATABASE_URL" | sed -n 's|postgresql://\([^:]*\):.*|\1|p')
-          DB_PASS=$(echo "$DATABASE_URL" | sed -n 's|postgresql://[^:]*:\([^@]*\)@.*|\1|p')
-          JDBC_URL=$(echo "$DATABASE_URL" | sed 's|postgresql://[^@]*@|jdbc:postgresql://|')
-          mvn liquibase:update \
-            -Dliquibase.url="$JDBC_URL" \
-            -Dliquibase.username="$DB_USER" \
-            -Dliquibase.password="$DB_PASS"
+          chmod +x ./run-migrations.sh
+          ./run-migrations.sh
       
       - name: SAM Build
         run: sam build
