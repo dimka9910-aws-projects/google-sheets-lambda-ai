@@ -43,7 +43,6 @@ public class MessageClassifierAgent {
     
     public record Response(
             Category category,
-            String reply,
             String rawJson,
             String errorMessage
     ) {}
@@ -55,8 +54,7 @@ public class MessageClassifierAgent {
     public enum Category {
         SIMPLE_FINANCIAL,         // Financial operation WITHOUT linked users → FinancialAgent (minimal context, cheap)
         THIRD_PARTY_FINANCIAL,    // Financial operation WITH linked users → FinancialAgent (with linked users context)
-        COMPLEX_ACTION,           // Everything else → MainAgent with full context (corrections, multi-step, custom instructions)
-        SMALL_TALK                // Non-financial chatter (greetings, jokes, stories, nonsense) → reply briefly, do NOT route to MainAgent
+        COMPLEX_ACTION            // Everything else → MainAgent with full context (corrections, multi-step, custom instructions)
     }
 
     // ═══════════════════════════════════════════════════════════════════════════
@@ -105,17 +103,6 @@ public class MessageClassifierAgent {
             - If user tries to add something to previous message like "and also...", "also forgot to say..."
             - any possible reference to previous messages should be treated like COMPLEX_ACTION
 
-            **SMALL_TALK** - Non-financial conversation / nonsense
-            This includes:
-            - Greetings and small talk: "hi", "how are you", "привет", "как дела"
-            - Requests for jokes/stories/advice unrelated to finance tracking
-            - "Let's just chat", "tell me something", "write me a big story", etc.
-
-            If you choose SMALL_TALK:
-            - Return a SHORT reply (1-2 sentences max).
-            - Do NOT tell stories, do NOT generate jokes, do NOT provide general advice.
-            - Politely steer the user back to finance tracking (expense/income/transfer/correction/settings).
-            
             ## Special Rules
             - When in doubt → COMPLEX_ACTION (safe default)
             
@@ -129,7 +116,7 @@ public class MessageClassifierAgent {
     /**
      * Classification result from LLM (used for structured output parsing).
      */
-    public record ClassificationResult(String category, String reply) {}
+    public record ClassificationResult(String category) {}
     
     // ═══════════════════════════════════════════════════════════════════════════
     // DEPENDENCIES (injected by Spring)
@@ -190,13 +177,12 @@ public class MessageClassifierAgent {
             
             log.info("✅ Classification: category={}", category);
             
-            return new Response(category, result.reply(), content, null);
+            return new Response(category, content, null);
             
         } catch (Exception e) {
             log.error("❌ Classification error: {}", e.getMessage(), e);
             return new Response(
                     Category.COMPLEX_ACTION,  // Safe fallback
-                    null,
                     "{\"error\":\"" + e.getMessage() + "\"}",
                     e.getMessage()
             );
@@ -221,12 +207,6 @@ public class MessageClassifierAgent {
       return category;
     }
 
-    /**
-     * Convenience method to get both category and (optional) SMALL_TALK reply.
-     */
-    public Response classifyWithReply(String message, List<String> linkedUserNamesAndAliases) {
-        return process(new Request(message, linkedUserNamesAndAliases));
-    }
     
     // ═══════════════════════════════════════════════════════════════════════════
     // BUILD PROMPT (Spring AI uses system + user messages)

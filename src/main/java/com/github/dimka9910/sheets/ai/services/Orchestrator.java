@@ -73,7 +73,6 @@ public class Orchestrator {
             boolean hasPending = userContext.getPendingActions() != null && !userContext.getPendingActions().isEmpty();
             
             Category category;
-            String classifierReply = null;
             if (hasPending) {
                 log.info("User has {} pending clarifications → routing to MainAgent", userContext.getPendingActions().size());
                 category = Category.COMPLEX_ACTION;  // Force MainAgent
@@ -90,14 +89,7 @@ public class Orchestrator {
                     }
                 }
                 
-                var classifierResponse = classifierAgent.classifyWithReply(message, linkedUserNamesAndAliases);
-                if (classifierResponse.errorMessage() != null) {
-                    log.error("Classification failed: {}", classifierResponse.errorMessage());
-                    category = Category.COMPLEX_ACTION;
-                } else {
-                    category = classifierResponse.category();
-                    classifierReply = classifierResponse.reply();
-                }
+                category = classifierAgent.classify(message, linkedUserNamesAndAliases);
                 log.info("Classification: category={} (linkedUsers={})", category, linkedUserNamesAndAliases);
             }
             
@@ -110,17 +102,6 @@ public class Orchestrator {
                 case THIRD_PARTY_FINANCIAL -> {
                     log.info("→ Routing to FinancialAgent (with linked users context)");
                     yield financialAgent.process(message, userContext, true);   // Include linked users context
-                }
-                case SMALL_TALK -> {
-                    log.info("→ SMALL_TALK: returning brief reply without calling MainAgent");
-                    String reply = (classifierReply == null || classifierReply.isBlank())
-                            ? "I can help with finance tracking (expense/income/transfer/correction/settings). Please send a finance-related request."
-                            : classifierReply;
-                    yield MainAgentResponse.builder()
-                            .redirects(List.of())
-                            .pendingClarifications(List.of())
-                            .message(reply)
-                            .build();
                 }
                 case COMPLEX_ACTION -> {
                     log.info("→ Routing to MainAgent (COMPLEX_ACTION)");

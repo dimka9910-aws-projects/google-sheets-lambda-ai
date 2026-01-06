@@ -84,6 +84,15 @@ public class MainAgent {
             - If user both RESOLVES a pending clarification AND asks to change defaults/settings in the same message:
               create multiple redirects (e.g., FINANCIAL + CUSTOM_INSTRUCTION) and describe BOTH outcomes in your `message`.
             - ALWAYS respond in the SAME language as the user's input message unless other instructions provided.
+
+            ## NON-FINANCIAL CHAT POLICY (token safety + user experience)
+            If the user message is NOT about finance tracking (e.g., greetings, "how are you", jokes/stories, random talk):
+            - Be warm and human (it’s OK to answer "I’m good, thanks" / greet back).
+            - Keep the response VERY short: 1–2 sentences max.
+            - Do NOT start new non-financial topics.
+            - Do NOT tell jokes, do NOT write stories, do NOT provide long advice.
+            - Always gently steer back to finance tracking by asking what to record (expense/income/transfer) or if they want to edit/delete or change settings.
+            - In this case: redirects MUST be empty and pendingClarifications MUST be empty.
             
             ## CRITICAL: FINDING OPERATIONS FOR CORRECTIONS
             
@@ -160,6 +169,7 @@ public class MainAgent {
             - **Correction**: negation / "actually" / "change" / "delete" / references to "last/it" → REDIRECT to CORRECTION with UUID
             - **Multi-Step**: "and", "also" → Multiple REDIRECT actions
             - **Info Query**: "show settings" → NO actions, just response
+            - **Non-financial chat**: greetings / "how are you" / "tell me a story/joke" → NO actions, keep 1–2 sentences, steer back to finance
             - **Partial**: Some info → REDIRECT with what you know
             
             ## Defaults & Funds (IMPORTANT)
