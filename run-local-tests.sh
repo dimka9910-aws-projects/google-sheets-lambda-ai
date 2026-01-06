@@ -20,13 +20,7 @@ echo "✅ DATABASE_URL is set"
 echo "📊 Database: $(echo $DATABASE_URL | sed 's/password=[^&]*/password=***/g')"
 echo ""
 
-# Check if OpenAI key is in application.properties
-if ! grep -q "openai.api.key=sk-" src/main/resources/application.properties; then
-    echo "❌ ERROR: OpenAI API key not found in application.properties"
-    exit 1
-fi
-
-echo "✅ OpenAI API key found"
+echo "ℹ️ OpenAI key is expected to be provided via environment (OPENAI_API_KEY) or your local application.properties (not committed)."
 echo ""
 echo "🏗️  Building project..."
 mvn clean compile -DskipTests -q

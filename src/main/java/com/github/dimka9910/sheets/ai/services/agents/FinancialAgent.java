@@ -10,8 +10,6 @@ import org.springframework.ai.chat.messages.SystemMessage;
 import org.springframework.ai.chat.messages.UserMessage;
 import org.springframework.ai.chat.model.ChatModel;
 import org.springframework.ai.chat.model.ChatResponse;
-import org.springframework.ai.chat.metadata.ChatResponseMetadata;
-import org.springframework.ai.chat.metadata.Usage;
 import org.springframework.ai.chat.prompt.Prompt;
 import org.springframework.ai.converter.BeanOutputConverter;
 import org.springframework.ai.openai.OpenAiChatOptions;
@@ -89,13 +87,6 @@ public class FinancialAgent {
             
             // Create Spring AI Prompt
             @SuppressWarnings("null")
-            // Default to minimal reasoning effort for latency/cost.
-            String reasoningEffort = System.getenv().getOrDefault("ZZ_REASONING_EFFORT", "low").trim().toLowerCase();
-            if (reasoningEffort.isBlank()) reasoningEffort = "low";
-            if (!reasoningEffort.equals("low") && !reasoningEffort.equals("medium") && !reasoningEffort.equals("high")) {
-                log.warn("⚠️ Invalid ZZ_REASONING_EFFORT='{}'. Using 'low'. Allowed: low|medium|high", reasoningEffort);
-                reasoningEffort = "low";
-            }
             Prompt prompt = new Prompt(
                     List.of(
                             new SystemMessage(systemPrompt),
@@ -108,15 +99,12 @@ public class FinancialAgent {
                             .temperature(1.0)
                             // Spring AI OpenAiChatOptions supports reasoningEffort for reasoning models.
                             // Supported values (per Spring AI 1.1.1 source): low | medium | high.
-                            .reasoningEffort(reasoningEffort)
+                            .reasoningEffort("low")
                             .build()
             );
             
             // Call LLM
-            long t0 = System.nanoTime();
             ChatResponse chatResponse = chatModel.call(prompt);
-            long ms = (System.nanoTime() - t0) / 1_000_000;
-            log.info("⏱️ LLM call duration: {} ms (model={}, reasoningEffort={})", ms, MODEL, reasoningEffort);
             String content = chatResponse.getResult().getOutput().getText();
             
             if (content == null || content.isBlank()) {
@@ -173,135 +161,6 @@ public class FinancialAgent {
                     .build();
         }
     }
-
-    /**
-     * Benchmark-friendly call that returns LLM latency and token usage in addition to the parsed response.
-     * Does NOT write anything to DB; caller decides how to interpret the result.
-     */
-    public BenchRunResult processBench(String message,
-                                       UserEntity userContext,
-                                       boolean includeLinkedUsersContext,
-                                       String model,
-                                       String reasoningEffort,
-                                       Integer maxCompletionTokens) {
-        if (message == null || message.isBlank()) {
-            return new BenchRunResult(
-                    FinancialAgentResponse.builder().financialActions(List.of()).message("Please send a non-empty message.").build(),
-                    new BenchMetrics(0, null, null, null, null, null)
-            );
-        }
-
-        String eff = (reasoningEffort == null ? "low" : reasoningEffort.trim().toLowerCase());
-        if (!eff.equals("low") && !eff.equals("medium") && !eff.equals("high")) eff = "low";
-
-        String m = (model == null || model.isBlank()) ? MODEL : model.trim();
-        int maxOut = maxCompletionTokens != null ? maxCompletionTokens : MAX_TOKENS;
-
-        try {
-            String systemPrompt = buildSystemPrompt(userContext, includeLinkedUsersContext);
-            String userPrompt = "User message: " + message;
-
-            String jsonSchema = outputConverter.getFormat();
-            systemPrompt += "\n\n" + jsonSchema;
-
-            Prompt prompt = new Prompt(
-                    List.of(new SystemMessage(systemPrompt), new UserMessage(userPrompt)),
-                    OpenAiChatOptions.builder()
-                            .model(m)
-                            .maxCompletionTokens(maxOut)
-                            .temperature(1.0)
-                            .reasoningEffort(eff)
-                            .build()
-            );
-
-            long t0 = System.nanoTime();
-            ChatResponse chatResponse = chatModel.call(prompt);
-            long llmMs = (System.nanoTime() - t0) / 1_000_000;
-
-            ChatResponseMetadata md = chatResponse.getMetadata();
-            Usage usage = md != null ? md.getUsage() : null;
-
-            Integer promptTokens = usage != null ? usage.getPromptTokens() : null;
-            Integer completionTokens = usage != null ? usage.getCompletionTokens() : null;
-            Integer totalTokens = usage != null ? usage.getTotalTokens() : null;
-
-            Integer cachedTokens = null;
-            Integer reasoningTokens = null;
-            Object nativeUsage = (usage instanceof org.springframework.ai.chat.metadata.DefaultUsage du) ? du.getNativeUsage() : null;
-            // Best-effort: OpenAI native usage has prompt_tokens_details.cached_tokens and completion_tokens_details.reasoning_tokens
-            if (nativeUsage != null) {
-                try {
-                    // OpenAiApi.Usage is a record with accessors; use reflection to avoid direct compile-time dependency.
-                    Object promptDetails = nativeUsage.getClass().getMethod("promptTokensDetails").invoke(nativeUsage);
-                    if (promptDetails != null) {
-                        Object v = promptDetails.getClass().getMethod("cachedTokens").invoke(promptDetails);
-                        if (v instanceof Integer i) cachedTokens = i;
-                    }
-                    Object completionDetails = nativeUsage.getClass().getMethod("completionTokenDetails").invoke(nativeUsage);
-                    if (completionDetails != null) {
-                        Object v = completionDetails.getClass().getMethod("reasoningTokens").invoke(completionDetails);
-                        if (v instanceof Integer i) reasoningTokens = i;
-                    }
-                } catch (Exception ignored) {
-                    // keep nulls
-                }
-            }
-
-            String content = chatResponse.getResult().getOutput().getText();
-            if (content == null || content.isBlank()) {
-                FinancialAgentResponse r = FinancialAgentResponse.builder()
-                        .financialActions(List.of())
-                        .message("I didn't get a response from the AI model. Please try again.")
-                        .build();
-                return new BenchRunResult(r, new BenchMetrics(llmMs, promptTokens, completionTokens, totalTokens, cachedTokens, reasoningTokens));
-            }
-
-            FinancialAgentResponse result = outputConverter.convert(content);
-
-            // Contract enforcement: pending => no actions
-            if (result != null && !CollectionUtils.isEmpty(result.getPendingClarifications())) {
-                result.setFinancialActions(List.of());
-                return new BenchRunResult(result, new BenchMetrics(llmMs, promptTokens, completionTokens, totalTokens, cachedTokens, reasoningTokens));
-            }
-
-            try {
-                validateResult(result, userContext);
-            } catch (ModelValidationException ve) {
-                String msg = (result != null && result.getMessage() != null && !result.getMessage().isBlank())
-                        ? result.getMessage()
-                        : "Please clarify the missing/ambiguous details (e.g., account and/or fund).";
-                FinancialAgentResponse r = FinancialAgentResponse.builder()
-                        .financialActions(List.of())
-                        .pendingClarifications(List.of(
-                                com.github.dimka9910.sheets.ai.dto.response.PendingClarificationAction.builder()
-                                        .context(buildPendingContext(ve))
-                                        .build()
-                        ))
-                        .message(msg)
-                        .build();
-                return new BenchRunResult(r, new BenchMetrics(llmMs, promptTokens, completionTokens, totalTokens, cachedTokens, reasoningTokens));
-            }
-
-            return new BenchRunResult(result, new BenchMetrics(llmMs, promptTokens, completionTokens, totalTokens, cachedTokens, reasoningTokens));
-        } catch (Exception e) {
-            String msg = e.getMessage() != null ? e.getMessage() : e.getClass().getSimpleName();
-            if (msg.length() > 180) msg = msg.substring(0, 180) + "...";
-            FinancialAgentResponse r = FinancialAgentResponse.builder()
-                    .financialActions(List.of())
-                    .message("ERROR: " + msg)
-                    .build();
-            return new BenchRunResult(r, new BenchMetrics(0, null, null, null, null, null));
-        }
-    }
-
-    public record BenchMetrics(long llmMs,
-                               Integer promptTokens,
-                               Integer completionTokens,
-                               Integer totalTokens,
-                               Integer cachedTokens,
-                               Integer reasoningTokens) {}
-
-    public record BenchRunResult(FinancialAgentResponse response, BenchMetrics metrics) {}
     
     // NOTE: guardrail-only mode:
     // - We do NOT modify model output (no server-side defaults, no heuristic fund/account inference).

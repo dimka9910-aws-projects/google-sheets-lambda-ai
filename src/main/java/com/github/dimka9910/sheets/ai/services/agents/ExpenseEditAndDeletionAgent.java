@@ -65,7 +65,7 @@ public class ExpenseEditAndDeletionAgent {
                             .model(MODEL)
                             .maxCompletionTokens(MAX_COMPLETION_TOKENS)
                             .temperature(1.0) // GPT-5.x reasoning models: keep default temperature
-                            .reasoningEffort(System.getenv().getOrDefault("ZZ_REASONING_EFFORT", "low").trim().toLowerCase())
+                            .reasoningEffort("low")
                             .build()
             );
 
