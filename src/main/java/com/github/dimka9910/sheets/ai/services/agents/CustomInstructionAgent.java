@@ -36,7 +36,7 @@ import java.util.List;
 @Component
 public class CustomInstructionAgent {
 
-    private static final String MODEL = "gpt-5-mini";
+    private static final String MODEL = "gpt-5.2";
     private static final int MAX_COMPLETION_TOKENS = 1500;
 
     public record Request(
@@ -138,7 +138,8 @@ public class CustomInstructionAgent {
                     OpenAiChatOptions.builder()
                             .model(MODEL)
                             .maxCompletionTokens(MAX_COMPLETION_TOKENS)
-                            .temperature(1.0) // gpt-5-mini (reasoning model) only supports default (1.0)
+                            .temperature(1.0) // GPT-5.x reasoning models: keep default temperature
+                            .reasoningEffort(System.getenv().getOrDefault("ZZ_REASONING_EFFORT", "low").trim().toLowerCase())
                             .build()
             );
 

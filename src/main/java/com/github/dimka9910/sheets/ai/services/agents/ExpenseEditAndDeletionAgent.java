@@ -23,13 +23,13 @@ import java.util.List;
  * - MODIFY operations (change amount, account, fund, etc.)
  * - DELETE operations (remove existing records)
  * 
- * Uses gpt-4o-mini for fast, focused corrections processing.
+ * Uses GPT-5.2 for robust corrections processing.
  */
 @Slf4j
 @Component
 public class ExpenseEditAndDeletionAgent {
 
-    private static final String MODEL = "gpt-4o-mini";
+    private static final String MODEL = "gpt-5.2";
     private static final int MAX_COMPLETION_TOKENS = 1000;
 
     private final ChatModel chatModel;
@@ -64,7 +64,8 @@ public class ExpenseEditAndDeletionAgent {
                     OpenAiChatOptions.builder()
                             .model(MODEL)
                             .maxCompletionTokens(MAX_COMPLETION_TOKENS)
-                            .temperature(0.3) // Lower temp for precise corrections
+                            .temperature(1.0) // GPT-5.x reasoning models: keep default temperature
+                            .reasoningEffort(System.getenv().getOrDefault("ZZ_REASONING_EFFORT", "low").trim().toLowerCase())
                             .build()
             );
 
