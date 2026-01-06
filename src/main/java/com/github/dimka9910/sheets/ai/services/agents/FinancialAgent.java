@@ -389,6 +389,9 @@ public class FinancialAgent {
              - If the user message contains exactly ONE clear numeric value (e.g., "200", "200.50"), it MUST be used as `amount`.
              - Do NOT ask for amount if a clear numeric value is present.
              - If there are multiple numbers and it's ambiguous which is the amount → PENDING_CLARIFICATION.
+             - **Minor-units / subunits (CRITICAL):**
+               - If the user specifies the amount in a currency minor unit (a subunit like cents/pence/sen/centimes/etc.), you MUST NOT treat it as a major-unit amount.
+               - Convert to the major unit using the known factor (commonly 100 minor units = 1 major unit). If you are not 100% confident about the factor or which major currency it belongs to → PENDING_CLARIFICATION (ask whether they mean major units or minor units).
            - **Currency**:
              - If the user explicitly mentions a currency (name/symbol/ISO code) in ANY language, map it to an ISO 4217 currency code.
              - Treat misspellings/slang/phonetic spellings as a currency mention if they clearly resemble a currency term.
