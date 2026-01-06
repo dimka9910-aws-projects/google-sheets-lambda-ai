@@ -21,11 +21,28 @@ import java.util.regex.Pattern;
 public class DevDatabaseSetup {
 
     private static final String DATABASE_URL = System.getenv("DATABASE_URL");
+    private static final String CONFIRM_FLAG = "--i-know-this-will-delete-dev-data";
     
     public static void main(String[] args) {
         if (DATABASE_URL == null || DATABASE_URL.isBlank()) {
             log.error("❌ DATABASE_URL environment variable is not set");
             System.exit(1);
+        }
+
+        boolean confirmed = false;
+        if (args != null) {
+            for (String a : args) {
+                if (CONFIRM_FLAG.equals(a)) {
+                    confirmed = true;
+                    break;
+                }
+            }
+        }
+        if (!confirmed) {
+            log.error("❌ Refusing to run without explicit confirmation flag.");
+            log.error("This tool DELETES DEV data for DIMA/KIKI.");
+            log.error("Re-run with: {}", CONFIRM_FLAG);
+            System.exit(2);
         }
         
         log.info("🔧 DEV Database Setup");
