@@ -20,6 +20,7 @@ DB_PASS=$(echo "$DATABASE_URL" | sed -n 's|postgresql://[^:]*:\([^@]*\)@.*|\1|p'
 JDBC_URL=$(echo "$DATABASE_URL" | sed 's|postgresql://[^@]*@|jdbc:postgresql://|')
 
 MAVEN_REPO_LOCAL="${MAVEN_REPO_LOCAL:-${MAVEN_USER_HOME:-$HOME/.m2}/repository}"
+MAVEN_SETTINGS="${MAVEN_SETTINGS:-}"
 
 # If a previous Maven Central failure was cached (.lastUpdated), force refresh and remove cached failures.
 # This helps when the repository outage/403 was transient.
@@ -32,7 +33,12 @@ echo "   URL: $(echo "$JDBC_URL" | sed 's/password=[^&]*/password=***/g')"
 
 # Use fully-qualified plugin invocation (avoids prefix resolution) + force update (-U) for CI resilience.
 set +e
-mvn -U -B org.liquibase:liquibase-maven-plugin:4.29.2:update \
+MVN=(mvn -U -B)
+if [ -n "$MAVEN_SETTINGS" ]; then
+  MVN+=(-s "$MAVEN_SETTINGS")
+fi
+
+"${MVN[@]}" org.liquibase:liquibase-maven-plugin:4.29.2:update \
   -Dliquibase.url="$JDBC_URL" \
   -Dliquibase.username="$DB_USER" \
   -Dliquibase.password="$DB_PASS"

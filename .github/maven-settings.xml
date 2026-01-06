@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<settings xmlns="http://maven.apache.org/SETTINGS/1.0.0"
+          xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+          xsi:schemaLocation="http://maven.apache.org/SETTINGS/1.0.0 https://maven.apache.org/xsd/settings-1.0.0.xsd">
+  <!--
+    GitHub-hosted runners occasionally hit 403 on repo.maven.apache.org.
+    This mirror keeps "central" resolution working by routing it via repo1.maven.org.
+    If you have a corporate mirror (Nexus/Artifactory), prefer that instead.
+  -->
+  <mirrors>
+    <mirror>
+      <id>central-repo1-mirror</id>
+      <mirrorOf>central</mirrorOf>
+      <name>Central via repo1.maven.org</name>
+      <url>https://repo1.maven.org/maven2</url>
+    </mirror>
+  </mirrors>
+</settings>
+
+

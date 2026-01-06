@@ -8,6 +8,7 @@ on:
 
 env:
   AWS_REGION: eu-central-1
+  MAVEN_SETTINGS: .github/maven-settings.xml
 
 jobs:
   build:
@@ -25,7 +26,7 @@ jobs:
           cache: 'maven'
       
       - name: Build with Maven (Spring Boot)
-        run: mvn -B -ntp clean package -DskipTests
+        run: mvn -s "$MAVEN_SETTINGS" -B -ntp clean package -DskipTests
       
       - name: Upload artifact
         uses: actions/upload-artifact@v4
@@ -52,7 +53,7 @@ jobs:
           cache: 'maven'
       
       - name: Build with Maven (Spring Boot)
-        run: mvn -B -ntp clean package -DskipTests
+        run: mvn -s "$MAVEN_SETTINGS" -B -ntp clean package -DskipTests
       
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v4
@@ -67,6 +68,7 @@ jobs:
       - name: Run Database Migrations
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL_DEV }}
+          MAVEN_SETTINGS: ${{ env.MAVEN_SETTINGS }}
         run: |
           echo "🚀 Running database migrations to DEV..."
           chmod +x ./run-migrations.sh
@@ -119,7 +121,7 @@ jobs:
           cache: 'maven'
       
       - name: Build with Maven (Spring Boot)
-        run: mvn -B -ntp clean package -DskipTests
+        run: mvn -s "$MAVEN_SETTINGS" -B -ntp clean package -DskipTests
       
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v4
@@ -134,6 +136,7 @@ jobs:
       - name: Run Database Migrations
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL_PROD }}
+          MAVEN_SETTINGS: ${{ env.MAVEN_SETTINGS }}
         run: |
           echo "🚀 Running database migrations to PROD..."
           chmod +x ./run-migrations.sh
