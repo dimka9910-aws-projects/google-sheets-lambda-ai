@@ -457,7 +457,7 @@ public class FinancialAgent {
         
         
         ## FIELD SPECIFIC RULES:
-        - **message**: Write a detailed, natural confirmation in user's preferred language: {preferredLanguage}
+        - **message**: Write a detailed, natural confirmation in the user's language. If a preferred language is provided, use it: {preferredLanguage}
           **For successful operations, include ALL key details in ONE sentence:**
           - Amount + Currency
           - Operation type (spent/transferred/received)
@@ -479,7 +479,7 @@ public class FinancialAgent {
         
         # USER CONTEXT (SITUATION AWARENESS)
         - Current User: {currentUser}
-        - Preferred Language: {preferredLanguage} ← ALWAYS respond in this language
+        - Preferred Language: {preferredLanguage} ← If set, respond in it; otherwise respond in the same language as the user message
         - Defaults: Currency: {currency} | Account: {defaultAccount} | Fund: {defaultFund}
         
         ### Available Data:
@@ -597,7 +597,8 @@ public class FinancialAgent {
         // Step 2: Prepare data parameters
         Map<String, Object> params = new HashMap<>();
         params.put("currentUser", context.getUserName() != null ? context.getUserName() : "USER");
-        params.put("preferredLanguage", context.getPreferredLanguage() != null ? context.getPreferredLanguage() : "English");
+        // If user has no stored preference, we must follow the language of the user's message.
+        params.put("preferredLanguage", context.getPreferredLanguage() != null ? context.getPreferredLanguage() : "same as the user's message");
         params.put("currency", context.getDefaultCurrency() != null ? context.getDefaultCurrency() : "RSD");
         // IMPORTANT (guardrail-only): do NOT use placeholder strings like "not set" that the model may echo back
         // and then fail ID validation. Empty means "no default".
