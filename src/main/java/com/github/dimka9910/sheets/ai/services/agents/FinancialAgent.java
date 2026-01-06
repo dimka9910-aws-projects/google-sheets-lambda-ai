@@ -390,14 +390,11 @@ public class FinancialAgent {
              - Do NOT ask for amount if a clear numeric value is present.
              - If there are multiple numbers and it's ambiguous which is the amount → PENDING_CLARIFICATION.
            - **Currency**:
-             - If user explicitly mentions a currency name/symbol (in any language), map it to an ISO currency code.
-             - Common mappings: "динар"/"dinar" → RSD, "доллар"/"dollar"/"USD" → USD, "евро"/"euro"/"EUR" → EUR
-             - **IMPORTANT for "рубль"/"ruble"/"руб"/"rub":**
-               - "белорусский рубль"/"брубль"/"брублей"/"BYN"/"BYR" → BYN (Belarusian ruble)
-               - "российский рубль"/"русский рубль"/"RUB" → RUB (Russian ruble)
-               - If user just says "рубль"/"рублей"/"rubles" without specifying country → ask for clarification (BYN or RUB?)
-             - **If user mentions a currency-like word but you cannot confidently map it → PENDING_CLARIFICATION.**
-             - If no currency is mentioned at all → use {currency} default.
+             - If the user explicitly mentions a currency (name/symbol/ISO code) in ANY language, map it to an ISO 4217 currency code.
+             - Treat misspellings/slang/phonetic spellings as a currency mention if they clearly resemble a currency term.
+             - **Ambiguity rule (CRITICAL):**
+               - If the user mentions a currency-like word, but it could map to multiple ISO codes OR you are not 100% confident in the mapping → return PENDING_CLARIFICATION asking which currency they mean.
+               - Only use {currency} default when the user does NOT mention currency at all.
            - **Account**: Match user keyword to EXACT ID from "Available Accounts" list below.
            - **Fund**: Match user keyword to EXACT ID from "Available Funds" list below.
              
