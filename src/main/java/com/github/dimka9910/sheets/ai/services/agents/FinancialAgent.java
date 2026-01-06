@@ -215,6 +215,9 @@ public class FinancialAgent {
                 }
                 
                 case TRANSFER -> {
+                    // For now, TRANSFER never uses funds. Ignore any provided fund to avoid fund-related clarifications.
+                    financial.setFund(null);
+
                     // TRANSFER: check if it's internal or with linked user
                     // Normalize userName based on context:
                     if (financial.getTargetPerson() != null && financial.getUserName() == null) {
@@ -501,6 +504,7 @@ public class FinancialAgent {
         - Do NOT infer fund from the purchase item text.
         
         ### 2. TRANSFER - Moving money between accounts
+        **IMPORTANT:** TRANSFER has NO fund. Always set `fund` to null and NEVER ask about fund for TRANSFER.
         **Case A: Between OWN accounts (no people involved)**
         - **Required:** amount, currency, account (from), targetAccount (to)
         - **userName and targetPerson:** MUST BE NULL

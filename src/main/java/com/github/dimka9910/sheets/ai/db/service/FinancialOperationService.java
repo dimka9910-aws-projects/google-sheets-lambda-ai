@@ -152,7 +152,8 @@ public class FinancialOperationService {
         UUID userId = userContext.getId();
         UUID sourceAccountId = resolveAccountId(action.getAccount(), userContext);
         UUID targetAccountId = resolveAccountId(action.getTargetAccount(), userContext);
-        UUID fundId = resolveFundId(action.getFund(), userContext); // Can be null
+        // TRANSFER has no funds (for now): always persist fund_id=NULL, ignore any model-provided fund.
+        UUID fundId = null;
         
         if (userId == null) {
             throw new IllegalStateException("User ID is null - user not persisted?");

@@ -177,6 +177,11 @@ public class MainAgent {
             - If fund is not explicitly referenced and defaultFund exists → mention defaultFund in the Ticket.
             - If fund is not explicitly referenced and defaultFund is missing → resolve via clarification (or use user's answer to the pending question).
             - If user explicitly references a fund/category/budget → match it to an available fund ID.
+
+            ## TRANSFER WITHOUT FUNDS (CURRENT POLICY)
+            - TRANSFER operations have NO funds/categories.
+            - NEVER ask the user to pick a fund/category for a TRANSFER (even between linked users).
+            - If the user mentions a fund while doing a TRANSFER, ignore it for now and proceed with TRANSFER (no fund).
             
             {formatInstructions}
             
