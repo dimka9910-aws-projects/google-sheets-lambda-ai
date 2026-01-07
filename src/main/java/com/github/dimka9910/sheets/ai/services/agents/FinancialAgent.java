@@ -8,6 +8,7 @@ import com.github.dimka9910.sheets.ai.services.UserContextToPromptMapper;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.ai.chat.messages.SystemMessage;
 import org.springframework.ai.chat.messages.UserMessage;
+import org.springframework.ai.chat.messages.Message;
 import org.springframework.ai.chat.model.ChatModel;
 import org.springframework.ai.chat.model.ChatResponse;
 import org.springframework.ai.chat.prompt.Prompt;
@@ -37,10 +38,12 @@ import java.util.Set;
 public class FinancialAgent {
     
     private static final String MODEL = "gpt-5.2";
-    // Some GPT-5.x reasoning calls can spend most of a small token budget on internal reasoning
-    // and return an empty final answer. We give a larger completion budget to ensure the model
-    // can always emit the required JSON.
-    private static final int MAX_TOKENS = 1200;
+    // Adaptive completion budgets:
+    // - First attempt uses a smaller budget (cheaper).
+    // - If the model returns an empty final answer (can happen with reasoning models),
+    //   retry once with a larger budget.
+    private static final int MAX_COMPLETION_TOKENS_FIRST = 600;
+    private static final int MAX_COMPLETION_TOKENS_RETRY = 1200;
     
     private final ChatModel chatModel;
     private final UserContextToPromptMapper contextMapper;
@@ -87,23 +90,9 @@ public class FinancialAgent {
             // Add JSON schema to prompt (cached, no reflection overhead)
             String jsonSchema = outputConverter.getFormat();
             systemPrompt += "\n\n" + jsonSchema;
-            
-            // Create Spring AI Prompt
-            @SuppressWarnings("null")
-            Prompt prompt = new Prompt(
-                    List.of(
-                            new SystemMessage(systemPrompt),
-                            new UserMessage(userPrompt)
-                    ),
-                    OpenAiChatOptions.builder()
-                            .model(MODEL)
-                            .maxCompletionTokens(MAX_TOKENS)
-                            // GPT-5 reasoning models typically only support default temperature (1.0)
-                            .temperature(1.0)
-                            // Spring AI OpenAiChatOptions supports reasoningEffort for reasoning models.
-                            // Supported values (per Spring AI 1.1.1 source): low | medium | high.
-                            .reasoningEffort("low")
-                            .build()
+            List<Message> messages = List.of(
+                    new SystemMessage(systemPrompt),
+                    new UserMessage(userPrompt)
             );
             
             // Call LLM with retry on empty response
@@ -112,6 +101,23 @@ public class FinancialAgent {
             for (int attempt = 1; attempt <= maxRetries; attempt++) {
                 long startTime = System.currentTimeMillis();
                 try {
+                    int maxCompletionTokens = (attempt == 1)
+                            ? MAX_COMPLETION_TOKENS_FIRST
+                            : MAX_COMPLETION_TOKENS_RETRY;
+
+                    @SuppressWarnings("null")
+                    Prompt prompt = new Prompt(
+                            messages,
+                            OpenAiChatOptions.builder()
+                                    .model(MODEL)
+                                    .maxCompletionTokens(maxCompletionTokens)
+                                    // GPT-5 reasoning models typically only support default temperature (1.0)
+                                    .temperature(1.0)
+                                    // Supported values (per Spring AI 1.1.1 source): low | medium | high.
+                                    .reasoningEffort("low")
+                                    .build()
+                    );
+
                     ChatResponse chatResponse = chatModel.call(prompt);
                     String rawText = chatResponse.getResult().getOutput().getText();
                     long duration = System.currentTimeMillis() - startTime;
@@ -125,8 +131,9 @@ public class FinancialAgent {
                     } catch (Exception ignore) {
                         // best-effort
                     }
-                    log.debug("LLM call completed in {}ms (attempt {}/{}), hasToolCalls={}, metadata={}",
-                            duration, attempt, maxRetries, hasToolCalls, chatResponse != null ? chatResponse.getMetadata() : null);
+                    log.debug("LLM call completed in {}ms (attempt {}/{}), maxCompletionTokens={}, hasToolCalls={}, metadata={}",
+                            duration, attempt, maxRetries, maxCompletionTokens, hasToolCalls,
+                            chatResponse != null ? chatResponse.getMetadata() : null);
 
                     // Best-effort: if provider returned non-text content or refusal, it may be in output metadata.
                     String fallbackText = null;
