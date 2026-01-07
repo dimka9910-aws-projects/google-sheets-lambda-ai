@@ -8,11 +8,15 @@ import org.springframework.boot.web.client.RestClientCustomizer;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.http.HttpRequest;
+import org.springframework.http.client.JdkClientHttpRequestFactory;
 import org.springframework.http.client.ClientHttpRequestExecution;
 import org.springframework.http.client.ClientHttpRequestInterceptor;
 import org.springframework.http.client.ClientHttpResponse;
 import org.springframework.lang.NonNull;
 
+import java.net.http.HttpClient;
+import java.time.Duration;
+import java.util.Objects;
 import java.io.IOException;
 
 /**
@@ -41,9 +45,19 @@ public class SpringAiFixConfiguration {
      * Этот бин автоматически применится к билдеру, создающему клиент для OpenAI.
      */
     @Bean
+    @SuppressWarnings("null")
     public RestClientCustomizer openaiExtraBodyFixCustomizer() {
         log.info("🔧 Registering extra_body workaround interceptor for Spring AI 1.1.x");
         return restClientBuilder -> {
+            // GPT-5.x reasoning models can take >10s. Default client read timeout is too aggressive.
+            // Keep connect timeout small, but allow longer read timeouts.
+            HttpClient httpClient = HttpClient.newBuilder()
+                    .connectTimeout(Duration.ofSeconds(10))
+                    .build();
+            JdkClientHttpRequestFactory requestFactory = new JdkClientHttpRequestFactory(httpClient);
+            requestFactory.setReadTimeout(Duration.ofSeconds(45));
+            restClientBuilder.requestFactory(requestFactory);
+
             restClientBuilder.requestInterceptors(interceptors -> 
                 interceptors.add(new ExtraBodyFixInterceptor())
             );
@@ -62,7 +76,7 @@ public class SpringAiFixConfiguration {
         @NonNull
         public ClientHttpResponse intercept(
                 @NonNull HttpRequest request, 
-                @NonNull byte[] body, 
+                @NonNull byte[] body,
                 @NonNull ClientHttpRequestExecution execution
         ) throws IOException {
             // Применяем логику только к запросам чат-комплишенов, чтобы не задеть embeddings или image generation
@@ -95,7 +109,7 @@ public class SpringAiFixConfiguration {
                         log.debug("✅ Successfully patched request, removed extra_body");
                         
                         // 6. Передаем выполнение дальше с новым телом
-                        return execution.execute(request, newBody);
+                        return execution.execute(request, Objects.requireNonNull(newBody));
                     }
                 } catch (Exception e) {
                     // В случае ошибки парсинга логируем и отправляем оригинальное тело, 
@@ -104,7 +118,8 @@ public class SpringAiFixConfiguration {
                 }
             }
             // Если условия не совпали, отправляем запрос без изменений
-            return execution.execute(request, body);
+            // The framework already guarantees non-null inputs, but static nullness analysis is conservative here.
+            return execution.execute(request, Objects.requireNonNull(body));
         }
     }
 }

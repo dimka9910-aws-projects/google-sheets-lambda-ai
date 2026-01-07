@@ -97,18 +97,49 @@ public class FinancialAgent {
                             .maxCompletionTokens(MAX_TOKENS)
                             // GPT-5 reasoning models typically only support default temperature (1.0)
                             .temperature(1.0)
+                            // Ensure the model does not emit tool-calls with empty text content.
+                            .toolChoice("none")
+                            .parallelToolCalls(false)
                             // Spring AI OpenAiChatOptions supports reasoningEffort for reasoning models.
                             // Supported values (per Spring AI 1.1.1 source): low | medium | high.
                             .reasoningEffort("low")
                             .build()
             );
             
-            // Call LLM
-            ChatResponse chatResponse = chatModel.call(prompt);
-            String content = chatResponse.getResult().getOutput().getText();
+            // Call LLM with retry on empty response
+            String content = null;
+            int maxRetries = 2;
+            for (int attempt = 1; attempt <= maxRetries; attempt++) {
+                long startTime = System.currentTimeMillis();
+                try {
+                    ChatResponse chatResponse = chatModel.call(prompt);
+                    content = chatResponse.getResult().getOutput().getText();
+                    long duration = System.currentTimeMillis() - startTime;
+                    // If text is empty, log metadata to understand why (finish reason/tool-calls/etc.)
+                    boolean hasToolCalls = chatResponse != null && chatResponse.hasToolCalls();
+                    log.debug("LLM call completed in {}ms (attempt {}/{}), hasToolCalls={}, metadata={}",
+                            duration, attempt, maxRetries, hasToolCalls, chatResponse != null ? chatResponse.getMetadata() : null);
+                    
+                    if (content != null && !content.isBlank()) {
+                        break; // Success!
+                    }
+                    
+                    log.warn("⚠️ Empty response from LLM (attempt {}/{})", attempt, maxRetries);
+                    if (attempt < maxRetries) {
+                        Thread.sleep(500); // Brief pause before retry
+                    }
+                } catch (Exception e) {
+                    long duration = System.currentTimeMillis() - startTime;
+                    log.error("❌ LLM call failed after {}ms (attempt {}/{}): {}", duration, attempt, maxRetries, e.getMessage());
+                    if (attempt >= maxRetries) {
+                        throw e;
+                    }
+                    Thread.sleep(500);
+                }
+            }
             
             if (content == null || content.isBlank()) {
-                log.error("❌ Empty response from LLM");
+                log.error("❌ Empty response from LLM after {} retries", maxRetries);
                 return FinancialAgentResponse.builder()
                         .financialActions(List.of())
                         .message("I didn't get a response from the AI model. Please try again.")
