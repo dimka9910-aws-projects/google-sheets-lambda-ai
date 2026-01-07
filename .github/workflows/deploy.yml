@@ -47,6 +47,9 @@ jobs:
     if: github.ref == 'refs/heads/develop' && github.event_name == 'push'
     runs-on: ubuntu-latest
     environment: dev
+    concurrency:
+      group: deploy-dev
+      cancel-in-progress: false
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -87,6 +90,39 @@ jobs:
       
       - name: SAM Build
         run: sam build
+
+      - name: Wait for CloudFormation stack to be idle (DEV)
+        run: |
+          STACK="google-sheets-ai-parser-dev"
+          REGION="${{ env.AWS_REGION }}"
+          echo "Checking stack status: $STACK ($REGION)"
+          if aws cloudformation describe-stacks --stack-name "$STACK" --region "$REGION" >/dev/null 2>&1; then
+            # Wait until stack is not *_IN_PROGRESS (queue multiple deploys safely)
+            deadline=$(( $(date +%s) + 1800 )) # 30 minutes
+            while true; do
+              status="$(aws cloudformation describe-stacks --stack-name "$STACK" --region "$REGION" --query 'Stacks[0].StackStatus' --output text)"
+              echo "StackStatus=$status"
+              case "$status" in
+                *_IN_PROGRESS)
+                  if [ "$(date +%s)" -ge "$deadline" ]; then
+                    echo "Timed out waiting for $STACK to become idle (last status: $status)"
+                    exit 1
+                  fi
+                  sleep 15
+                  ;;
+                UPDATE_ROLLBACK_FAILED|ROLLBACK_FAILED|UPDATE_FAILED)
+                  echo "Stack is in a failed state: $status. Manual intervention required."
+                  exit 1
+                  ;;
+                *)
+                  echo "Stack is idle: $status"
+                  break
+                  ;;
+              esac
+            done
+          else
+            echo "Stack does not exist yet; continuing."
+          fi
       
       - name: SAM Deploy to DEV
         run: |
@@ -120,6 +156,9 @@ jobs:
     if: github.ref == 'refs/heads/main' && github.event_name == 'push'
     runs-on: ubuntu-latest
     environment: prod
+    concurrency:
+      group: deploy-prod
+      cancel-in-progress: false
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -160,6 +199,38 @@ jobs:
       
       - name: SAM Build
         run: sam build
+
+      - name: Wait for CloudFormation stack to be idle (PROD)
+        run: |
+          STACK="google-sheets-ai-parser-prod"
+          REGION="${{ env.AWS_REGION }}"
+          echo "Checking stack status: $STACK ($REGION)"
+          if aws cloudformation describe-stacks --stack-name "$STACK" --region "$REGION" >/dev/null 2>&1; then
+            deadline=$(( $(date +%s) + 1800 )) # 30 minutes
+            while true; do
+              status="$(aws cloudformation describe-stacks --stack-name "$STACK" --region "$REGION" --query 'Stacks[0].StackStatus' --output text)"
+              echo "StackStatus=$status"
+              case "$status" in
+                *_IN_PROGRESS)
+                  if [ "$(date +%s)" -ge "$deadline" ]; then
+                    echo "Timed out waiting for $STACK to become idle (last status: $status)"
+                    exit 1
+                  fi
+                  sleep 15
+                  ;;
+                UPDATE_ROLLBACK_FAILED|ROLLBACK_FAILED|UPDATE_FAILED)
+                  echo "Stack is in a failed state: $status. Manual intervention required."
+                  exit 1
+                  ;;
+                *)
+                  echo "Stack is idle: $status"
+                  break
+                  ;;
+              esac
+            done
+          else
+            echo "Stack does not exist yet; continuing."
+          fi
       
       - name: SAM Deploy to PROD
         run: |
