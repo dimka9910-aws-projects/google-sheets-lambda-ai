@@ -110,12 +110,53 @@ public class FinancialAgent {
                 long startTime = System.currentTimeMillis();
                 try {
                     ChatResponse chatResponse = chatModel.call(prompt);
-                    content = chatResponse.getResult().getOutput().getText();
+                    String rawText = chatResponse.getResult().getOutput().getText();
                     long duration = System.currentTimeMillis() - startTime;
                     // If text is empty, log metadata to understand why (finish reason/tool-calls/etc.)
                     boolean hasToolCalls = chatResponse != null && chatResponse.hasToolCalls();
+                    String chatId = null;
+                    try {
+                        chatId = chatResponse != null && chatResponse.getMetadata() != null
+                                ? String.valueOf(chatResponse.getMetadata().getId())
+                                : null;
+                    } catch (Exception ignore) {
+                        // best-effort
+                    }
                     log.debug("LLM call completed in {}ms (attempt {}/{}), hasToolCalls={}, metadata={}",
                             duration, attempt, maxRetries, hasToolCalls, chatResponse != null ? chatResponse.getMetadata() : null);
+
+                    // Best-effort: if provider returned non-text content or refusal, it may be in output metadata.
+                    String fallbackText = null;
+                    try {
+                        var out = chatResponse.getResult().getOutput();
+                        if (out != null && out.getMetadata() != null) {
+                            Object refusal = out.getMetadata().get("refusal");
+                            if (refusal != null) {
+                                String r = String.valueOf(refusal);
+                                if (!r.isBlank()) {
+                                    fallbackText = r;
+                                }
+                            }
+                        }
+                    } catch (Exception ignore) {
+                        // best-effort
+                    }
+
+                    // Prefer normal text; if blank but we have a refusal, use that as the text.
+                    content = (rawText != null && !rawText.isBlank()) ? rawText : fallbackText;
+
+                    if (content == null || content.isBlank()) {
+                        // More diagnostics: include output metadata keys + chat id, without leaking to user.
+                        try {
+                            var out = chatResponse.getResult().getOutput();
+                            log.warn("⚠️ Empty LLM text (attempt {}/{}). chatId={}, outputType={}, outputMetadataKeys={}",
+                                    attempt, maxRetries, chatId,
+                                    out != null ? out.getClass().getSimpleName() : "null",
+                                    (out != null && out.getMetadata() != null) ? out.getMetadata().keySet() : null);
+                        } catch (Exception ignore) {
+                            log.warn("⚠️ Empty LLM text (attempt {}/{})", attempt, maxRetries);
+                        }
+                    }
                     
                     if (content != null && !content.isBlank()) {
                         break; // Success!
