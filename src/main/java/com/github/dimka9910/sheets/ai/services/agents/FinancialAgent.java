@@ -97,9 +97,6 @@ public class FinancialAgent {
                             .maxCompletionTokens(MAX_TOKENS)
                             // GPT-5 reasoning models typically only support default temperature (1.0)
                             .temperature(1.0)
-                            // Ensure the model does not emit tool-calls with empty text content.
-                            .toolChoice("none")
-                            .parallelToolCalls(false)
                             // Spring AI OpenAiChatOptions supports reasoningEffort for reasoning models.
                             // Supported values (per Spring AI 1.1.1 source): low | medium | high.
                             .reasoningEffort("low")
