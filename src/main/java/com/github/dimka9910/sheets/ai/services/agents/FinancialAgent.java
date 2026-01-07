@@ -37,7 +37,10 @@ import java.util.Set;
 public class FinancialAgent {
     
     private static final String MODEL = "gpt-5.2";
-    private static final int MAX_TOKENS = 600;
+    // Some GPT-5.x reasoning calls can spend most of a small token budget on internal reasoning
+    // and return an empty final answer. We give a larger completion budget to ensure the model
+    // can always emit the required JSON.
+    private static final int MAX_TOKENS = 1200;
     
     private final ChatModel chatModel;
     private final UserContextToPromptMapper contextMapper;
