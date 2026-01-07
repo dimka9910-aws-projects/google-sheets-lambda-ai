@@ -202,6 +202,10 @@ public class CustomInstructionHandler {
     // ═══════════════════════════════════════════════════════════════════════════
     
     private void addLinkedUserAlias(UserEntity userEntity, String userName, String alias) {
+        if (userEntity.getId() != null) {
+            // Persist in DB
+            userEntityService.addLinkedUserAlias(userEntity.getId(), userName, alias);
+        }
         List<LinkedUserEntry> linkedUsers = userEntity.getLinkedUsers();
         if (linkedUsers != null) {
             for (LinkedUserEntry linked : linkedUsers) {
@@ -221,6 +225,9 @@ public class CustomInstructionHandler {
     }
     
     private void removeLinkedUserAlias(UserEntity userEntity, String userName, String alias) {
+        if (userEntity.getId() != null) {
+            userEntityService.removeLinkedUserAlias(userEntity.getId(), userName, alias);
+        }
         List<LinkedUserEntry> linkedUsers = userEntity.getLinkedUsers();
         if (linkedUsers != null) {
             for (LinkedUserEntry linked : linkedUsers) {
@@ -245,6 +252,9 @@ public class CustomInstructionHandler {
     // ═══════════════════════════════════════════════════════════════════════════
     
     private void addAccountAlias(UserEntity userEntity, String accountId, String alias) {
+        if (userEntity.getId() != null) {
+            userEntityService.addAccountAlias(userEntity.getId(), accountId, alias);
+        }
         List<AccountEntry> accounts = userEntity.getAccounts();
         if (accounts != null) {
             for (AccountEntry account : accounts) {
@@ -264,6 +274,9 @@ public class CustomInstructionHandler {
     }
     
     private void removeAccountAlias(UserEntity userEntity, String accountId, String alias) {
+        if (userEntity.getId() != null) {
+            userEntityService.removeAccountAlias(userEntity.getId(), accountId, alias);
+        }
         List<AccountEntry> accounts = userEntity.getAccounts();
         if (accounts != null) {
             for (AccountEntry account : accounts) {
@@ -288,6 +301,9 @@ public class CustomInstructionHandler {
     // ═══════════════════════════════════════════════════════════════════════════
     
     private void addFundAlias(UserEntity userEntity, String fundId, String alias) {
+        if (userEntity.getId() != null) {
+            userEntityService.addFundAlias(userEntity.getId(), fundId, alias);
+        }
         List<FundEntry> funds = userEntity.getFunds();
         if (funds != null) {
             for (FundEntry fund : funds) {
@@ -307,6 +323,9 @@ public class CustomInstructionHandler {
     }
     
     private void removeFundAlias(UserEntity userEntity, String fundId, String alias) {
+        if (userEntity.getId() != null) {
+            userEntityService.removeFundAlias(userEntity.getId(), fundId, alias);
+        }
         List<FundEntry> funds = userEntity.getFunds();
         if (funds != null) {
             for (FundEntry fund : funds) {

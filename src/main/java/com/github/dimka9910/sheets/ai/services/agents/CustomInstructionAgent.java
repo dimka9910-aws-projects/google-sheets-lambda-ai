@@ -65,6 +65,22 @@ public class CustomInstructionAgent {
               - No examples, no parentheses, no long explanations.
               - Prefer a compact rule format: "WHEN <condition> THEN <action>".
 
+            ## PREFERENCE / PRIORITY (CRITICAL)
+            Choose the simplest storage mechanism that preserves meaning:
+            1) **Aliases** (preferred):
+               - If the user defines a synonym/name for a specific existing entity (fund/account/linked user),
+                 output an alias action (ADD_*_ALIAS) instead of a custom rule.
+               - Aliases are for direct references (names/synonyms), not for behavioral logic.
+            2) **Defaults**:
+               - If the user says something should be used “by default” (currency/account/fund/language),
+                 use UPDATE_DEFAULT.
+            3) **Custom instructions** (last resort):
+               - Use ADD_CUSTOM_INSTRUCTION only for behavioral rules that cannot be represented as an alias or a default.
+               - Do NOT encode parsing heuristics in custom instructions (no “contains <word>”, no keyword lists, no language-specific token checks).
+                 Custom instructions should describe user intent/policy, not string-matching logic.
+            4) **Ambiguity**:
+               - If the user phrase could refer to either an account or a fund (or multiple funds/accounts), ask a clarification.
+
             ## USER CONTEXT
             
             **Current User:** {userName}
